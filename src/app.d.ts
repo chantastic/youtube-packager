@@ -3,7 +3,9 @@
 declare global {
 	namespace App {
 		// interface Error {}
-		// interface Locals {}
+		interface Locals {
+			auth: import('@workos/authkit-sveltekit').AuthKitAuth;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}
