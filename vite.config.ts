@@ -30,6 +30,15 @@ export default defineConfig({
 					include: ['src/**/*.{test,spec}.{js,ts}'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
+			},
+
+			{
+				extends: './vite.config.ts',
+				test: {
+					name: 'convex',
+					environment: 'edge-runtime',
+					include: ['convex/**/*.{test,spec}.{js,ts}']
+				}
 			}
 		]
 	}
