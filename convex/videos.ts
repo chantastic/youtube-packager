@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 
 const validationStatValidator = v.object({
@@ -143,6 +144,19 @@ export const listAssignmentsByVideo = query({
 	}
 });
 
+export const listSpeakers = query({
+	args: {},
+	handler: async (ctx) => {
+		const speakers = await ctx.db.query('speakers').take(500);
+
+		return speakers.sort((a, b) =>
+			[a.name, a.company ?? '', a.position ?? '']
+				.join(' ')
+				.localeCompare([b.name, b.company ?? '', b.position ?? ''].join(' '))
+		);
+	}
+});
+
 export const updateMetadata = mutation({
 	args: {
 		youtubeVideoId: v.string(),
@@ -165,11 +179,12 @@ export const updateMetadata = mutation({
 export const addSpeaker = mutation({
 	args: {
 		youtubeVideoId: v.string(),
-		name: v.string(),
+		speakerId: v.optional(v.id('speakers')),
+		name: v.optional(v.string()),
 		company: v.optional(v.string()),
 		position: v.optional(v.string())
 	},
-	handler: async (ctx, { youtubeVideoId, name, company, position }) => {
+	handler: async (ctx, { youtubeVideoId, speakerId, name, company, position }) => {
 		const video = await ctx.db
 			.query('videos')
 			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
@@ -179,6 +194,20 @@ export const addSpeaker = mutation({
 			throw new Error('Video not found.');
 		}
 
+		if (speakerId) {
+			const speaker = await ctx.db.get(speakerId);
+
+			if (!speaker) {
+				throw new Error('Speaker not found.');
+			}
+
+			return await assignSpeakerToVideo(ctx, video._id, speakerId);
+		}
+
+		if (!name) {
+			throw new Error('Speaker name is required.');
+		}
+
 		const existingSpeakers = await ctx.db
 			.query('speakers')
 			.withIndex('by_name_and_company', (q) => q.eq('name', name))
@@ -186,36 +215,15 @@ export const addSpeaker = mutation({
 		const existingSpeaker = existingSpeakers.find(
 			(speaker) => speaker.company === company && speaker.position === position
 		);
-		const speakerId = existingSpeaker
+		const resolvedSpeakerId = existingSpeaker
 			? existingSpeaker._id
 			: await ctx.db.insert('speakers', {
 					name,
 					...(company !== undefined ? { company } : {}),
 					...(position !== undefined ? { position } : {})
 				});
-		const existingAssignment = await ctx.db
-			.query('videoSpeakers')
-			.withIndex('by_videoId_and_speakerId', (q) =>
-				q.eq('videoId', video._id).eq('speakerId', speakerId)
-			)
-			.unique();
 
-		if (existingAssignment) {
-			return existingAssignment._id;
-		}
-
-		const speakerAssignments = await ctx.db
-			.query('videoSpeakers')
-			.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-			.take(100);
-		const assignmentPosition =
-			speakerAssignments.reduce((max, assignment) => Math.max(max, assignment.position), -1) + 1;
-
-		return await ctx.db.insert('videoSpeakers', {
-			videoId: video._id,
-			speakerId,
-			position: assignmentPosition
-		});
+		return await assignSpeakerToVideo(ctx, video._id, resolvedSpeakerId);
 	}
 });
 
@@ -343,6 +351,36 @@ export const syncPlaylistForEvent = mutation({
 		};
 	}
 });
+
+async function assignSpeakerToVideo(
+	ctx: MutationCtx,
+	videoId: Id<'videos'>,
+	speakerId: Id<'speakers'>
+) {
+	const existingAssignment = await ctx.db
+		.query('videoSpeakers')
+		.withIndex('by_videoId_and_speakerId', (q) =>
+			q.eq('videoId', videoId).eq('speakerId', speakerId)
+		)
+		.unique();
+
+	if (existingAssignment) {
+		return existingAssignment._id;
+	}
+
+	const speakerAssignments = await ctx.db
+		.query('videoSpeakers')
+		.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
+		.take(100);
+	const assignmentPosition =
+		speakerAssignments.reduce((max, assignment) => Math.max(max, assignment.position), -1) + 1;
+
+	return await ctx.db.insert('videoSpeakers', {
+		videoId,
+		speakerId,
+		position: assignmentPosition
+	});
+}
 
 async function upsertVideo(
 	ctx: MutationCtx,

@@ -28,6 +28,11 @@
 	let copiedTitle = $state<string | null>(null);
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
+	let speakerSelection = $state('');
+	let selectedSpeakerId = $state('');
+	let speakerName = $state('');
+	let speakerPosition = $state('');
+	let speakerCompany = $state('');
 
 	onMount(() => {
 		void loadTitleQuality();
@@ -88,6 +93,55 @@
 
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
 		return [row.speaker.position, row.speaker.company].filter(Boolean).join(', ');
+	}
+
+	function availableSpeakerLabel(speaker: PageData['availableSpeakers'][number]) {
+		const meta = [speaker.position, speaker.company].filter(Boolean).join(', ');
+
+		return meta ? `${speaker.name} (${meta})` : speaker.name;
+	}
+
+	function findAvailableSpeaker(value: string) {
+		const selection = value.trim();
+
+		return data.availableSpeakers.find((speaker) => availableSpeakerLabel(speaker) === selection);
+	}
+
+	function syncSpeakerSelection() {
+		const wasSelected = Boolean(selectedSpeakerId);
+		const speaker = findAvailableSpeaker(speakerSelection);
+
+		if (!speaker) {
+			selectedSpeakerId = '';
+			speakerName = speakerSelection;
+
+			if (wasSelected) {
+				speakerPosition = '';
+				speakerCompany = '';
+			}
+
+			return;
+		}
+
+		selectedSpeakerId = speaker._id;
+		speakerName = speaker.name;
+		speakerPosition = speaker.position ?? '';
+		speakerCompany = speaker.company ?? '';
+	}
+
+	function addSpeakerName() {
+		return selectedSpeakerId ? speakerName : speakerSelection.trim();
+	}
+
+	function afterSpeakerAdd() {
+		return async ({ update }: { update: () => Promise<void> }) => {
+			await update();
+			speakerSelection = '';
+			selectedSpeakerId = '';
+			speakerName = '';
+			speakerPosition = '';
+			speakerCompany = '';
+		};
 	}
 
 	function composedTitle(event: PageData['videoView']['assignments'][number]['event']) {
@@ -350,23 +404,40 @@
 			<form
 				method="POST"
 				action="?/addSpeaker"
-				use:enhance
+				use:enhance={afterSpeakerAdd}
 				class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
 			>
 				<div>
 					<label for="speakerName" class="mb-1 block text-sm text-gray-500">Speaker</label>
 					<input
 						id="speakerName"
-						name="name"
+						list="availableSpeakers"
+						bind:value={speakerSelection}
+						oninput={syncSpeakerSelection}
+						onchange={syncSpeakerSelection}
+						placeholder="Search speakers or type a new one"
+						autocomplete="off"
 						class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
 					/>
+					<datalist id="availableSpeakers">
+						{#each data.availableSpeakers as speaker (speaker._id)}
+							<option value={availableSpeakerLabel(speaker)}></option>
+						{/each}
+					</datalist>
+					<input type="hidden" name="speakerId" value={selectedSpeakerId} />
+					<input type="hidden" name="name" value={addSpeakerName()} />
+					{#if selectedSpeakerId}
+						<p class="mt-1 text-xs text-gray-500">Existing speaker selected</p>
+					{/if}
 				</div>
 				<div>
 					<label for="speakerPosition" class="mb-1 block text-sm text-gray-500">Position</label>
 					<input
 						id="speakerPosition"
 						name="position"
-						class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+						bind:value={speakerPosition}
+						readonly={Boolean(selectedSpeakerId)}
+						class="w-full rounded border border-gray-300 px-3 py-2 text-sm read-only:bg-gray-50 read-only:text-gray-500"
 					/>
 				</div>
 				<div>
@@ -374,7 +445,9 @@
 					<input
 						id="speakerCompany"
 						name="company"
-						class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+						bind:value={speakerCompany}
+						readonly={Boolean(selectedSpeakerId)}
+						class="w-full rounded border border-gray-300 px-3 py-2 text-sm read-only:bg-gray-50 read-only:text-gray-500"
 					/>
 				</div>
 				<div class="flex items-end">

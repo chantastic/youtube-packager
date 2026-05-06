@@ -49,10 +49,12 @@ export const load: PageServerLoad = async ({ params }) => {
 	const captions = await convexAdminFunction(internal.videoCaptions.listByYoutubeVideoId, {
 		youtubeVideoId: params.videoId
 	});
+	const availableSpeakers = await getConvexClient().query(api.videos.listSpeakers, {});
 
 	return {
 		videoView,
 		captions,
+		availableSpeakers,
 		assignmentValidationsById: Object.fromEntries(
 			videoView.assignments.map((row) => [
 				row.assignment._id,
@@ -116,7 +118,17 @@ export const actions: Actions = {
 
 	addSpeaker: async ({ request, params }) => {
 		const data = await request.formData();
+		const speakerId = optionalString(data, 'speakerId');
 		const name = optionalString(data, 'name');
+
+		if (speakerId) {
+			await getConvexClient().mutation(api.videos.addSpeaker, {
+				youtubeVideoId: params.videoId,
+				speakerId: speakerId as Id<'speakers'>
+			});
+
+			return;
+		}
 
 		if (!name) {
 			return;

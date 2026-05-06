@@ -208,6 +208,49 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	});
 });
 
+test('existing speakers can be assigned to another video', async () => {
+	const t = convexTest(schema, modules);
+	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+
+	await t.mutation(api.videos.syncPlaylistForEvent, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [
+				video({ youtubeVideoId: 'video-1', title: 'First talk' }),
+				video({ youtubeVideoId: 'video-2', title: 'Second talk' })
+			]
+		}
+	});
+	await t.mutation(api.videos.addSpeaker, {
+		youtubeVideoId: 'video-1',
+		name: 'Chan',
+		company: 'WorkOS',
+		position: 'Developer Advocate'
+	});
+
+	const speakers = await t.query(api.videos.listSpeakers, {});
+
+	await t.mutation(api.videos.addSpeaker, {
+		youtubeVideoId: 'video-2',
+		speakerId: speakers[0]._id
+	});
+
+	const videoView = await t.query(api.videos.getViewByYoutubeVideoId, {
+		youtubeVideoId: 'video-2'
+	});
+
+	expect(speakers).toHaveLength(1);
+	expect(videoView?.speakers).toHaveLength(1);
+	expect(videoView?.speakers[0].speaker).toMatchObject({
+		name: 'Chan',
+		company: 'WorkOS',
+		position: 'Developer Advocate'
+	});
+});
+
 test('a video can have assignments in multiple playlists', async () => {
 	const t = convexTest(schema, modules);
 	const firstEventId = await t.mutation(api.events.create, { name: 'FirstConf', year: 2026 });
