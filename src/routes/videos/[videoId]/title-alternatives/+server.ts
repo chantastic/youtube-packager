@@ -40,6 +40,7 @@ export const POST: RequestHandler = async ({ params }) => {
 			speaker: speakerNames || undefined,
 			company: companies || undefined,
 			position: positions || undefined,
+			titleOverride: videoView.video.titleOverride,
 			videoTitleFormat: videoView.video.videoTitleFormat,
 			videoType: videoView.video.videoType
 		},

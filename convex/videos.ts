@@ -138,7 +138,23 @@ export const listAssignmentsByEvent = query({
 			const video = await ctx.db.get(assignment.videoId);
 
 			if (video) {
-				rows.push({ assignment, video });
+				const speakerAssignments = await ctx.db
+					.query('videoSpeakers')
+					.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
+					.take(100);
+				const speakers = [];
+
+				for (const speakerAssignment of speakerAssignments.sort(
+					(a, b) => a.position - b.position
+				)) {
+					const speaker = await ctx.db.get(speakerAssignment.speakerId);
+
+					if (speaker) {
+						speakers.push({ assignment: speakerAssignment, speaker });
+					}
+				}
+
+				rows.push({ assignment, video, speakers });
 			}
 		}
 
@@ -174,10 +190,12 @@ export const listSpeakers = query({
 export const updateMetadata = mutation({
 	args: {
 		youtubeVideoId: v.string(),
+		clearTitleOverride: v.optional(v.boolean()),
+		titleOverride: v.optional(v.string()),
 		videoTitleFormat: v.optional(v.string()),
 		videoType: v.optional(videoTypeValidator)
 	},
-	handler: async (ctx, { youtubeVideoId, ...fields }) => {
+	handler: async (ctx, { youtubeVideoId, clearTitleOverride, titleOverride, ...fields }) => {
 		const video = await ctx.db
 			.query('videos')
 			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
@@ -187,7 +205,11 @@ export const updateMetadata = mutation({
 			throw new Error('Video not found.');
 		}
 
-		await ctx.db.patch(video._id, fields);
+		await ctx.db.patch(video._id, {
+			...fields,
+			...(titleOverride !== undefined ? { titleOverride } : {}),
+			...(clearTitleOverride ? { titleOverride: undefined } : {})
+		});
 	}
 });
 
@@ -455,6 +477,9 @@ async function upsertVideo(
 			...snapshot,
 			...(existingVideo.videoTitleFormat !== undefined
 				? { videoTitleFormat: existingVideo.videoTitleFormat }
+				: {}),
+			...(existingVideo.titleOverride !== undefined
+				? { titleOverride: existingVideo.titleOverride }
 				: {}),
 			...(existingVideo.videoType !== undefined
 				? { videoType: existingVideo.videoType }

@@ -1,9 +1,14 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import {
 		deriveBaseTitle,
+		deriveComposedBaseTitle,
+		formatComposedVideoTitle,
 		formatVideoTitle,
+		normalizeVideoType,
 		normalizeTitleFormat,
-		previewVideoTitle
+		previewVideoTitle,
+		videoTypeOptions
 	} from '$lib/title-format';
 	import {
 		validateVideoBaseline,
@@ -11,19 +16,78 @@
 		type VideoValidation
 	} from '$lib/video-validation';
 	import { onMount } from 'svelte';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let copiedVideoId = $state<string | null>(null);
 	let titleQualityValidationsByVideoId = $state<Record<string, VideoValidation[]>>({});
 	let titleQualityError = $state<string | null>(null);
 	let titleQualityLoading = $state(false);
+	let updatingVideoType = $state<string | null>(null);
 
 	onMount(() => {
 		void loadTitleQuality();
 	});
 
-	function formattedTitle(videoTitle: string) {
+	function assignmentRowFor(videoId: string) {
+		return data.playlistAssignments.find((row) => row.video.youtubeVideoId === videoId);
+	}
+
+	function titleFocusSpeakers(videoId: string) {
+		const row = assignmentRowFor(videoId);
+
+		return (
+			row?.speakers.map((speakerRow) => ({
+				name: speakerRow.speaker.name,
+				company: speakerRow.speaker.company
+			})) ?? []
+		);
+	}
+
+	function videoTitleRecord(videoId: string) {
+		const row = assignmentRowFor(videoId);
+
+		if (!row) return null;
+
+		const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
+		const company = [
+			...new Set(
+				row.speakers
+					.map((speakerRow) => speakerRow.speaker.company)
+					.filter((value): value is string => Boolean(value))
+			)
+		].join(', ');
+		const position = [
+			...new Set(
+				row.speakers
+					.map((speakerRow) => speakerRow.speaker.position)
+					.filter((value): value is string => Boolean(value))
+			)
+		].join(', ');
+
+		return {
+			speaker: speaker || undefined,
+			company: company || undefined,
+			position: position || undefined,
+			titleOverride: row.video.titleOverride,
+			videoTitleFormat: row.video.videoTitleFormat,
+			videoType: row.video.videoType
+		};
+	}
+
+	function videoTypeValue(videoId: string) {
+		return normalizeVideoType(videoTitleRecord(videoId)?.videoType);
+	}
+
+	function formattedTitle(videoId: string, videoTitle: string) {
+		const video = videoTitleRecord(videoId);
+
+		if (video) {
+			const baseTitle = deriveComposedBaseTitle(videoTitle, video, data.event);
+
+			return formatComposedVideoTitle(baseTitle, video, data.event);
+		}
+
 		const baseTitle = deriveBaseTitle(videoTitle, data.event.titleFormat, data.event);
 		return formatVideoTitle(data.event.titleFormat, baseTitle, data.event);
 	}
@@ -34,8 +98,13 @@
 			: data.event.name;
 	}
 
-	function baselineValidations(videoTitle: string) {
-		return validateVideoBaseline(videoTitle, data.event);
+	function baselineValidations(videoId: string, videoTitle: string) {
+		const video = videoTitleRecord(videoId);
+
+		return validateVideoBaseline(videoTitle, data.event, {
+			speakers: titleFocusSpeakers(videoId),
+			...(video ? { video } : {})
+		});
 	}
 
 	function titleQualityValidations(videoId: string) {
@@ -43,7 +112,7 @@
 	}
 
 	function validationsForVideo(videoId: string, videoTitle: string) {
-		return [...baselineValidations(videoTitle), ...titleQualityValidations(videoId)];
+		return [...baselineValidations(videoId, videoTitle), ...titleQualityValidations(videoId)];
 	}
 
 	function titleFocusParts(title: string) {
@@ -59,7 +128,9 @@
 		}
 
 		const checks = data.playlist.videos.flatMap((video) =>
-			baselineValidations(video.title).filter((check) => check.id === 'title-event-suffix')
+			baselineValidations(video.videoId, video.title).filter(
+				(check) => check.id === 'title-event-suffix'
+			)
 		);
 		const actionableChecks = checks.filter((check) => check.status !== 'info');
 
@@ -88,6 +159,28 @@
 			fail: 'border-amber-200 bg-amber-50 text-amber-800',
 			info: 'border-gray-200 bg-gray-50 text-gray-600'
 		}[status];
+	}
+
+	function submitParentForm(event: Event) {
+		const select = event.currentTarget;
+
+		if (select instanceof HTMLSelectElement) {
+			select.form?.requestSubmit();
+		}
+	}
+
+	function afterVideoTypeUpdate(videoId: string) {
+		return () => {
+			updatingVideoType = videoId;
+
+			return async ({ update }: { update: () => Promise<void> }) => {
+				try {
+					await update();
+				} finally {
+					updatingVideoType = null;
+				}
+			};
+		};
 	}
 
 	function formatDate(value?: string) {
@@ -259,14 +352,18 @@
 						AI title checks: {titleQuality.checked}/{titleQuality.total}
 					</p>
 				{/if}
+				{#if form?.videoTypeError}
+					<p class="mt-1 text-xs text-amber-700">{form.videoTypeError}</p>
+				{/if}
 			</div>
 		</section>
 
 		<section class="overflow-hidden rounded-lg border border-gray-200 bg-white">
 			<div
-				class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500 uppercase md:grid-cols-[84px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
+				class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500 uppercase md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 			>
 				<div>Video</div>
+				<div class="hidden md:block">Type</div>
 				<div>Current</div>
 				<div class="hidden md:block">Validation</div>
 				<div class="hidden md:block">Formatted</div>
@@ -274,12 +371,12 @@
 			</div>
 
 			{#each data.playlist.videos as video (video.playlistItemId)}
-				{@const nextTitle = formattedTitle(video.title)}
+				{@const nextTitle = formattedTitle(video.videoId, video.title)}
 				{@const validations = validationsForVideo(video.videoId, video.title)}
 				{@const currentTitleParts = titleFocusParts(video.title)}
 				{@const formattedTitleParts = titleFocusParts(nextTitle)}
 				<article
-					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
+					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 				>
 					<a href={video.playlistVideoUrl} target="_blank" rel="noreferrer" class="block">
 						{#if video.thumbnailUrl}
@@ -293,8 +390,38 @@
 							<div class="aspect-video rounded border border-gray-200 bg-gray-100"></div>
 						{/if}
 					</a>
+					<form
+						method="POST"
+						action="?/updateVideoType"
+						use:enhance={afterVideoTypeUpdate(video.videoId)}
+						class="hidden md:block"
+					>
+						<input type="hidden" name="youtubeVideoId" value={video.videoId} />
+						<label class="sr-only" for={`videoType-desktop-${video.videoId}`}>Video type</label>
+						<select
+							id={`videoType-desktop-${video.videoId}`}
+							name="videoType"
+							value={videoTypeValue(video.videoId)}
+							onchange={submitParentForm}
+							disabled={updatingVideoType === video.videoId}
+							class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm disabled:cursor-wait disabled:opacity-60"
+						>
+							{#each videoTypeOptions as option (option.value)}
+								<option value={option.value}>{option.label}</option>
+							{/each}
+						</select>
+						<button type="submit" class="sr-only">Save video type</button>
+						{#if updatingVideoType === video.videoId}
+							<p class="mt-1 text-xs text-gray-500">Saving...</p>
+						{:else if form?.videoTypeVideoId === video.videoId && form.videoTypeMessage}
+							<p class="mt-1 text-xs text-green-700">{form.videoTypeMessage}</p>
+						{/if}
+						{#if videoTitleRecord(video.videoId)?.titleOverride}
+							<p class="mt-1 text-xs text-gray-500">Override</p>
+						{/if}
+					</form>
 					<div class="min-w-0">
-						<p class="text-xs text-gray-400">
+						<p class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
 							#{video.position + 1} · {formatDate(video.videoPublishedAt)}
 						</p>
 						<h3 class="mt-1 text-sm font-medium text-gray-950">
@@ -302,6 +429,36 @@
 							><span class="text-gray-500">{currentTitleParts.rest}</span>
 						</h3>
 						<p class="mt-1 text-xs break-all text-gray-500">{video.videoId}</p>
+						<form
+							method="POST"
+							action="?/updateVideoType"
+							use:enhance={afterVideoTypeUpdate(video.videoId)}
+							class="mt-3 md:hidden"
+						>
+							<input type="hidden" name="youtubeVideoId" value={video.videoId} />
+							<label class="sr-only" for={`videoType-mobile-${video.videoId}`}>Video type</label>
+							<select
+								id={`videoType-mobile-${video.videoId}`}
+								name="videoType"
+								value={videoTypeValue(video.videoId)}
+								onchange={submitParentForm}
+								disabled={updatingVideoType === video.videoId}
+								class="max-w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm disabled:cursor-wait disabled:opacity-60"
+							>
+								{#each videoTypeOptions as option (option.value)}
+									<option value={option.value}>{option.label}</option>
+								{/each}
+							</select>
+							<button type="submit" class="sr-only">Save video type</button>
+							{#if updatingVideoType === video.videoId}
+								<p class="mt-1 text-xs text-gray-500">Saving...</p>
+							{:else if form?.videoTypeVideoId === video.videoId && form.videoTypeMessage}
+								<p class="mt-1 text-xs text-green-700">{form.videoTypeMessage}</p>
+							{/if}
+							{#if videoTitleRecord(video.videoId)?.titleOverride}
+								<p class="mt-1 text-xs text-gray-500">Override</p>
+							{/if}
+						</form>
 						<div class="mt-3 flex flex-wrap gap-2 md:hidden">
 							{#each validations as validation (validation.id)}
 								<span

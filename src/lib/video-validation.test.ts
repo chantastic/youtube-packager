@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
+	validateSelectedTitleFormat,
 	validateTitleEventSuffix,
 	validateTitleFocus,
+	validateTitleOverride,
 	validateVideoBaseline
 } from './video-validation';
 
@@ -64,7 +66,9 @@ describe('video validation', () => {
 	});
 
 	test('fails when the title starts with weak framing', () => {
-		expect(validateTitleFocus('Overview of Agent-Native Auth | RenderConf 2026', event)).toMatchObject({
+		expect(
+			validateTitleFocus('Overview of Agent-Native Auth | RenderConf 2026', event)
+		).toMatchObject({
 			id: 'title-focus',
 			status: 'fail',
 			message: 'Starts with weak framing'
@@ -89,6 +93,93 @@ describe('video validation', () => {
 			status: 'fail',
 			message: 'Starts with speaker metadata'
 		});
+	});
+
+	test('validates titles against the selected composed video title format', () => {
+		expect(
+			validateSelectedTitleFormat('Build Better Auth — Chan, WorkOS | RenderConf 2026', event, {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'talk'
+			})
+		).toMatchObject({
+			id: 'title-format',
+			status: 'pass',
+			message: 'Matches selected format',
+			expected: 'Video Title — Chan, WorkOS | RenderConf 2026'
+		});
+	});
+
+	test('fails when the selected title format suffix is missing', () => {
+		expect(
+			validateSelectedTitleFormat('Build Better Auth | RenderConf 2026', event, {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'talk'
+			})
+		).toMatchObject({
+			id: 'title-format',
+			status: 'fail',
+			message: 'Does not match selected format',
+			expected: 'Video Title — Chan, WorkOS | RenderConf 2026',
+			details: ['End with "— Chan, WorkOS | RenderConf 2026".']
+		});
+	});
+
+	test('validates titles against a full title override', () => {
+		expect(
+			validateTitleOverride('Build Agent Auth Without the Glue Code', {
+				titleOverride: 'Build Agent Auth Without the Glue Code',
+				videoType: 'talk'
+			})
+		).toMatchObject({
+			id: 'title-override',
+			status: 'pass',
+			message: 'Matches override'
+		});
+		expect(
+			validateTitleOverride('Build Better Auth | RenderConf 2026', {
+				titleOverride: 'Build Agent Auth Without the Glue Code',
+				videoType: 'talk'
+			})
+		).toMatchObject({
+			id: 'title-override',
+			status: 'fail',
+			message: 'Does not match override',
+			expected: 'Build Agent Auth Without the Glue Code'
+		});
+	});
+
+	test('baseline validation includes selected title format when video context is provided', () => {
+		const validations = validateVideoBaseline('Build Better Auth | RenderConf 2026', event, {
+			video: {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'talk'
+			}
+		});
+
+		expect(validations.map((validation) => validation.id)).toEqual([
+			'title-event-suffix',
+			'title-format',
+			'title-focus'
+		]);
+	});
+
+	test('baseline validation uses override checks instead of event suffix and format checks', () => {
+		const validations = validateVideoBaseline('Build Agent Auth Without the Glue Code', event, {
+			video: {
+				titleOverride: 'Build Agent Auth Without the Glue Code',
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'talk'
+			}
+		});
+
+		expect(validations.map((validation) => validation.id)).toEqual([
+			'title-override',
+			'title-focus'
+		]);
 	});
 
 	test('baseline validation returns the title suffix and first 55 checks', () => {

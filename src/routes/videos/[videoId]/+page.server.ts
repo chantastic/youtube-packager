@@ -1,6 +1,10 @@
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
-import { canCustomizeVideoTitleFormat, isVideoType } from '$lib/title-format';
+import {
+	canCustomizeVideoTitleFormat,
+	isVideoType,
+	type VideoTitleFormatRecord
+} from '$lib/title-format';
 import {
 	getConnectedYouTubeAccessToken,
 	YouTubeConnectionError,
@@ -45,6 +49,42 @@ function bestCaptionTrack(tracks: YouTubeCaptionTrack[]) {
 	return [...tracks].sort((a, b) => captionTrackScore(b) - captionTrackScore(a))[0];
 }
 
+function videoTitleRecord(
+	video: {
+		titleOverride?: string;
+		videoTitleFormat?: string;
+		videoType?: VideoTitleFormatRecord['videoType'];
+	},
+	speakers: Array<{
+		speaker: {
+			name: string;
+			company?: string;
+			position?: string;
+		};
+	}>
+): VideoTitleFormatRecord {
+	const speaker = speakers.map((row) => row.speaker.name).join(', ');
+	const company = [
+		...new Set(
+			speakers.map((row) => row.speaker.company).filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+	const position = [
+		...new Set(
+			speakers.map((row) => row.speaker.position).filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+
+	return {
+		speaker: speaker || undefined,
+		company: company || undefined,
+		position: position || undefined,
+		titleOverride: video.titleOverride,
+		videoTitleFormat: video.videoTitleFormat,
+		videoType: video.videoType
+	};
+}
+
 export const load: PageServerLoad = async ({ params }) => {
 	const videoView = await getConvexClient().query(api.videos.getViewByYoutubeVideoId, {
 		youtubeVideoId: params.videoId
@@ -62,6 +102,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		name: speakerRow.speaker.name,
 		company: speakerRow.speaker.company
 	}));
+	const selectedTitleFormat = videoTitleRecord(videoView.video, videoView.speakers);
 
 	return {
 		videoView,
@@ -71,7 +112,8 @@ export const load: PageServerLoad = async ({ params }) => {
 			videoView.assignments.map((row) => [
 				row.assignment._id,
 				validateVideoBaseline(videoView.video.title, row.event, {
-					speakers
+					speakers,
+					video: selectedTitleFormat
 				})
 			])
 		)
@@ -121,17 +163,73 @@ export const actions: Actions = {
 		}
 	},
 
-	updateMetadata: async ({ request, params }) => {
-		const data = await request.formData();
+	updateMetadata: async (event) => {
+		const data = await event.request.formData();
 		const videoType = optionalVideoType(data);
+		const titleOverride = optionalString(data, 'titleOverride');
+		const titleOverrideEnabled = data.get('titleOverrideEnabled') === 'on';
+		const client = getConvexClient();
 
-		await getConvexClient().mutation(api.videos.updateMetadata, {
-			youtubeVideoId: params.videoId,
-			videoType,
-			...(canCustomizeVideoTitleFormat(videoType)
-				? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
-				: {})
-		});
+		if (titleOverrideEnabled && !titleOverride) {
+			return fail(400, {
+				metadataError: 'Enter a title override before saving.'
+			});
+		}
+
+		try {
+			let updatedTitle = titleOverride;
+			let wroteYouTubeTitle = false;
+			const existingVideo = titleOverride
+				? await client.query(api.videos.getByYoutubeVideoId, {
+						youtubeVideoId: event.params.videoId
+					})
+				: null;
+
+			if (titleOverride && existingVideo?.title !== titleOverride) {
+				const auth = youtubeAuthContext(event);
+				const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
+				const updatedVideo = await updateYouTubeVideoTitle(
+					event.params.videoId,
+					titleOverride,
+					accessToken
+				);
+
+				updatedTitle = updatedVideo.title;
+				wroteYouTubeTitle = true;
+			}
+
+			await client.mutation(api.videos.updateMetadata, {
+				youtubeVideoId: event.params.videoId,
+				videoType,
+				...(updatedTitle ? { titleOverride: updatedTitle } : { clearTitleOverride: true }),
+				...(canCustomizeVideoTitleFormat(videoType)
+					? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
+					: {})
+			});
+
+			if (updatedTitle && existingVideo?.title !== updatedTitle) {
+				await client.mutation(api.videos.updateTitle, {
+					youtubeVideoId: event.params.videoId,
+					title: updatedTitle
+				});
+			}
+
+			return {
+				metadataMessage: wroteYouTubeTitle
+					? 'Saved metadata and updated YouTube title.'
+					: updatedTitle
+						? 'Saved metadata. YouTube title already matches.'
+						: 'Saved metadata.'
+			};
+		} catch (caught) {
+			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
+				return fail(caught.status >= 400 && caught.status < 500 ? caught.status : 400, {
+					metadataError: caught.message
+				});
+			}
+
+			throw caught;
+		}
 	},
 
 	applyTitle: async (event) => {

@@ -1,7 +1,11 @@
 import {
+	formatComposedVideoTitle,
+	getComposedTitleFormatAffixes,
 	getTitleEventSuffix,
+	normalizeTitleOverride,
 	normalizeTitleFormat,
-	type TitleFormatEvent
+	type TitleFormatEvent,
+	type VideoTitleFormatRecord
 } from './title-format';
 
 export type ValidationStatus = 'pass' | 'fail' | 'info';
@@ -34,6 +38,10 @@ type TitleFocusContext = {
 	}>;
 };
 
+type VideoBaselineContext = TitleFocusContext & {
+	video?: VideoTitleFormatRecord;
+};
+
 const weakTitleOpeners = [
 	'introduction to',
 	'intro to',
@@ -64,10 +72,7 @@ function startsWithPhrase(value: string, phrase: string) {
 	return new RegExp(`^${escaped}(?:\\b|\\s*[:|\\-–—])`, 'i').test(value);
 }
 
-export function validateTitleEventSuffix(
-	title: string,
-	event: TitleFormatEvent
-): VideoValidation {
+export function validateTitleEventSuffix(title: string, event: TitleFormatEvent): VideoValidation {
 	const suffix = getTitleEventSuffix(event.titleFormat, event);
 
 	if (!suffix) {
@@ -90,6 +95,75 @@ export function validateTitleEventSuffix(
 	};
 }
 
+export function validateSelectedTitleFormat(
+	title: string,
+	event: TitleFormatEvent,
+	video: VideoTitleFormatRecord
+): VideoValidation {
+	const titleOverride = normalizeTitleOverride(video.titleOverride);
+
+	if (titleOverride) {
+		return validateTitleOverride(title, video);
+	}
+
+	const { prefix, suffix } = getComposedTitleFormatAffixes(video, event);
+
+	if (!prefix && !suffix) {
+		return {
+			id: 'title-format',
+			label: 'Title format',
+			status: 'info',
+			message: 'No format affixes configured'
+		};
+	}
+
+	const normalizedTitle = normalizeComparable(title);
+	const hasExpectedPrefix = !prefix || normalizedTitle.startsWith(prefix);
+	const hasExpectedSuffix = !suffix || normalizedTitle.endsWith(suffix);
+	const missing = [
+		prefix && !hasExpectedPrefix ? `Start with "${prefix}".` : null,
+		suffix && !hasExpectedSuffix ? `End with "${suffix}".` : null
+	].filter((message): message is string => Boolean(message));
+
+	return {
+		id: 'title-format',
+		label: 'Title format',
+		status: hasExpectedPrefix && hasExpectedSuffix ? 'pass' : 'fail',
+		message:
+			hasExpectedPrefix && hasExpectedSuffix
+				? 'Matches selected format'
+				: 'Does not match selected format',
+		expected: formatComposedVideoTitle('Video Title', video, event),
+		...(missing.length ? { details: missing } : {})
+	};
+}
+
+export function validateTitleOverride(
+	title: string,
+	video: VideoTitleFormatRecord
+): VideoValidation {
+	const titleOverride = normalizeTitleOverride(video.titleOverride);
+
+	if (!titleOverride) {
+		return {
+			id: 'title-override',
+			label: 'Title override',
+			status: 'info',
+			message: 'No override configured'
+		};
+	}
+
+	const matchesOverride = normalizeComparable(title) === normalizeComparable(titleOverride);
+
+	return {
+		id: 'title-override',
+		label: 'Title override',
+		status: matchesOverride ? 'pass' : 'fail',
+		message: matchesOverride ? 'Matches override' : 'Does not match override',
+		expected: titleOverride
+	};
+}
+
 export function validateTitleFocus(
 	title: string,
 	event: TitleFormatEvent,
@@ -100,12 +174,15 @@ export function validateTitleFocus(
 	const leadingFocus = leadingComparable(focus);
 	const eventName = leadingComparable(event.name);
 	const eventYear = event.year?.toString();
-	const speaker = context.speakers?.find((candidate) =>
-		Boolean(candidate.name.trim()) && startsWithPhrase(leadingFocus, leadingComparable(candidate.name))
+	const speaker = context.speakers?.find(
+		(candidate) =>
+			Boolean(candidate.name.trim()) &&
+			startsWithPhrase(leadingFocus, leadingComparable(candidate.name))
 	);
-	const company = context.speakers?.find((candidate) =>
-		Boolean(candidate.company?.trim()) &&
-		startsWithPhrase(leadingFocus, leadingComparable(candidate.company ?? ''))
+	const company = context.speakers?.find(
+		(candidate) =>
+			Boolean(candidate.company?.trim()) &&
+			startsWithPhrase(leadingFocus, leadingComparable(candidate.company ?? ''))
 	);
 	const startsWithEventName = Boolean(eventName && startsWithPhrase(leadingFocus, eventName));
 	const startsWithEventYear = Boolean(eventYear && leadingFocus.startsWith(eventYear));
@@ -166,10 +243,15 @@ export function validateTitleFocus(
 export function validateVideoBaseline(
 	title: string,
 	event: TitleFormatEvent,
-	context: TitleFocusContext = {}
+	context: VideoBaselineContext = {}
 ): VideoValidation[] {
+	if (context.video && normalizeTitleOverride(context.video.titleOverride)) {
+		return [validateTitleOverride(title, context.video), validateTitleFocus(title, event, context)];
+	}
+
 	return [
 		validateTitleEventSuffix(title, event),
+		...(context.video ? [validateSelectedTitleFormat(title, event, context.video)] : []),
 		validateTitleFocus(title, event, context)
 	];
 }

@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
 import {
 	getConnectedYouTubeAccessToken,
@@ -6,6 +6,7 @@ import {
 	youtubeAuthContext
 } from '$lib/server/youtube-connection';
 import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
+import { isVideoType, normalizeVideoType } from '$lib/title-format';
 import {
 	summarizeVideoValidations,
 	validateVideoBaseline,
@@ -13,7 +14,12 @@ import {
 } from '$lib/video-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { Id } from '../../../../../convex/_generated/dataModel';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+
+function optionalString(data: FormData, key: string) {
+	const value = data.get(key);
+	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const auth = youtubeAuthContext({ locals });
@@ -30,6 +36,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		return {
 			event,
 			playlist: null,
+			playlistAssignments: [],
 			playlistError: null,
 			titleQualityValidationsByVideoId: {},
 			titleQualityError: null
@@ -70,10 +77,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				}))
 			}
 		});
+		const playlistAssignments = await client.query(api.videos.listAssignmentsByEvent, {
+			eventId: event._id
+		});
 
 		return {
 			event,
 			playlist,
+			playlistAssignments,
 			playlistError: null,
 			titleQualityValidationsByVideoId: {},
 			titleQualityError: null
@@ -83,6 +94,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			return {
 				event,
 				playlist: null,
+				playlistAssignments: [],
 				playlistError: {
 					status: err.status,
 					message: err.message
@@ -93,5 +105,29 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		}
 
 		throw err;
+	}
+};
+
+export const actions: Actions = {
+	updateVideoType: async ({ request }) => {
+		const data = await request.formData();
+		const youtubeVideoId = optionalString(data, 'youtubeVideoId');
+		const videoType = optionalString(data, 'videoType');
+
+		if (!youtubeVideoId || !isVideoType(videoType)) {
+			return fail(400, {
+				videoTypeError: 'Choose a valid video type.'
+			});
+		}
+
+		await getConvexClient().mutation(api.videos.updateMetadata, {
+			youtubeVideoId,
+			videoType: normalizeVideoType(videoType)
+		});
+
+		return {
+			videoTypeMessage: 'Video type updated.',
+			videoTypeVideoId: youtubeVideoId
+		};
 	}
 };

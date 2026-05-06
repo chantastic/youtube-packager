@@ -105,6 +105,7 @@ function buildPrompt(input: TitleAlternativesInput) {
 		videoPublishedAt: input.videoContext?.videoPublishedAt,
 		description: (input.description ?? input.videoContext?.description)?.slice(0, 2000),
 		speakers: input.videoContext?.speakers ?? [],
+		titleOverride: input.video.titleOverride,
 		videoType,
 		videoTypeLabel: videoTypeLabelFor(videoType),
 		videoTitleFormat: normalizeVideoTitleFormat(
@@ -117,6 +118,7 @@ function buildPrompt(input: TitleAlternativesInput) {
 			videoType === 'panelDiscussion' ? undefined : input.video.company,
 		formattedPositionText: input.video.position
 	};
+	const formattingVideo = { ...input.video, titleOverride: undefined };
 	const assignments = input.assignments.map((assignment) => ({
 		assignmentId: assignment.assignmentId,
 		eventName: assignment.event.name,
@@ -124,8 +126,8 @@ function buildPrompt(input: TitleAlternativesInput) {
 		eventYear: assignment.event.year,
 		titleFormat: normalizeTitleFormat(assignment.event.titleFormat),
 		eventSuffix: getTitleEventSuffix(assignment.event.titleFormat, assignment.event),
-		finalTitleFormat: getComposedVideoTitleFormat(input.video, assignment.event),
-		currentBaseTitle: deriveComposedBaseTitle(input.currentTitle, input.video, assignment.event)
+		finalTitleFormat: getComposedVideoTitleFormat(formattingVideo, assignment.event),
+		currentBaseTitle: deriveComposedBaseTitle(input.currentTitle, formattingVideo, assignment.event)
 	}));
 
 	return `Generate concise YouTube title alternatives for each playlist assignment.
@@ -175,16 +177,17 @@ export function finalizeTitleAlternatives(
 	video: VideoTitleFormatRecord,
 	event: TitleFormatEvent
 ) {
+	const formattingVideo = { ...video, titleOverride: undefined };
 	const currentFormattedTitle = formatComposedVideoTitle(
-		deriveComposedBaseTitle(currentTitle, video, event),
-		video,
+		deriveComposedBaseTitle(currentTitle, formattingVideo, event),
+		formattingVideo,
 		event
 	);
 	const seen = new Set<string>();
 	const alternatives: string[] = [];
 
 	for (const baseTitle of baseTitles) {
-		const finalTitle = formatComposedVideoTitle(baseTitle, video, event);
+		const finalTitle = formatComposedVideoTitle(baseTitle, formattingVideo, event);
 		const titleFocus = validateTitleFocus(finalTitle, event, {
 			speakers: video.speaker ? [{ name: video.speaker, company: video.company }] : []
 		});

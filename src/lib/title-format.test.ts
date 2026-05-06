@@ -121,6 +121,21 @@ describe('title formatting', () => {
 		).toBe('Building AuthKit — Chan, WorkOS | Launch Week 2026');
 	});
 
+	test('uses a full title override instead of the composed format', () => {
+		expect(
+			formatComposedVideoTitle(
+				'Building AuthKit',
+				{
+					speaker: 'Chan',
+					company: 'WorkOS',
+					titleOverride: 'Build Agent Auth Without the Glue Code',
+					videoType: 'talk'
+				},
+				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
+			)
+		).toBe('Build Agent Auth Without the Glue Code');
+	});
+
 	test('uses a composed keynote format with the event name and video type', () => {
 		expect(getDefaultVideoTypeTitleFormat('keynote')).toBe(
 			'{title} — {speaker}, {company} {event_suffix} {video_type}'

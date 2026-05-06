@@ -199,6 +199,7 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	});
 	await t.mutation(api.videos.updateMetadata, {
 		youtubeVideoId: 'video-1',
+		titleOverride: 'A Fully Custom Video Title',
 		videoTitleFormat: '{title} — {speaker}, {company}',
 		videoType: 'panelDiscussion'
 	});
@@ -228,6 +229,7 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	expect(videoDoc).toMatchObject({
 		youtubeVideoId: 'video-1',
 		title: 'Updated title',
+		titleOverride: 'A Fully Custom Video Title',
 		videoTitleFormat: '{title} — {speaker}, {company}',
 		videoType: 'panelDiscussion'
 	});
@@ -237,6 +239,35 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		company: 'WorkOS',
 		position: 'Developer Advocate'
 	});
+});
+
+test('video title override can be cleared', async () => {
+	const t = convexTest(schema, modules);
+	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+
+	await t.mutation(api.videos.syncPlaylistForEvent, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
+		}
+	});
+	await t.mutation(api.videos.updateMetadata, {
+		youtubeVideoId: 'video-1',
+		titleOverride: 'A Fully Custom Video Title'
+	});
+	await t.mutation(api.videos.updateMetadata, {
+		youtubeVideoId: 'video-1',
+		clearTitleOverride: true
+	});
+
+	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(videoDoc?.titleOverride).toBeUndefined();
 });
 
 test('existing speakers can be assigned to another video', async () => {

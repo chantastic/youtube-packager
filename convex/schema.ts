@@ -14,6 +14,7 @@ export default defineSchema({
 		youtubeVideoId: v.string(),
 		title: v.string(),
 		description: v.optional(v.string()),
+		titleOverride: v.optional(v.string()),
 		videoTitleFormat: v.optional(v.string()),
 		videoType: v.optional(
 			v.union(

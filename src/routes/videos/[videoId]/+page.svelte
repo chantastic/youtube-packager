@@ -2,18 +2,22 @@
 	import { enhance } from '$app/forms';
 	import {
 		canCustomizeVideoTitleFormat,
-		defaultVideoType,
 		deriveComposedBaseTitle,
 		formatComposedVideoTitle,
 		getDefaultVideoTypeTitleFormat,
 		normalizeComposedVideoTitleFormat,
+		normalizeTitleOverride,
 		normalizeVideoType,
 		videoTypeLabelFor,
 		videoTypeOptions,
 		videoTitleTokens
 	} from '$lib/title-format';
 	import { youtubePlaylistUrl } from '$lib/youtube';
-	import { youtubeTitleMaxLength, type VideoValidation } from '$lib/video-validation';
+	import {
+		validateVideoBaseline,
+		youtubeTitleMaxLength,
+		type VideoValidation
+	} from '$lib/video-validation';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -34,8 +38,10 @@
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
-	let selectedVideoType = $state(defaultVideoType);
-	let videoTitleFormatInput = $state('');
+	let selectedVideoType = $state(currentVideoType());
+	let videoTitleFormatInput = $state(currentVideoTitleFormat());
+	let titleOverrideEnabled = $state(Boolean(currentTitleOverride()));
+	let titleOverrideInput = $state(currentTitleOverride());
 	let speakerSelection = $state('');
 	let selectedSpeakerId = $state('');
 	let speakerName = $state('');
@@ -43,9 +49,23 @@
 	let speakerCompany = $state('');
 
 	$effect(() => {
-		selectedVideoType = normalizeVideoType(data.videoView.video.videoType);
-		videoTitleFormatInput = data.videoView.video.videoTitleFormat ?? '';
+		selectedVideoType = currentVideoType();
+		videoTitleFormatInput = currentVideoTitleFormat();
+		titleOverrideEnabled = Boolean(currentTitleOverride());
+		titleOverrideInput = currentTitleOverride();
 	});
+
+	function currentVideoType() {
+		return normalizeVideoType(data.videoView.video.videoType);
+	}
+
+	function currentVideoTitleFormat() {
+		return data.videoView.video.videoTitleFormat ?? '';
+	}
+
+	function currentTitleOverride() {
+		return data.videoView.video.titleOverride ?? '';
+	}
 
 	onMount(() => {
 		void loadTitleQuality();
@@ -71,8 +91,11 @@
 		}[status];
 	}
 
-	function assignmentValidations(assignmentId: string) {
-		return data.assignmentValidationsById[assignmentId] ?? [];
+	function titleFocusSpeakers() {
+		return data.videoView.speakers.map((row) => ({
+			name: row.speaker.name,
+			company: row.speaker.company
+		}));
 	}
 
 	function assignmentAlternatives(assignmentId: string) {
@@ -120,9 +143,33 @@
 			speaker: speaker || undefined,
 			company: company || undefined,
 			position: position || undefined,
-			videoTitleFormat: data.videoView.video.videoTitleFormat,
-			videoType: data.videoView.video.videoType
+			titleOverride: selectedTitleOverride(),
+			videoTitleFormat: selectedVideoTitleFormat(),
+			videoType: selectedVideoType
 		};
+	}
+
+	function selectedVideoTitleFormat() {
+		return canCustomizeVideoTitleFormat(selectedVideoType)
+			? videoTitleFormatInput
+			: data.videoView.video.videoTitleFormat;
+	}
+
+	function selectedTitleOverride() {
+		return titleOverrideEnabled ? titleOverrideInput : undefined;
+	}
+
+	function titleOverrideLength() {
+		return normalizeTitleOverride(selectedTitleOverride())?.length ?? titleOverrideInput.trim().length;
+	}
+
+	function assignmentTitleValidations(
+		event: PageData['videoView']['assignments'][number]['event']
+	) {
+		return validateVideoBaseline(data.videoView.video.title, event, {
+			speakers: titleFocusSpeakers(),
+			video: videoTitleRecord()
+		});
 	}
 
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
@@ -190,8 +237,15 @@
 	}
 
 	function afterMetadataUpdate() {
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ update, result }: { update: () => Promise<void>; result: { type: string } }) => {
 			await update();
+			if (result.type !== 'success') {
+				metadataSaved = false;
+				return;
+			}
+
+			await loadTitleQuality();
+			titleAlternativesByAssignmentId = {};
 			metadataSaved = true;
 
 			setTimeout(() => {
@@ -437,26 +491,62 @@
 					</p>
 				</div>
 			{/if}
+			<div class="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-3">
+				<label class="flex items-center gap-2 text-sm font-medium text-gray-900">
+					<input
+						type="checkbox"
+						name="titleOverrideEnabled"
+						bind:checked={titleOverrideEnabled}
+						class="h-4 w-4 rounded border-gray-300 text-gray-950"
+					/>
+					Title override
+				</label>
+				{#if titleOverrideEnabled}
+					<div class="mt-3">
+						<label for="titleOverride" class="sr-only">Override title</label>
+						<textarea
+							id="titleOverride"
+							name="titleOverride"
+							bind:value={titleOverrideInput}
+							maxlength={youtubeTitleMaxLength}
+							rows="2"
+							placeholder={data.videoView.video.title}
+							class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+						></textarea>
+						<p class="mt-1 text-xs text-gray-500">
+							{titleOverrideLength()}/{youtubeTitleMaxLength}
+						</p>
+					</div>
+				{/if}
+			</div>
 			<div class="mt-4 flex flex-wrap items-center gap-3">
 				<button
 					type="submit"
 					class="rounded bg-gray-950 px-3 py-2 text-sm text-white hover:bg-gray-800"
 				>
-					Save Metadata
+					{normalizeTitleOverride(selectedTitleOverride())
+						? 'Save and Update YouTube'
+						: 'Save Metadata'}
 				</button>
-				{#if metadataSaved}
-					<span class="text-sm text-green-700">Saved</span>
+				{#if form?.metadataError}
+					<span class="text-sm text-amber-700">{form.metadataError}</span>
+				{:else if metadataSaved}
+					<span class="text-sm text-green-700">{form?.metadataMessage ?? 'Saved'}</span>
 				{/if}
 			</div>
-			<p class="mt-3 text-xs text-gray-500">
-				Effective format:
-				<span class="font-mono"
-					>{normalizeComposedVideoTitleFormat(
-						data.videoView.video.videoTitleFormat,
-						data.videoView.video.videoType ?? defaultVideoType
-					)}</span
-				>
-			</p>
+			{#if normalizeTitleOverride(selectedTitleOverride())}
+				<p class="mt-3 text-xs text-gray-500">
+					Effective title:
+					<span class="font-mono">{normalizeTitleOverride(selectedTitleOverride())}</span>
+				</p>
+			{:else}
+				<p class="mt-3 text-xs text-gray-500">
+					Effective format:
+					<span class="font-mono"
+						>{normalizeComposedVideoTitleFormat(selectedVideoTitleFormat(), selectedVideoType)}</span
+					>
+				</p>
+			{/if}
 		</form>
 		<div class="border-t border-gray-100 px-4 py-4">
 			<div class="flex flex-wrap items-center justify-between gap-2">
@@ -720,7 +810,7 @@
 			</p>
 		{/if}
 		{#each data.videoView.assignments as row (row.assignment._id)}
-			{@const validations = assignmentValidations(row.assignment._id)}
+			{@const validations = assignmentTitleValidations(row.event)}
 			{@const alternatives = assignmentAlternatives(row.assignment._id)}
 			<article
 				class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0"
@@ -766,11 +856,7 @@
 										>
 											{copiedTitle === title ? 'Copied' : 'Copy'}
 										</button>
-										<form
-											method="POST"
-											action="?/applyTitle"
-											use:enhance={afterTitleApply(title)}
-										>
+										<form method="POST" action="?/applyTitle" use:enhance={afterTitleApply(title)}>
 											<input type="hidden" name="title" value={title} />
 											<button
 												type="submit"

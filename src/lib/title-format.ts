@@ -9,6 +9,7 @@ export type VideoTitleFormatRecord = {
 	speaker?: string;
 	company?: string;
 	position?: string;
+	titleOverride?: string;
 	videoTitleFormat?: string;
 	videoType?: VideoType;
 };
@@ -156,6 +157,12 @@ export function normalizeTitleFormat(format?: string) {
 	return normalized && normalized.includes('{title}') ? normalized : defaultTitleFormat;
 }
 
+export function normalizeTitleOverride(value?: string) {
+	const normalized = value?.trim();
+
+	return normalized ? cleanupTitlePunctuation(normalized) : undefined;
+}
+
 export function isVideoType(value: unknown): value is VideoType {
 	return typeof value === 'string' && videoTypeValues.has(value as VideoType);
 }
@@ -243,6 +250,12 @@ export function formatVideoRecordTitle(
 	title: string,
 	video: VideoTitleFormatRecord
 ) {
+	const titleOverride = normalizeTitleOverride(video.titleOverride);
+
+	if (titleOverride) {
+		return titleOverride;
+	}
+
 	return cleanupTitlePunctuation(
 		formatWithVideoTitle(normalizeVideoTitleFormat(format, video.videoType), title, video)
 	);
@@ -253,6 +266,12 @@ export function formatComposedVideoTitle(
 	video: VideoTitleFormatRecord,
 	event: TitleFormatEvent
 ) {
+	const titleOverride = normalizeTitleOverride(video.titleOverride);
+
+	if (titleOverride) {
+		return titleOverride;
+	}
+
 	return cleanupTitlePunctuation(
 		formatWithComposedTitle(getComposedVideoTitleFormat(video, event), baseTitle, video, event)
 	);
