@@ -63,8 +63,8 @@ export const videoTypeOptions = [
 	{
 		value: 'interview',
 		label: 'Interview',
-		defaultTitleFormat: '{title} — {video_type}: {speaker}, {company}',
-		defaultComposedTitleFormat: '{title} — {video_type}: {speaker}, {company} {event_suffix}'
+		defaultTitleFormat: defaultVideoTitleFormat,
+		defaultComposedTitleFormat: defaultComposedVideoTitleFormat
 	},
 	{
 		value: 'custom',

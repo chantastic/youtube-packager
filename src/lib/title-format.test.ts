@@ -56,8 +56,9 @@ describe('title formatting', () => {
 		expect(normalizeVideoTitleFormat(undefined, 'panelDiscussion')).toBe(
 			'{title} — {video_type}'
 		);
-		expect(getDefaultVideoTitleFormat('interview')).toBe(
-			'{title} — {video_type}: {speaker}, {company}'
+		expect(getDefaultVideoTitleFormat('interview')).toBe('{title} — {speaker}, {company}');
+		expect(getDefaultVideoTypeTitleFormat('interview')).toBe(
+			'{title} — {speaker}, {company} {event_suffix}'
 		);
 		expect(
 			formatVideoRecordTitle(undefined, 'Building AuthKit', {
@@ -65,7 +66,7 @@ describe('title formatting', () => {
 				company: 'WorkOS',
 				videoType: 'interview'
 			})
-		).toBe('Building AuthKit — Interview: Chan, WorkOS');
+		).toBe('Building AuthKit — Chan, WorkOS');
 	});
 
 	test('normalizes presentation and demo records to the Talk template', () => {
