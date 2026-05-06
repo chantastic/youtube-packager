@@ -1,32 +1,32 @@
-# sv
+# YouTube Playlist Helper
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A SvelteKit app for linking events to YouTube playlists, previewing formatted video titles,
+and jumping into YouTube Studio for manual edits.
 
-## Creating a project
+## Environment
 
-If you're seeing this, you've probably already done this step. Congrats!
+Create `.env.local` with:
 
-```sh
-# create a new project
-npx sv create my-app
+```bash
+PUBLIC_CONVEX_URL=your_convex_url
+YOUTUBE_API_KEY=your_youtube_data_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-To recreate this project with the same configuration:
+`YOUTUBE_API_KEY` is used server-side for public, read-only YouTube Data API calls:
+playlist metadata, playlist videos, thumbnails, and video links.
+
+`ANTHROPIC_API_KEY` is used server-side for spelling, grammar, and readability checks on
+video titles. You can optionally set `ANTHROPIC_MODEL`; otherwise the app uses
+`claude-haiku-4-5-20251001`.
+
+## Development
+
+Install dependencies and start the dev server:
 
 ```sh
-# recreate this project
-pnpm dlx sv@0.15.2 create --template minimal --types ts --add prettier mcp="ide:claude-code+setup:remote" vitest="usages:unit,component" eslint tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:vercel" --install pnpm ./ytp
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+pnpm install
+pnpm run dev
 ```
 
 ## Building
@@ -34,9 +34,9 @@ npm run dev -- --open
 To create a production version of your app:
 
 ```sh
-npm run build
+pnpm run build
 ```
 
-You can preview the production build with `npm run preview`.
+You can preview the production build with `pnpm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.

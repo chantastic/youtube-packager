@@ -8,11 +8,19 @@ export const list = query({
 	}
 });
 
+export const get = query({
+	args: { id: v.id('events') },
+	handler: async (ctx, { id }) => {
+		return await ctx.db.get(id);
+	}
+});
+
 export const create = mutation({
 	args: {
 		name: v.string(),
 		year: v.number(),
-		titleFormat: v.optional(v.string())
+		titleFormat: v.optional(v.string()),
+		youtubePlaylistId: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		return await ctx.db.insert('events', args);
@@ -24,7 +32,8 @@ export const update = mutation({
 		id: v.id('events'),
 		name: v.string(),
 		year: v.number(),
-		titleFormat: v.optional(v.string())
+		titleFormat: v.optional(v.string()),
+		youtubePlaylistId: v.optional(v.string())
 	},
 	handler: async (ctx, { id, ...fields }) => {
 		await ctx.db.patch(id, fields);
