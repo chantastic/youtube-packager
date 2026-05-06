@@ -1,13 +1,40 @@
 import { error } from '@sveltejs/kit';
-import { getConvexClient } from '$lib/server/convex';
+import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
+import {
+	getConnectedYouTubeAccessToken,
+	YouTubeConnectionError,
+	youtubeAuthContext
+} from '$lib/server/youtube-connection';
+import {
+	downloadYouTubeCaptionTrack,
+	listYouTubeCaptionTracks,
+	YouTubeDataApiError,
+	type YouTubeCaptionTrack
+} from '$lib/server/youtube-data-api';
 import { validateVideoBaseline } from '$lib/video-validation';
-import { api } from '../../../../convex/_generated/api';
+import { api, internal } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
 
 function optionalString(data: FormData, key: string) {
 	const value = data.get(key);
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function captionTrackScore(track: YouTubeCaptionTrack) {
+	const language = track.language?.toLowerCase() ?? '';
+	const trackKind = track.trackKind?.toLowerCase() ?? '';
+
+	return (
+		(language === 'en' ? 100 : language.startsWith('en-') ? 90 : 0) +
+		(trackKind === 'standard' ? 50 : 0) +
+		(track.isAutoSynced ? 0 : 10) +
+		(track.status === 'serving' ? 5 : 0)
+	);
+}
+
+function bestCaptionTrack(tracks: YouTubeCaptionTrack[]) {
+	return [...tracks].sort((a, b) => captionTrackScore(b) - captionTrackScore(a))[0];
 }
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -19,8 +46,13 @@ export const load: PageServerLoad = async ({ params }) => {
 		throw error(404, 'Video not found.');
 	}
 
+	const captions = await convexAdminFunction(internal.videoCaptions.listByYoutubeVideoId, {
+		youtubeVideoId: params.videoId
+	});
+
 	return {
 		videoView,
+		captions,
 		assignmentValidationsById: Object.fromEntries(
 			videoView.assignments.map((row) => [
 				row.assignment._id,
@@ -31,6 +63,48 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
+	fetchCaptions: async (event) => {
+		const auth = youtubeAuthContext(event);
+
+		try {
+			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
+			const tracks = await listYouTubeCaptionTracks(event.params.videoId, accessToken);
+			const track = bestCaptionTrack(tracks);
+
+			if (!track) {
+				return {
+					captionError: 'No caption tracks were found for this video.'
+				};
+			}
+
+			const body = await downloadYouTubeCaptionTrack(track.id, accessToken, 'srt');
+
+			await convexAdminFunction(internal.videoCaptions.upsertForYoutubeVideoId, {
+				youtubeVideoId: event.params.videoId,
+				caption: {
+					captionTrackId: track.id,
+					...(track.language !== undefined ? { language: track.language } : {}),
+					...(track.name !== undefined ? { name: track.name } : {}),
+					...(track.trackKind !== undefined ? { trackKind: track.trackKind } : {}),
+					...(track.isAutoSynced !== undefined ? { isAutoSynced: track.isAutoSynced } : {}),
+					...(track.status !== undefined ? { status: track.status } : {}),
+					format: 'srt',
+					body
+				}
+			});
+
+			return {
+				captionMessage: `Fetched ${track.language ?? 'unknown'} captions.`
+			};
+		} catch (caught) {
+			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
+				return { captionError: caught.message };
+			}
+
+			throw caught;
+		}
+	},
+
 	updateMetadata: async ({ request, params }) => {
 		const data = await request.formData();
 

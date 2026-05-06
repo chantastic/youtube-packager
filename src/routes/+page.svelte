@@ -20,12 +20,26 @@
 				{/if}
 			</div>
 			<form method="POST" action="?/signout">
-				<button
-					type="submit"
-					class="rounded bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600"
-				>
-					Sign Out
-				</button>
+				<div class="flex flex-wrap gap-2">
+					<a
+						href="/integrations"
+						class="rounded bg-gray-950 px-4 py-2 text-white transition-colors hover:bg-gray-800"
+					>
+						Integrations
+					</a>
+					<a
+						href="/events"
+						class="rounded border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-white"
+					>
+						Events
+					</a>
+					<button
+						type="submit"
+						class="rounded border border-red-200 px-4 py-2 text-red-700 transition-colors hover:bg-red-50"
+					>
+						Sign Out
+					</button>
+				</div>
 			</form>
 		</div>
 	{:else}
@@ -40,7 +54,5 @@
 		</div>
 	{/if}
 
-	<p class="mt-8 text-gray-600">
-		Visit <a href="https://svelte.dev/docs/kit" class="text-blue-500 underline">svelte.dev/docs/kit</a> to read the documentation
-	</p>
+	<p class="mt-8 text-gray-600">Package YouTube playlists and video metadata from one place.</p>
 </main>

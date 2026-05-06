@@ -1,6 +1,11 @@
 import { error } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
-import { getPublicPlaylistData, YouTubePublicApiError } from '$lib/server/youtube-public';
+import {
+	getConnectedYouTubeAccessToken,
+	YouTubeConnectionError,
+	youtubeAuthContext
+} from '$lib/server/youtube-connection';
+import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
 import {
 	summarizeVideoValidations,
 	validateVideoBaseline,
@@ -10,7 +15,8 @@ import { api } from '../../../../../convex/_generated/api';
 import type { Id } from '../../../../../convex/_generated/dataModel';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
+	const auth = youtubeAuthContext({ locals });
 	const client = getConvexClient();
 	const event = await client.query(api.events.get, {
 		id: params.id as Id<'events'>
@@ -31,7 +37,8 @@ export const load: PageServerLoad = async ({ params }) => {
 	}
 
 	try {
-		const playlist = await getPublicPlaylistData(event.youtubePlaylistId);
+		const accessToken = await getConnectedYouTubeAccessToken(auth);
+		const playlist = await getYouTubePlaylistData(event.youtubePlaylistId, accessToken);
 		const validationStats = summarizeVideoValidations(
 			playlist.videos.map((video) => validateVideoBaseline(video.title, event))
 		);
@@ -72,7 +79,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			titleQualityError: null
 		};
 	} catch (err) {
-		if (err instanceof YouTubePublicApiError) {
+		if (err instanceof YouTubeDataApiError || err instanceof YouTubeConnectionError) {
 			return {
 				event,
 				playlist: null,

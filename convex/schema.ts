@@ -34,6 +34,22 @@ export default defineSchema({
 		.index('by_videoId', ['videoId'])
 		.index('by_videoId_and_speakerId', ['videoId', 'speakerId'])
 		.index('by_speakerId', ['speakerId']),
+	videoCaptions: defineTable({
+		videoId: v.id('videos'),
+		youtubeVideoId: v.string(),
+		captionTrackId: v.string(),
+		language: v.optional(v.string()),
+		name: v.optional(v.string()),
+		trackKind: v.optional(v.string()),
+		isAutoSynced: v.optional(v.boolean()),
+		status: v.optional(v.string()),
+		format: v.literal('srt'),
+		body: v.string(),
+		fetchedAt: v.number()
+	})
+		.index('by_videoId', ['videoId'])
+		.index('by_youtubeVideoId', ['youtubeVideoId'])
+		.index('by_youtubeVideoId_and_captionTrackId', ['youtubeVideoId', 'captionTrackId']),
 	playlistAssignments: defineTable({
 		eventId: v.id('events'),
 		playlistId: v.string(),
@@ -73,6 +89,19 @@ export default defineSchema({
 		),
 		lastFetchedAt: v.number()
 	}).index('by_eventId', ['eventId']),
+	youtubeConnections: defineTable({
+		userId: v.string(),
+		organizationId: v.optional(v.string()),
+		organizationKey: v.string(),
+		refreshTokenCiphertext: v.string(),
+		refreshTokenIv: v.string(),
+		scopes: v.array(v.string()),
+		tokenType: v.optional(v.string()),
+		status: v.union(v.literal('active'), v.literal('needs_reauthorization')),
+		lastError: v.optional(v.string()),
+		connectedAt: v.number(),
+		updatedAt: v.number()
+	}).index('by_userId_and_organizationKey', ['userId', 'organizationKey']),
 	titleQualityChecks: defineTable({
 		videoId: v.string(),
 		titleHash: v.string(),

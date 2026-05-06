@@ -9,12 +9,23 @@ Create `.env.local` with:
 
 ```bash
 PUBLIC_CONVEX_URL=your_convex_url
-YOUTUBE_API_KEY=your_youtube_data_api_key
+CONVEX_ADMIN_TOKEN=your_convex_deploy_key
+GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/integrations/youtube/callback
+GOOGLE_TOKEN_ENCRYPTION_KEY=base64_32_byte_secret
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-`YOUTUBE_API_KEY` is used server-side for public, read-only YouTube Data API calls:
-playlist metadata, playlist videos, thumbnails, and video links.
+YouTube Data API calls use the connected Google OAuth account. The app stores the
+Google refresh token encrypted in Convex and uses `CONVEX_ADMIN_TOKEN` to call the
+internal Convex functions that read/write that connection.
+
+Generate `GOOGLE_TOKEN_ENCRYPTION_KEY` with:
+
+```sh
+openssl rand -base64 32
+```
 
 `ANTHROPIC_API_KEY` is used server-side for spelling, grammar, and readability checks on
 video titles. You can optionally set `ANTHROPIC_MODEL`; otherwise the app uses

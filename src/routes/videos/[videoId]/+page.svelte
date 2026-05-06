@@ -10,7 +10,7 @@
 	import { youtubePlaylistUrl } from '$lib/youtube';
 	import type { VideoValidation } from '$lib/video-validation';
 	import { onMount } from 'svelte';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
 	type AssignmentTitleAlternatives = {
 		assignmentId: string;
@@ -18,7 +18,7 @@
 		error: string | null;
 	};
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let titleQualityValidations = $state<VideoValidation[]>([]);
 	let titleQualityError = $state<string | null>(null);
 	let titleQualityLoading = $state(false);
@@ -27,6 +27,7 @@
 	let titleAlternativesLoading = $state(false);
 	let copiedTitle = $state<string | null>(null);
 	let metadataSaved = $state(false);
+	let captionsFetching = $state(false);
 
 	onMount(() => {
 		void loadTitleQuality();
@@ -105,6 +106,42 @@
 				metadataSaved = false;
 			}, 1600);
 		};
+	}
+
+	function afterCaptionFetch() {
+		return async ({ update }: { update: () => Promise<void> }) => {
+			captionsFetching = true;
+			await update();
+			captionsFetching = false;
+		};
+	}
+
+	function srtToPlainText(body: string) {
+		return body
+			.replace(/\r/g, '')
+			.split('\n')
+			.filter((line) => {
+				const trimmed = line.trim();
+
+				return (
+					trimmed.length > 0 &&
+					!/^\d+$/.test(trimmed) &&
+					!/^\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/.test(trimmed)
+				);
+			})
+			.join('\n');
+	}
+
+	function downloadCaption(filename: string, body: string, type = 'text/plain;charset=utf-8') {
+		const url = URL.createObjectURL(new Blob([body], { type }));
+		const link = document.createElement('a');
+
+		link.href = url;
+		link.download = filename;
+		document.body.append(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
 	}
 
 	async function copyTitle(title: string) {
@@ -363,6 +400,98 @@
 				</p>
 			{:else}
 				<p class="text-sm text-gray-500">No description synced yet.</p>
+			{/if}
+		</div>
+	</section>
+
+	<section class="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
+		>
+			<div>
+				<h2 class="text-sm font-semibold text-gray-950">Captions</h2>
+				<p class="mt-1 text-xs text-gray-500">{data.captions.length} stored tracks</p>
+			</div>
+			<form method="POST" action="?/fetchCaptions" use:enhance={afterCaptionFetch}>
+				<button
+					type="submit"
+					disabled={captionsFetching}
+					class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+				>
+					{captionsFetching ? 'Fetching...' : 'Fetch Captions'}
+				</button>
+			</form>
+		</div>
+		{#if form?.captionError}
+			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+				{form.captionError}
+			</p>
+		{:else if form?.captionMessage}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				{form.captionMessage}
+			</p>
+		{/if}
+		<div class="px-4 py-4">
+			{#if data.captions.length}
+				<div class="space-y-4">
+					{#each data.captions as caption (caption._id)}
+						<div class="rounded border border-gray-200 bg-gray-50 p-3">
+							<div class="flex flex-wrap items-center justify-between gap-3">
+								<div>
+									<p class="text-sm font-medium text-gray-950">
+										{caption.language ?? 'Unknown language'}
+										{#if caption.name}
+											<span class="text-gray-500">· {caption.name}</span>
+										{/if}
+									</p>
+									<p class="mt-1 text-xs text-gray-500">
+										{caption.format.toUpperCase()} · {caption.trackKind ?? 'track'} · Fetched
+										{formatDate(caption.fetchedAt)}
+									</p>
+								</div>
+								<span
+									class="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500"
+								>
+									{caption.body.length.toLocaleString()} chars
+								</span>
+							</div>
+							<div class="mt-3 flex flex-wrap gap-2">
+								<button
+									type="button"
+									onclick={() =>
+										downloadCaption(
+											`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.srt`,
+											caption.body,
+											'application/x-subrip;charset=utf-8'
+										)}
+									class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+								>
+									Download SRT
+								</button>
+								<button
+									type="button"
+									onclick={() =>
+										downloadCaption(
+											`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.txt`,
+											srtToPlainText(caption.body)
+										)}
+									class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+								>
+									Download TXT
+								</button>
+							</div>
+							<details class="mt-3">
+								<summary class="cursor-pointer text-xs text-gray-600">Preview transcript</summary>
+								<pre
+									class="mt-2 max-h-64 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{caption.body}</pre>
+							</details>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="text-sm text-gray-500">
+					No captions stored yet. Fetching captions requires the YouTube metadata write scope.
+				</p>
 			{/if}
 		</div>
 	</section>
