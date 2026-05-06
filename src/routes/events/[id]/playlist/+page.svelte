@@ -28,6 +28,12 @@
 		return formatVideoTitle(data.event.titleFormat, baseTitle, data.event);
 	}
 
+	function eventDisplayTitle() {
+		return data.event.editionTitle
+			? `${data.event.name}: ${data.event.editionTitle}`
+			: data.event.name;
+	}
+
 	function baselineValidations(videoTitle: string) {
 		return validateVideoBaseline(videoTitle, data.event);
 	}
@@ -144,14 +150,16 @@
 </script>
 
 <svelte:head>
-	<title>{data.event.name} Playlist</title>
+	<title>{eventDisplayTitle()} Playlist</title>
 </svelte:head>
 
 <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
 		<div>
 			<a href="/events" class="text-sm text-blue-600 hover:underline">Events</a>
-			<h1 class="mt-2 text-3xl font-bold tracking-normal text-gray-950">{data.event.name}</h1>
+			<h1 class="mt-2 text-3xl font-bold tracking-normal text-gray-950">
+				{eventDisplayTitle()}
+			</h1>
 			<p class="mt-1 text-sm text-gray-500">
 				{data.event.year} · {normalizeTitleFormat(data.event.titleFormat)}
 			</p>
@@ -235,7 +243,8 @@
 					{previewVideoTitle(
 						normalizeTitleFormat(data.event.titleFormat),
 						data.event.name,
-						data.event.year ?? new Date().getFullYear()
+						data.event.year ?? new Date().getFullYear(),
+						data.event.editionTitle
 					)}
 				</p>
 				<p class="mt-1 text-xs text-gray-500">

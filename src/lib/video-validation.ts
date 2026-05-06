@@ -1,4 +1,8 @@
-import { getTitleEventSuffix, normalizeTitleFormat, type TitleFormatEvent } from './title-format';
+import {
+	getTitleEventSuffix,
+	normalizeTitleFormat,
+	type TitleFormatEvent
+} from './title-format';
 
 export type ValidationStatus = 'pass' | 'fail' | 'info';
 
@@ -60,7 +64,10 @@ function startsWithPhrase(value: string, phrase: string) {
 	return new RegExp(`^${escaped}(?:\\b|\\s*[:|\\-–—])`, 'i').test(value);
 }
 
-export function validateTitleEventSuffix(title: string, event: TitleFormatEvent): VideoValidation {
+export function validateTitleEventSuffix(
+	title: string,
+	event: TitleFormatEvent
+): VideoValidation {
 	const suffix = getTitleEventSuffix(event.titleFormat, event);
 
 	if (!suffix) {
@@ -161,12 +168,16 @@ export function validateVideoBaseline(
 	event: TitleFormatEvent,
 	context: TitleFocusContext = {}
 ): VideoValidation[] {
-	return [validateTitleEventSuffix(title, event), validateTitleFocus(title, event, context)];
+	return [
+		validateTitleEventSuffix(title, event),
+		validateTitleFocus(title, event, context)
+	];
 }
 
 export function videoValidationContextKey(event: TitleFormatEvent) {
 	return JSON.stringify({
 		name: event.name,
+		editionTitle: event.editionTitle ?? null,
 		year: event.year ?? null,
 		titleFormat: normalizeTitleFormat(event.titleFormat)
 	});

@@ -2,8 +2,12 @@ import { env } from '$env/dynamic/private';
 import {
 	deriveComposedBaseTitle,
 	formatComposedVideoTitle,
+	getComposedVideoTitleFormat,
+	getTitleEventSuffix,
 	normalizeTitleFormat,
+	normalizeVideoType,
 	normalizeVideoTitleFormat,
+	videoTypeLabelFor,
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
 } from '$lib/title-format';
@@ -92,6 +96,7 @@ function textFromAnthropicResponse(response: AnthropicMessageResponse) {
 }
 
 function buildPrompt(input: TitleAlternativesInput) {
+	const videoType = normalizeVideoType(input.video.videoType);
 	const videoContext = {
 		youtubeVideoId: input.videoContext?.youtubeVideoId,
 		currentTitle: input.currentTitle,
@@ -100,16 +105,26 @@ function buildPrompt(input: TitleAlternativesInput) {
 		videoPublishedAt: input.videoContext?.videoPublishedAt,
 		description: (input.description ?? input.videoContext?.description)?.slice(0, 2000),
 		speakers: input.videoContext?.speakers ?? [],
-		videoTitleFormat: normalizeVideoTitleFormat(input.video.videoTitleFormat),
-		formattedSpeakerText: input.video.speaker,
-		formattedCompanyText: input.video.company,
+		videoType,
+		videoTypeLabel: videoTypeLabelFor(videoType),
+		videoTitleFormat: normalizeVideoTitleFormat(
+			input.video.videoTitleFormat,
+			videoType
+		),
+		formattedSpeakerText:
+			videoType === 'panelDiscussion' ? videoTypeLabelFor(videoType) : input.video.speaker,
+		formattedCompanyText:
+			videoType === 'panelDiscussion' ? undefined : input.video.company,
 		formattedPositionText: input.video.position
 	};
 	const assignments = input.assignments.map((assignment) => ({
 		assignmentId: assignment.assignmentId,
 		eventName: assignment.event.name,
+		editionTitle: assignment.event.editionTitle,
 		eventYear: assignment.event.year,
 		titleFormat: normalizeTitleFormat(assignment.event.titleFormat),
+		eventSuffix: getTitleEventSuffix(assignment.event.titleFormat, assignment.event),
+		finalTitleFormat: getComposedVideoTitleFormat(input.video, assignment.event),
 		currentBaseTitle: deriveComposedBaseTitle(input.currentTitle, input.video, assignment.event)
 	}));
 
@@ -130,13 +145,14 @@ Return only JSON in this shape:
 
 Rules:
 - Return 5 baseTitles for every assignment.
-- baseTitles must not include the event name, event year, or playlist suffix.
+- baseTitles must not include the event name, edition title, event year, or playlist suffix.
 - Write baseTitles as strong standalone hooks.
 - Prefer direct, active language with a clear viewer payoff.
 - Use directive phrasing when natural, such as "Stop...", "Build...", "Ship...", or "Use...".
 - Use absolute statements when accurate, such as "X Changes Everything" or "X Is the Missing Piece".
 - Avoid vague hype, unsupported claims, clickbait, and titles that overpromise beyond the video context.
 - Preserve important proper nouns and technical terms.
+- For panel discussions, do not include individual speaker names in baseTitles.
 - Favor clear, searchable, readable titles over cleverness.
 - Put the concrete topic or hook in the first ${youtubeTitleFocusLength} characters.
 - Keep baseTitles concise enough that the final formatted title can be <= ${youtubeTitleMaxLength} characters.

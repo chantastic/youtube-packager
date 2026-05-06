@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
+import { canCustomizeVideoTitleFormat, isVideoType } from '$lib/title-format';
 import {
 	getConnectedYouTubeAccessToken,
 	YouTubeConnectionError,
@@ -20,6 +21,12 @@ import type { Actions, PageServerLoad } from './$types';
 function optionalString(data: FormData, key: string) {
 	const value = data.get(key);
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function optionalVideoType(data: FormData) {
+	const value = optionalString(data, 'videoType');
+
+	return isVideoType(value) ? value : undefined;
 }
 
 function captionTrackScore(track: YouTubeCaptionTrack) {
@@ -51,6 +58,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		youtubeVideoId: params.videoId
 	});
 	const availableSpeakers = await getConvexClient().query(api.videos.listSpeakers, {});
+	const speakers = videoView.speakers.map((speakerRow) => ({
+		name: speakerRow.speaker.name,
+		company: speakerRow.speaker.company
+	}));
 
 	return {
 		videoView,
@@ -60,10 +71,7 @@ export const load: PageServerLoad = async ({ params }) => {
 			videoView.assignments.map((row) => [
 				row.assignment._id,
 				validateVideoBaseline(videoView.video.title, row.event, {
-					speakers: videoView.speakers.map((speakerRow) => ({
-						name: speakerRow.speaker.name,
-						company: speakerRow.speaker.company
-					}))
+					speakers
 				})
 			])
 		)
@@ -115,10 +123,14 @@ export const actions: Actions = {
 
 	updateMetadata: async ({ request, params }) => {
 		const data = await request.formData();
+		const videoType = optionalVideoType(data);
 
 		await getConvexClient().mutation(api.videos.updateMetadata, {
 			youtubeVideoId: params.videoId,
-			videoTitleFormat: optionalString(data, 'videoTitleFormat')
+			videoType,
+			...(canCustomizeVideoTitleFormat(videoType)
+				? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
+				: {})
 		});
 	},
 

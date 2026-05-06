@@ -11,20 +11,26 @@
 
 	let createFormat = $state(defaultTitleFormat);
 	let createName = $state('');
+	let createEditionTitle = $state('');
 	let createYear = $state(new Date().getFullYear());
 	let createPlaylistId = $state('');
 	let createInput = $state<HTMLInputElement | null>(null);
 
 	let editFormat = $state('');
 	let editName = $state('');
+	let editEditionTitle = $state('');
 	let editYear = $state(new Date().getFullYear());
 	let editPlaylistId = $state('');
 	let editInput = $state<HTMLInputElement | null>(null);
 
 	type PlaylistStats = PageData['playlistStatsByEventId'][string];
 
-	function preview(format: string, name: string, year: number) {
-		return previewVideoTitle(format, name, year);
+	function preview(format: string, name: string, year: number, editionTitle?: string) {
+		return previewVideoTitle(format, name, year, editionTitle);
+	}
+
+	function eventDisplayTitle(event: { name: string; editionTitle?: string }) {
+		return event.editionTitle ? `${event.name}: ${event.editionTitle}` : event.name;
 	}
 
 	function playlistStatsFor(eventId: string) {
@@ -71,12 +77,14 @@
 	function startEditing(event: {
 		_id: string;
 		name: string;
+		editionTitle?: string;
 		year?: number;
 		titleFormat?: string;
 		youtubePlaylistId?: string;
 	}) {
 		editing = event._id;
 		editName = event.name;
+		editEditionTitle = event.editionTitle ?? '';
 		editYear = event.year ?? new Date().getFullYear();
 		editFormat = event.titleFormat ?? defaultTitleFormat;
 		editPlaylistId = event.youtubePlaylistId ?? '';
@@ -93,6 +101,7 @@
 		return async ({ update }: { update: () => Promise<void> }) => {
 			await update();
 			createName = '';
+			createEditionTitle = '';
 			createYear = new Date().getFullYear();
 			createPlaylistId = '';
 			createFormat = defaultTitleFormat;
@@ -120,6 +129,14 @@
 							name="name"
 							bind:value={editName}
 							required
+							class="flex-1 rounded border px-3 py-2"
+						/>
+						<label for="edit-editionTitle" class="sr-only">Edition title</label>
+						<input
+							id="edit-editionTitle"
+							name="editionTitle"
+							bind:value={editEditionTitle}
+							placeholder="Edition title"
 							class="flex-1 rounded border px-3 py-2"
 						/>
 						<label for="edit-year" class="sr-only">Year</label>
@@ -166,7 +183,10 @@
 							{/each}
 						</div>
 						<p class="mt-2 text-sm text-gray-400">
-							Preview: <span class="text-gray-600">{preview(editFormat, editName, editYear)}</span>
+							Preview:
+							<span class="text-gray-600"
+								>{preview(editFormat, editName, editYear, editEditionTitle)}</span
+							>
 						</p>
 					</div>
 					<div class="flex gap-2">
@@ -188,10 +208,21 @@
 					<div class="flex items-center justify-between">
 						<div>
 							<span class="text-lg"
-								>{event.name} <span class="text-gray-400">({event.year})</span></span
+								>{eventDisplayTitle(event)}
+								<span class="text-gray-400">({event.year})</span></span
 							>
+							{#if event.editionTitle}
+								<p class="mt-1 text-sm text-gray-500">
+									Series: {event.name} · Edition: {event.editionTitle}
+								</p>
+							{/if}
 							<p class="mt-1 text-sm text-gray-400">
-								{preview(event.titleFormat ?? defaultTitleFormat, event.name, event.year ?? 0)}
+								{preview(
+									event.titleFormat ?? defaultTitleFormat,
+									event.name,
+									event.year ?? 0,
+									event.editionTitle
+								)}
 							</p>
 							<div class="mt-2 flex flex-wrap gap-2">
 								{#if event.youtubePlaylistId}
@@ -290,6 +321,14 @@
 				placeholder="Event name"
 				class="flex-1 rounded border px-3 py-2"
 			/>
+			<label for="editionTitle" class="sr-only">Edition title</label>
+			<input
+				id="editionTitle"
+				name="editionTitle"
+				bind:value={createEditionTitle}
+				placeholder="Edition title"
+				class="flex-1 rounded border px-3 py-2"
+			/>
 			<label for="year" class="sr-only">Year</label>
 			<input
 				id="year"
@@ -333,7 +372,10 @@
 				{/each}
 			</div>
 			<p class="mt-2 text-sm text-gray-400">
-				Preview: <span class="text-gray-600">{preview(createFormat, createName, createYear)}</span>
+				Preview:
+				<span class="text-gray-600"
+					>{preview(createFormat, createName, createYear, createEditionTitle)}</span
+				>
 			</p>
 		</div>
 		<button type="submit" class="rounded bg-green-500 px-3 py-2 text-white hover:bg-green-600"

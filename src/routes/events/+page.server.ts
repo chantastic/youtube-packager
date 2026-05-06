@@ -46,6 +46,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		await getConvexClient().mutation(api.events.create, {
 			name: String(data.get('name')),
+			editionTitle: optionalString(data, 'editionTitle'),
 			year: Number(data.get('year')),
 			titleFormat: optionalString(data, 'titleFormat'),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))
@@ -57,6 +58,7 @@ export const actions: Actions = {
 		await getConvexClient().mutation(api.events.update, {
 			id: String(data.get('id')) as Id<'events'>,
 			name: String(data.get('name')),
+			editionTitle: optionalString(data, 'editionTitle'),
 			year: Number(data.get('year')),
 			titleFormat: optionalString(data, 'titleFormat'),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))

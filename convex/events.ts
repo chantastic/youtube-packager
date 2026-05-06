@@ -18,6 +18,7 @@ export const get = query({
 export const create = mutation({
 	args: {
 		name: v.string(),
+		editionTitle: v.optional(v.string()),
 		year: v.number(),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
@@ -31,6 +32,7 @@ export const update = mutation({
 	args: {
 		id: v.id('events'),
 		name: v.string(),
+		editionTitle: v.optional(v.string()),
 		year: v.number(),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())

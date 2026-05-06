@@ -26,6 +26,16 @@ const playlistVideoSnapshotValidator = v.object({
 	videoPublishedAt: v.optional(v.string())
 });
 
+const videoTypeValidator = v.union(
+	v.literal('talk'),
+	v.literal('presentation'),
+	v.literal('panelDiscussion'),
+	v.literal('keynote'),
+	v.literal('demo'),
+	v.literal('interview'),
+	v.literal('custom')
+);
+
 export const getByYoutubeVideoId = query({
 	args: {
 		youtubeVideoId: v.string()
@@ -160,7 +170,8 @@ export const listSpeakers = query({
 export const updateMetadata = mutation({
 	args: {
 		youtubeVideoId: v.string(),
-		videoTitleFormat: v.optional(v.string())
+		videoTitleFormat: v.optional(v.string()),
+		videoType: v.optional(videoTypeValidator)
 	},
 	handler: async (ctx, { youtubeVideoId, ...fields }) => {
 		const video = await ctx.db
@@ -438,6 +449,9 @@ async function upsertVideo(
 			...snapshot,
 			...(existingVideo.videoTitleFormat !== undefined
 				? { videoTitleFormat: existingVideo.videoTitleFormat }
+				: {}),
+			...(existingVideo.videoType !== undefined
+				? { videoType: existingVideo.videoType }
 				: {})
 		});
 		return existingVideo._id;

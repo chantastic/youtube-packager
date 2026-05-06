@@ -30,6 +30,16 @@ describe('video validation', () => {
 		});
 	});
 
+	test('passes when title includes the rendered event suffix before other video metadata', () => {
+		expect(
+			validateTitleEventSuffix('Build Better Auth — Chan, WorkOS | RenderConf 2026 Keynote', event)
+		).toMatchObject({
+			id: 'title-event-suffix',
+			status: 'pass',
+			expected: '| RenderConf 2026'
+		});
+	});
+
 	test('returns info when a title format has no suffix after title', () => {
 		expect(
 			validateTitleEventSuffix('RenderConf 2026 Keynote', {

@@ -40,7 +40,8 @@ export const POST: RequestHandler = async ({ params }) => {
 			speaker: speakerNames || undefined,
 			company: companies || undefined,
 			position: positions || undefined,
-			videoTitleFormat: videoView.video.videoTitleFormat
+			videoTitleFormat: videoView.video.videoTitleFormat,
+			videoType: videoView.video.videoType
 		},
 		videoContext: {
 			youtubeVideoId: videoView.video.youtubeVideoId,

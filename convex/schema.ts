@@ -4,6 +4,7 @@ import { v } from 'convex/values';
 export default defineSchema({
 	events: defineTable({
 		name: v.string(),
+		editionTitle: v.optional(v.string()),
 		year: v.optional(v.number()),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
@@ -13,6 +14,17 @@ export default defineSchema({
 		title: v.string(),
 		description: v.optional(v.string()),
 		videoTitleFormat: v.optional(v.string()),
+		videoType: v.optional(
+			v.union(
+				v.literal('talk'),
+				v.literal('presentation'),
+				v.literal('panelDiscussion'),
+				v.literal('keynote'),
+				v.literal('demo'),
+				v.literal('interview'),
+				v.literal('custom')
+			)
+		),
 		videoUrl: v.string(),
 		studioEditUrl: v.string(),
 		thumbnailUrl: v.optional(v.string()),

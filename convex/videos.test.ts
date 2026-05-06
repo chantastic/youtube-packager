@@ -170,7 +170,8 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	});
 	await t.mutation(api.videos.updateMetadata, {
 		youtubeVideoId: 'video-1',
-		videoTitleFormat: '{title} — {speaker}, {company}'
+		videoTitleFormat: '{title} — {speaker}, {company}',
+		videoType: 'panelDiscussion'
 	});
 	await t.mutation(api.videos.addSpeaker, {
 		youtubeVideoId: 'video-1',
@@ -198,7 +199,8 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	expect(videoDoc).toMatchObject({
 		youtubeVideoId: 'video-1',
 		title: 'Updated title',
-		videoTitleFormat: '{title} — {speaker}, {company}'
+		videoTitleFormat: '{title} — {speaker}, {company}',
+		videoType: 'panelDiscussion'
 	});
 	expect(videoView?.speakers).toHaveLength(1);
 	expect(videoView?.speakers[0].speaker).toMatchObject({

@@ -2,7 +2,12 @@ import { describe, expect, test } from 'vitest';
 import {
 	deriveComposedBaseTitle,
 	formatComposedVideoTitle,
-	formatVideoRecordTitle
+	formatVideoTitle,
+	formatVideoRecordTitle,
+	getDefaultVideoTypeTitleFormat,
+	getDefaultVideoTitleFormat,
+	normalizeVideoType,
+	normalizeVideoTitleFormat
 } from './title-format';
 
 describe('title formatting', () => {
@@ -22,6 +27,89 @@ describe('title formatting', () => {
 		);
 	});
 
+	test('uses panel discussion instead of speaker and company metadata', () => {
+		expect(getDefaultVideoTypeTitleFormat('panelDiscussion')).toBe(
+			'{title} — Panel Discussion {event_suffix}'
+		);
+		expect(
+			formatVideoRecordTitle(undefined, 'Building AuthKit', {
+				speaker: 'Chan, Michael, Sarah',
+				company: 'WorkOS, Acme',
+				videoType: 'panelDiscussion'
+			})
+		).toBe('Building AuthKit — Panel Discussion');
+	});
+
+	test('formats panel discussions with the event suffix after the type', () => {
+		expect(
+			formatComposedVideoTitle(
+				'The Future of Agentic AI: Why MCP Moved to the Linux Foundation',
+				{ videoType: 'panelDiscussion' },
+				{ name: 'MCP Night', titleFormat: '{title} | {event_name}' }
+			)
+		).toBe(
+			'The Future of Agentic AI: Why MCP Moved to the Linux Foundation — Panel Discussion | MCP Night'
+		);
+	});
+
+	test('uses type-specific defaults when no custom video format is set', () => {
+		expect(normalizeVideoTitleFormat(undefined, 'panelDiscussion')).toBe(
+			'{title} — {video_type}'
+		);
+		expect(getDefaultVideoTitleFormat('interview')).toBe(
+			'{title} — {video_type}: {speaker}, {company}'
+		);
+		expect(
+			formatVideoRecordTitle(undefined, 'Building AuthKit', {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'interview'
+			})
+		).toBe('Building AuthKit — Interview: Chan, WorkOS');
+	});
+
+	test('normalizes presentation and demo records to the Talk template', () => {
+		expect(normalizeVideoType('presentation')).toBe('talk');
+		expect(normalizeVideoType('demo')).toBe('talk');
+		expect(getDefaultVideoTypeTitleFormat('talk')).toBe(
+			'{title} — {speaker}, {company} {event_suffix}'
+		);
+		expect(getDefaultVideoTypeTitleFormat('presentation')).toBe(
+			getDefaultVideoTypeTitleFormat('talk')
+		);
+		expect(getDefaultVideoTypeTitleFormat('demo')).toBe(getDefaultVideoTypeTitleFormat('talk'));
+		expect(
+			formatComposedVideoTitle(
+				'Building AuthKit',
+				{ speaker: 'Chan', company: 'WorkOS', videoType: 'demo' },
+				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
+			)
+		).toBe('Building AuthKit — Chan, WorkOS | Launch Week 2026');
+	});
+
+	test('only honors custom video formats for the custom video type', () => {
+		expect(normalizeVideoTitleFormat('{title} with {speaker}', 'presentation')).toBe(
+			getDefaultVideoTitleFormat('presentation')
+		);
+		expect(normalizeVideoTitleFormat('{title} with {speaker}', 'custom')).toBe(
+			'{title} with {speaker}'
+		);
+		expect(
+			formatVideoRecordTitle('{title} with {speaker}', 'Building AuthKit', {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'demo'
+			})
+		).toBe('Building AuthKit — Chan, WorkOS');
+		expect(
+			formatVideoRecordTitle('{title} with {speaker}', 'Building AuthKit', {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoType: 'custom'
+			})
+		).toBe('Building AuthKit with Chan');
+	});
+
 	test('composes video and playlist title formats', () => {
 		expect(
 			formatComposedVideoTitle(
@@ -32,11 +120,69 @@ describe('title formatting', () => {
 		).toBe('Building AuthKit — Chan, WorkOS | Launch Week 2026');
 	});
 
+	test('uses a composed keynote format with the event name and video type', () => {
+		expect(getDefaultVideoTypeTitleFormat('keynote')).toBe(
+			'{title} — {speaker}, {company} {event_suffix} {video_type}'
+		);
+		expect(
+			formatComposedVideoTitle(
+				'Building AuthKit',
+				{ speaker: 'Chan', company: 'WorkOS', videoType: 'keynote' },
+				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
+			)
+		).toBe('Building AuthKit — Chan, WorkOS | Launch Week 2026 Keynote');
+	});
+
+	test('custom video title formats can compose video and event metadata', () => {
+		expect(
+			formatComposedVideoTitle(
+				'Building AuthKit',
+				{
+					speaker: 'Chan',
+					company: 'WorkOS',
+					videoType: 'custom',
+					videoTitleFormat: '{event_name}: {title} — {speaker}, {company} ({year})'
+				},
+				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
+			)
+		).toBe('Launch Week: Building AuthKit — Chan, WorkOS (2026)');
+	});
+
+	test('keeps edition title out of the default event suffix', () => {
+		expect(
+			formatVideoTitle(undefined, 'Building AuthKit', {
+				name: 'MCP Night',
+				editionTitle: 'Auth for Agents',
+				year: 2026
+			})
+		).toBe('Building AuthKit | MCP Night 2026');
+	});
+
+	test('supports edition title when the format explicitly includes it', () => {
+		expect(
+			formatVideoTitle('{title} | {event_name}: {edition_title} {year}', 'Building AuthKit', {
+				name: 'MCP Night',
+				editionTitle: 'Auth for Agents',
+				year: 2026
+			})
+		).toBe('Building AuthKit | MCP Night: Auth for Agents 2026');
+	});
+
 	test('derives the base title from a composed title', () => {
 		expect(
 			deriveComposedBaseTitle(
 				'Building AuthKit — Chan, WorkOS | Launch Week 2026',
 				{ speaker: 'Chan', company: 'WorkOS' },
+				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
+			)
+		).toBe('Building AuthKit');
+	});
+
+	test('derives the base title from a keynote title', () => {
+		expect(
+			deriveComposedBaseTitle(
+				'Building AuthKit — Chan, WorkOS | Launch Week 2026 Keynote',
+				{ speaker: 'Chan', company: 'WorkOS', videoType: 'keynote' },
 				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
 			)
 		).toBe('Building AuthKit');

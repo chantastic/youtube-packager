@@ -25,6 +25,21 @@ test('create with titleFormat', async () => {
 	expect(events[0].titleFormat).toBe('{title} - {event_name} {year}');
 });
 
+test('create with edition title', async () => {
+	const t = convexTest(schema, modules);
+	await t.mutation(api.events.create, {
+		name: 'MCP Night',
+		editionTitle: 'Auth for Agents',
+		year: 2026
+	});
+	const events = await t.query(api.events.list);
+	expect(events[0]).toMatchObject({
+		name: 'MCP Night',
+		editionTitle: 'Auth for Agents',
+		year: 2026
+	});
+});
+
 test('create with YouTube playlist ID', async () => {
 	const t = convexTest(schema, modules);
 	await t.mutation(api.events.create, {
@@ -49,6 +64,7 @@ test('update event fields', async () => {
 	await t.mutation(api.events.update, {
 		id,
 		name: 'NewName',
+		editionTitle: 'New Edition',
 		year: 2026,
 		titleFormat: '{title} | {event_name}',
 		youtubePlaylistId: 'PL456'
@@ -56,6 +72,7 @@ test('update event fields', async () => {
 	const events = await t.query(api.events.list);
 	expect(events[0]).toMatchObject({
 		name: 'NewName',
+		editionTitle: 'New Edition',
 		year: 2026,
 		titleFormat: '{title} | {event_name}',
 		youtubePlaylistId: 'PL456'

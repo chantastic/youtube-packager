@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import {
-		defaultVideoTitleFormat,
+		canCustomizeVideoTitleFormat,
+		defaultVideoType,
 		deriveComposedBaseTitle,
 		formatComposedVideoTitle,
-		normalizeVideoTitleFormat,
+		getDefaultVideoTypeTitleFormat,
+		normalizeComposedVideoTitleFormat,
+		normalizeVideoType,
+		videoTypeLabelFor,
+		videoTypeOptions,
 		videoTitleTokens
 	} from '$lib/title-format';
 	import { youtubePlaylistUrl } from '$lib/youtube';
@@ -29,11 +34,18 @@
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
+	let selectedVideoType = $state(defaultVideoType);
+	let videoTitleFormatInput = $state('');
 	let speakerSelection = $state('');
 	let selectedSpeakerId = $state('');
 	let speakerName = $state('');
 	let speakerPosition = $state('');
 	let speakerCompany = $state('');
+
+	$effect(() => {
+		selectedVideoType = normalizeVideoType(data.videoView.video.videoType);
+		videoTitleFormatInput = data.videoView.video.videoTitleFormat ?? '';
+	});
 
 	onMount(() => {
 		void loadTitleQuality();
@@ -108,12 +120,17 @@
 			speaker: speaker || undefined,
 			company: company || undefined,
 			position: position || undefined,
-			videoTitleFormat: data.videoView.video.videoTitleFormat
+			videoTitleFormat: data.videoView.video.videoTitleFormat,
+			videoType: data.videoView.video.videoType
 		};
 	}
 
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
 		return [row.speaker.position, row.speaker.company].filter(Boolean).join(', ');
+	}
+
+	function eventDisplayTitle(event: PageData['videoView']['assignments'][number]['event']) {
+		return event.editionTitle ? `${event.name}: ${event.editionTitle}` : event.name;
 	}
 
 	function availableSpeakerLabel(speaker: PageData['availableSpeakers'][number]) {
@@ -373,24 +390,53 @@
 			use:enhance={afterMetadataUpdate}
 			class="px-4 py-4"
 		>
-			<div>
-				<label for="videoTitleFormat" class="mb-1 block text-sm text-gray-500"
-					>Video title format</label
+			<div class="mb-4">
+				<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
+				<select
+					id="videoType"
+					name="videoType"
+					bind:value={selectedVideoType}
+					class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
 				>
-				<input
-					id="videoTitleFormat"
-					name="videoTitleFormat"
-					value={normalizeVideoTitleFormat(data.videoView.video.videoTitleFormat)}
-					class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
-				/>
-				<div class="mt-1 flex flex-wrap gap-1">
-					{#each videoTitleTokens as token (token)}
-						<span class="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
-							{token}
-						</span>
+					{#each videoTypeOptions as option (option.value)}
+						<option value={option.value}>{option.label}</option>
 					{/each}
-				</div>
+				</select>
 			</div>
+			{#if canCustomizeVideoTitleFormat(selectedVideoType)}
+				<div>
+					<label for="videoTitleFormat" class="mb-1 block text-sm text-gray-500"
+						>Custom title format</label
+					>
+					<input
+						id="videoTitleFormat"
+						name="videoTitleFormat"
+						bind:value={videoTitleFormatInput}
+						placeholder={getDefaultVideoTypeTitleFormat(selectedVideoType)}
+						class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+					/>
+					<div class="mt-1 flex flex-wrap gap-1">
+						{#each videoTitleTokens as token (token)}
+							<span class="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
+								{token}
+							</span>
+						{/each}
+					</div>
+					<p class="mt-2 text-xs text-gray-500">
+						Fallback:
+						<span class="font-mono">{getDefaultVideoTypeTitleFormat(selectedVideoType)}</span>
+					</p>
+				</div>
+			{:else}
+				<div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+					<p class="text-xs text-gray-500">
+						{videoTypeLabelFor(selectedVideoType)} format
+					</p>
+					<p class="mt-1 font-mono text-sm text-gray-800">
+						{getDefaultVideoTypeTitleFormat(selectedVideoType)}
+					</p>
+				</div>
+			{/if}
 			<div class="mt-4 flex flex-wrap items-center gap-3">
 				<button
 					type="submit"
@@ -403,7 +449,13 @@
 				{/if}
 			</div>
 			<p class="mt-3 text-xs text-gray-500">
-				Default: <span class="font-mono">{defaultVideoTitleFormat}</span>
+				Effective format:
+				<span class="font-mono"
+					>{normalizeComposedVideoTitleFormat(
+						data.videoView.video.videoTitleFormat,
+						data.videoView.video.videoType ?? defaultVideoType
+					)}</span
+				>
 			</p>
 		</form>
 		<div class="border-t border-gray-100 px-4 py-4">
@@ -675,7 +727,7 @@
 			>
 				<div>
 					<p class="font-medium text-gray-950">
-						{row.event.name} <span class="text-gray-400">({row.event.year})</span>
+						{eventDisplayTitle(row.event)} <span class="text-gray-400">({row.event.year})</span>
 					</p>
 					<p class="mt-1 text-sm text-gray-500">
 						Position #{row.assignment.position + 1} · Synced {formatDate(
