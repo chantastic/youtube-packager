@@ -1,6 +1,8 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 
+const eventTypeValidator = v.union(v.literal('conference'), v.literal('interviews'));
+
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -19,12 +21,16 @@ export const create = mutation({
 	args: {
 		name: v.string(),
 		editionTitle: v.optional(v.string()),
+		eventType: v.optional(eventTypeValidator),
 		year: v.number(),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db.insert('events', args);
+		return await ctx.db.insert('events', {
+			...args,
+			eventType: args.eventType ?? 'conference'
+		});
 	}
 });
 
@@ -33,12 +39,16 @@ export const update = mutation({
 		id: v.id('events'),
 		name: v.string(),
 		editionTitle: v.optional(v.string()),
+		eventType: v.optional(eventTypeValidator),
 		year: v.number(),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
 	},
 	handler: async (ctx, { id, ...fields }) => {
-		await ctx.db.patch(id, fields);
+		await ctx.db.patch(id, {
+			...fields,
+			eventType: fields.eventType ?? 'conference'
+		});
 	}
 });
 

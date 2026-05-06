@@ -82,7 +82,8 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 	});
 	expect(videoDoc).toMatchObject({
 		youtubeVideoId: 'video-1',
-		title: 'A playlist video'
+		title: 'A playlist video',
+		videoType: 'talk'
 	});
 	expect(stats).toHaveLength(1);
 	expect(stats[0]).toMatchObject({
@@ -101,6 +102,34 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 				infoCount: 0
 			}
 		]
+	});
+});
+
+test('event type sets the default video type for ingested videos', async () => {
+	const t = convexTest(schema, modules);
+	const eventId = await t.mutation(api.events.create, {
+		name: 'Customer Chats',
+		eventType: 'interviews',
+		year: 2026
+	});
+
+	await t.mutation(api.videos.syncPlaylistForEvent, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'customer-chats-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'interview-1', title: 'Customer interview' })]
+		}
+	});
+
+	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+		youtubeVideoId: 'interview-1'
+	});
+
+	expect(videoDoc).toMatchObject({
+		youtubeVideoId: 'interview-1',
+		videoType: 'interview'
 	});
 });
 

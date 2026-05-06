@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { defaultTitleFormat, previewVideoTitle, titleTokens } from '$lib/title-format';
+	import {
+		defaultEventType,
+		defaultVideoTypeForEventType,
+		eventTypeLabelFor,
+		eventTypeOptions,
+		normalizeEventType
+	} from '$lib/event-type';
+	import {
+		defaultTitleFormat,
+		previewVideoTitle,
+		titleTokens,
+		videoTypeLabelFor
+	} from '$lib/title-format';
 	import { youtubePlaylistUrl } from '$lib/youtube';
 	import { slide } from 'svelte/transition';
 	import type { PageData } from './$types';
@@ -12,6 +24,7 @@
 	let createFormat = $state(defaultTitleFormat);
 	let createName = $state('');
 	let createEditionTitle = $state('');
+	let createEventType = $state(defaultEventType);
 	let createYear = $state(new Date().getFullYear());
 	let createPlaylistId = $state('');
 	let createInput = $state<HTMLInputElement | null>(null);
@@ -19,6 +32,7 @@
 	let editFormat = $state('');
 	let editName = $state('');
 	let editEditionTitle = $state('');
+	let editEventType = $state(defaultEventType);
 	let editYear = $state(new Date().getFullYear());
 	let editPlaylistId = $state('');
 	let editInput = $state<HTMLInputElement | null>(null);
@@ -78,6 +92,7 @@
 		_id: string;
 		name: string;
 		editionTitle?: string;
+		eventType?: string;
 		year?: number;
 		titleFormat?: string;
 		youtubePlaylistId?: string;
@@ -85,6 +100,7 @@
 		editing = event._id;
 		editName = event.name;
 		editEditionTitle = event.editionTitle ?? '';
+		editEventType = normalizeEventType(event.eventType);
 		editYear = event.year ?? new Date().getFullYear();
 		editFormat = event.titleFormat ?? defaultTitleFormat;
 		editPlaylistId = event.youtubePlaylistId ?? '';
@@ -102,6 +118,7 @@
 			await update();
 			createName = '';
 			createEditionTitle = '';
+			createEventType = defaultEventType;
 			createYear = new Date().getFullYear();
 			createPlaylistId = '';
 			createFormat = defaultTitleFormat;
@@ -148,6 +165,21 @@
 							required
 							class="w-24 rounded border px-3 py-2"
 						/>
+					</div>
+					<div>
+						<label for="edit-eventType" class="mb-1 block text-sm text-gray-500">Event type</label>
+						<select
+							id="edit-eventType"
+							name="eventType"
+							bind:value={editEventType}
+							class="w-full rounded border px-3 py-2"
+						>
+							{#each eventTypeOptions as option (option.value)}
+								<option value={option.value}>
+									{option.label} - defaults videos to {videoTypeLabelFor(option.defaultVideoType)}
+								</option>
+							{/each}
+						</select>
 					</div>
 					<div>
 						<label for="edit-youtubePlaylistId" class="mb-1 block text-sm text-gray-500"
@@ -216,6 +248,11 @@
 									Series: {event.name} · Edition: {event.editionTitle}
 								</p>
 							{/if}
+							<p class="mt-1 text-sm text-gray-500">
+								{eventTypeLabelFor(event.eventType)} · new videos default to {videoTypeLabelFor(
+									defaultVideoTypeForEventType(event.eventType)
+								)}
+							</p>
 							<p class="mt-1 text-sm text-gray-400">
 								{preview(
 									event.titleFormat ?? defaultTitleFormat,
@@ -339,6 +376,21 @@
 				placeholder="Year"
 				class="w-24 rounded border px-3 py-2"
 			/>
+		</div>
+		<div>
+			<label for="eventType" class="mb-1 block text-sm text-gray-500">Event type</label>
+			<select
+				id="eventType"
+				name="eventType"
+				bind:value={createEventType}
+				class="w-full rounded border px-3 py-2"
+			>
+				{#each eventTypeOptions as option (option.value)}
+					<option value={option.value}>
+						{option.label} - defaults videos to {videoTypeLabelFor(option.defaultVideoType)}
+					</option>
+				{/each}
+			</select>
 		</div>
 		<div>
 			<label for="youtubePlaylistId" class="mb-1 block text-sm text-gray-500"

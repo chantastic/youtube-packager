@@ -11,7 +11,7 @@ test('create and list an event', async () => {
 	await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
 	const events = await t.query(api.events.list);
 	expect(events).toHaveLength(1);
-	expect(events[0]).toMatchObject({ name: 'TestConf', year: 2026 });
+	expect(events[0]).toMatchObject({ name: 'TestConf', eventType: 'conference', year: 2026 });
 });
 
 test('create with titleFormat', async () => {
@@ -51,6 +51,21 @@ test('create with YouTube playlist ID', async () => {
 	expect(events[0].youtubePlaylistId).toBe('PL123');
 });
 
+test('create with event type', async () => {
+	const t = convexTest(schema, modules);
+	await t.mutation(api.events.create, {
+		name: 'Customer Chats',
+		eventType: 'interviews',
+		year: 2026
+	});
+	const events = await t.query(api.events.list);
+	expect(events[0]).toMatchObject({
+		name: 'Customer Chats',
+		eventType: 'interviews',
+		year: 2026
+	});
+});
+
 test('create without titleFormat stores undefined', async () => {
 	const t = convexTest(schema, modules);
 	await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
@@ -65,6 +80,7 @@ test('update event fields', async () => {
 		id,
 		name: 'NewName',
 		editionTitle: 'New Edition',
+		eventType: 'interviews',
 		year: 2026,
 		titleFormat: '{title} | {event_name}',
 		youtubePlaylistId: 'PL456'
@@ -73,6 +89,7 @@ test('update event fields', async () => {
 	expect(events[0]).toMatchObject({
 		name: 'NewName',
 		editionTitle: 'New Edition',
+		eventType: 'interviews',
 		year: 2026,
 		titleFormat: '{title} | {event_name}',
 		youtubePlaylistId: 'PL456'

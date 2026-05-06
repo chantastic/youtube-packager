@@ -1,5 +1,6 @@
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClient } from '$lib/server/convex';
+import { defaultEventType, isEventType } from '$lib/event-type';
 import { videoValidationContextKey } from '$lib/video-validation';
 import { api } from '../../../convex/_generated/api';
 import type { Id } from '../../../convex/_generated/dataModel';
@@ -8,6 +9,12 @@ import type { PageServerLoad, Actions } from './$types';
 function optionalString(data: FormData, key: string) {
 	const value = data.get(key);
 	return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function eventType(data: FormData) {
+	const value = optionalString(data, 'eventType');
+
+	return isEventType(value) ? value : defaultEventType;
 }
 
 export const load: PageServerLoad = async () => {
@@ -47,6 +54,7 @@ export const actions: Actions = {
 		await getConvexClient().mutation(api.events.create, {
 			name: String(data.get('name')),
 			editionTitle: optionalString(data, 'editionTitle'),
+			eventType: eventType(data),
 			year: Number(data.get('year')),
 			titleFormat: optionalString(data, 'titleFormat'),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))
@@ -59,6 +67,7 @@ export const actions: Actions = {
 			id: String(data.get('id')) as Id<'events'>,
 			name: String(data.get('name')),
 			editionTitle: optionalString(data, 'editionTitle'),
+			eventType: eventType(data),
 			year: Number(data.get('year')),
 			titleFormat: optionalString(data, 'titleFormat'),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))

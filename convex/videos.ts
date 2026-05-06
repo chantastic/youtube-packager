@@ -36,6 +36,10 @@ const videoTypeValidator = v.union(
 	v.literal('custom')
 );
 
+function defaultVideoTypeForEventType(eventType: string | undefined) {
+	return eventType === 'interviews' ? 'interview' : 'talk';
+}
+
 export const getByYoutubeVideoId = query({
 	args: {
 		youtubeVideoId: v.string()
@@ -306,6 +310,7 @@ export const syncPlaylistForEvent = mutation({
 		}
 
 		const lastFetchedAt = Date.now();
+		const defaultVideoType = defaultVideoTypeForEventType(event.eventType);
 		const videos = playlist.videos.slice(0, 500);
 		const existingStats = await ctx.db
 			.query('eventPlaylistStats')
@@ -347,7 +352,7 @@ export const syncPlaylistForEvent = mutation({
 		}
 
 		for (const video of videos) {
-			const videoId = await upsertVideo(ctx, video, lastFetchedAt);
+			const videoId = await upsertVideo(ctx, video, lastFetchedAt, defaultVideoType);
 			const existingAssignment = await ctx.db
 				.query('playlistAssignments')
 				.withIndex('by_eventId_and_playlistId_and_playlistItemId', (q) =>
@@ -425,7 +430,8 @@ async function upsertVideo(
 		publishedAt?: string;
 		videoPublishedAt?: string;
 	},
-	lastFetchedAt: number
+	lastFetchedAt: number,
+	defaultVideoType: 'talk' | 'interview'
 ) {
 	const existingVideo = await ctx.db
 		.query('videos')
@@ -452,10 +458,13 @@ async function upsertVideo(
 				: {}),
 			...(existingVideo.videoType !== undefined
 				? { videoType: existingVideo.videoType }
-				: {})
+				: { videoType: defaultVideoType })
 		});
 		return existingVideo._id;
 	}
 
-	return await ctx.db.insert('videos', snapshot);
+	return await ctx.db.insert('videos', {
+		...snapshot,
+		videoType: defaultVideoType
+	});
 }

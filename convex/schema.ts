@@ -5,6 +5,7 @@ export default defineSchema({
 	events: defineTable({
 		name: v.string(),
 		editionTitle: v.optional(v.string()),
+		eventType: v.optional(v.union(v.literal('conference'), v.literal('interviews'))),
 		year: v.optional(v.number()),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
