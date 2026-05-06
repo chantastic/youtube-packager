@@ -4,13 +4,34 @@ export type TitleFormatEvent = {
 	titleFormat?: string;
 };
 
+export type VideoTitleFormatRecord = {
+	speaker?: string;
+	company?: string;
+	position?: string;
+	videoTitleFormat?: string;
+};
+
 const titlePlaceholder = '__YTP_TITLE__';
 
 export const defaultTitleFormat = '{title} | {event_name} {year}';
 export const titleTokens = ['{title}', '{event_name}', '{year}'];
+export const defaultVideoTitleFormat = '{title} — {speaker}, {company}';
+export const videoTitleTokens = ['{title}', '{speaker}', '{company}'];
 
 function normalizeSpaces(value: string) {
 	return value.replace(/\s+/g, ' ').trim();
+}
+
+function cleanupTitlePunctuation(value: string) {
+	return normalizeSpaces(value)
+		.replace(/\s+,\s+/g, ', ')
+		.replace(/\s+,\s*$/g, '')
+		.replace(/,\s*$/g, '')
+		.replace(/,\s+([|—-])/g, ' $1')
+		.replace(/([|—-])\s*,\s+/g, '$1 ')
+		.replace(/\s+[—|-]\s*$/g, '')
+		.replace(/^\s*[—|-]\s+/g, '')
+		.trim();
 }
 
 function formatWithTitle(format: string, title: string, event: TitleFormatEvent) {
@@ -20,9 +41,21 @@ function formatWithTitle(format: string, title: string, event: TitleFormatEvent)
 		.replace(/{year}/g, String(event.year ?? ''));
 }
 
+function formatWithVideoTitle(format: string, title: string, video: VideoTitleFormatRecord) {
+	return format
+		.replace(/{title}/g, title)
+		.replace(/{speaker}/g, video.speaker ?? '')
+		.replace(/{company}/g, video.company ?? '');
+}
+
 export function normalizeTitleFormat(format?: string) {
 	const normalized = format?.trim();
 	return normalized && normalized.includes('{title}') ? normalized : defaultTitleFormat;
+}
+
+export function normalizeVideoTitleFormat(format?: string) {
+	const normalized = format?.trim();
+	return normalized && normalized.includes('{title}') ? normalized : defaultVideoTitleFormat;
 }
 
 export function formatVideoTitle(
@@ -30,7 +63,29 @@ export function formatVideoTitle(
 	title: string,
 	event: TitleFormatEvent
 ) {
-	return normalizeSpaces(formatWithTitle(normalizeTitleFormat(format), title, event));
+	return cleanupTitlePunctuation(formatWithTitle(normalizeTitleFormat(format), title, event));
+}
+
+export function formatVideoRecordTitle(
+	format: string | undefined,
+	title: string,
+	video: VideoTitleFormatRecord
+) {
+	return cleanupTitlePunctuation(
+		formatWithVideoTitle(normalizeVideoTitleFormat(format), title, video)
+	);
+}
+
+export function formatComposedVideoTitle(
+	baseTitle: string,
+	video: VideoTitleFormatRecord,
+	event: TitleFormatEvent
+) {
+	return formatVideoTitle(
+		event.titleFormat,
+		formatVideoRecordTitle(video.videoTitleFormat, baseTitle, video),
+		event
+	);
 }
 
 export function previewVideoTitle(format: string, name: string, year: number) {
@@ -61,6 +116,29 @@ export function getTitleEventSuffix(format: string | undefined, event: TitleForm
 	return getTitleFormatAffixes(format, event).suffix;
 }
 
+export function getVideoTitleFormatAffixes(
+	format: string | undefined,
+	video: VideoTitleFormatRecord
+) {
+	const normalized = normalizeVideoTitleFormat(format);
+	const rendered = formatWithVideoTitle(normalized, titlePlaceholder, video);
+	const placeholderMatches = rendered.match(new RegExp(titlePlaceholder, 'g')) ?? [];
+
+	if (placeholderMatches.length !== 1) {
+		return {
+			prefix: '',
+			suffix: ''
+		};
+	}
+
+	const [prefix, suffix] = rendered.split(titlePlaceholder);
+
+	return {
+		prefix: cleanupTitlePunctuation(prefix),
+		suffix: cleanupTitlePunctuation(suffix)
+	};
+}
+
 export function deriveBaseTitle(
 	currentTitle: string,
 	format: string | undefined,
@@ -77,5 +155,36 @@ export function deriveBaseTitle(
 		baseTitle = normalizeSpaces(baseTitle.slice(0, -suffix.length));
 	}
 
-	return baseTitle || normalizeSpaces(currentTitle);
+	return cleanupTitlePunctuation(baseTitle) || normalizeSpaces(currentTitle);
+}
+
+export function deriveVideoRecordBaseTitle(
+	currentTitle: string,
+	format: string | undefined,
+	video: VideoTitleFormatRecord
+) {
+	const { prefix, suffix } = getVideoTitleFormatAffixes(format, video);
+	let baseTitle = normalizeSpaces(currentTitle);
+
+	if (prefix && baseTitle.startsWith(prefix)) {
+		baseTitle = normalizeSpaces(baseTitle.slice(prefix.length));
+	}
+
+	if (suffix && baseTitle.endsWith(suffix)) {
+		baseTitle = normalizeSpaces(baseTitle.slice(0, -suffix.length));
+	}
+
+	return cleanupTitlePunctuation(baseTitle) || normalizeSpaces(currentTitle);
+}
+
+export function deriveComposedBaseTitle(
+	currentTitle: string,
+	video: VideoTitleFormatRecord,
+	event: TitleFormatEvent
+) {
+	return deriveVideoRecordBaseTitle(
+		deriveBaseTitle(currentTitle, event.titleFormat, event),
+		video.videoTitleFormat,
+		video
+	);
 }

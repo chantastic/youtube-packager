@@ -8,6 +8,71 @@ export default defineSchema({
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
 	}),
+	videos: defineTable({
+		youtubeVideoId: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		videoTitleFormat: v.optional(v.string()),
+		videoUrl: v.string(),
+		studioEditUrl: v.string(),
+		thumbnailUrl: v.optional(v.string()),
+		channelTitle: v.optional(v.string()),
+		publishedAt: v.optional(v.string()),
+		videoPublishedAt: v.optional(v.string()),
+		lastFetchedAt: v.number()
+	}).index('by_youtubeVideoId', ['youtubeVideoId']),
+	speakers: defineTable({
+		name: v.string(),
+		company: v.optional(v.string()),
+		position: v.optional(v.string())
+	}).index('by_name_and_company', ['name', 'company']),
+	videoSpeakers: defineTable({
+		videoId: v.id('videos'),
+		speakerId: v.id('speakers'),
+		position: v.number()
+	})
+		.index('by_videoId', ['videoId'])
+		.index('by_videoId_and_speakerId', ['videoId', 'speakerId'])
+		.index('by_speakerId', ['speakerId']),
+	playlistAssignments: defineTable({
+		eventId: v.id('events'),
+		playlistId: v.string(),
+		playlistItemId: v.string(),
+		videoId: v.id('videos'),
+		youtubeVideoId: v.string(),
+		position: v.number(),
+		playlistVideoUrl: v.string(),
+		lastFetchedAt: v.number()
+	})
+		.index('by_eventId', ['eventId'])
+		.index('by_eventId_and_playlistId', ['eventId', 'playlistId'])
+		.index('by_eventId_and_playlistId_and_playlistItemId', [
+			'eventId',
+			'playlistId',
+			'playlistItemId'
+		])
+		.index('by_videoId', ['videoId'])
+		.index('by_playlistId', ['playlistId'])
+		.index('by_playlistId_and_playlistItemId', ['playlistId', 'playlistItemId']),
+	eventPlaylistStats: defineTable({
+		eventId: v.id('events'),
+		playlistId: v.string(),
+		playlistTitle: v.optional(v.string()),
+		playlistChannelTitle: v.optional(v.string()),
+		playlistItemCount: v.optional(v.number()),
+		validationContextKey: v.optional(v.string()),
+		videoCount: v.number(),
+		validationStats: v.array(
+			v.object({
+				id: v.string(),
+				label: v.string(),
+				passCount: v.number(),
+				failCount: v.number(),
+				infoCount: v.number()
+			})
+		),
+		lastFetchedAt: v.number()
+	}).index('by_eventId', ['eventId']),
 	titleQualityChecks: defineTable({
 		videoId: v.string(),
 		titleHash: v.string(),

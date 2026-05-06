@@ -304,6 +304,10 @@
 						</div>
 						<div class="mt-3 flex flex-wrap gap-2 md:hidden">
 							<a
+								href={`/videos/${video.videoId}`}
+								class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">Details</a
+							>
+							<a
 								href={video.playlistVideoUrl}
 								target="_blank"
 								rel="noreferrer"
@@ -358,6 +362,11 @@
 						{/if}
 					</div>
 					<div class="hidden items-start gap-2 md:flex">
+						<a
+							href={`/videos/${video.videoId}`}
+							class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+							>Details</a
+						>
 						<a
 							href={video.playlistVideoUrl}
 							target="_blank"

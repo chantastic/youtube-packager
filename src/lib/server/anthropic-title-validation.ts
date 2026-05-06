@@ -4,6 +4,7 @@ import type { VideoValidation } from '$lib/video-validation';
 const anthropicApiUrl = 'https://api.anthropic.com/v1/messages';
 const anthropicVersion = '2023-06-01';
 const defaultModel = 'claude-haiku-4-5-20251001';
+const titleQualityBatchSize = 20;
 export const titleQualityValidationVersion = 'title-quality-v1';
 
 type TitleInput = {
@@ -16,6 +17,7 @@ type AnthropicMessageResponse = {
 		type?: string;
 		text?: string;
 	}>;
+	stop_reason?: string;
 };
 
 type TitleQualityItem = {
@@ -109,6 +111,16 @@ function countValidations(validationsByVideoId: Record<string, VideoValidation[]
 	);
 }
 
+export function chunkTitleQualityInputs(titles: TitleInput[]) {
+	const batches: TitleInput[][] = [];
+
+	for (let index = 0; index < titles.length; index += titleQualityBatchSize) {
+		batches.push(titles.slice(index, index + titleQualityBatchSize));
+	}
+
+	return batches;
+}
+
 export function titleQualityValidationModel() {
 	return env.ANTHROPIC_MODEL ?? defaultModel;
 }
@@ -127,20 +139,9 @@ function anthropicErrorMessage(message: string | undefined, status: number) {
 	return message;
 }
 
-export async function validateTitleQualityWithAnthropic(
+async function validateTitleQualityBatchWithAnthropic(
 	titles: TitleInput[]
 ): Promise<TitleQualityValidationResult> {
-	if (titles.length === 0) {
-		return { validationsByVideoId: {}, error: null };
-	}
-
-	if (!env.ANTHROPIC_API_KEY) {
-		return {
-			validationsByVideoId: {},
-			error: 'Set ANTHROPIC_API_KEY to run spelling, grammar, and readability checks.'
-		};
-	}
-
 	let response: Response;
 
 	try {
@@ -180,6 +181,13 @@ export async function validateTitleQualityWithAnthropic(
 		};
 	}
 
+	if (body.stop_reason === 'max_tokens') {
+		return {
+			validationsByVideoId: {},
+			error: 'Anthropic title validation response was truncated. Try a smaller batch.'
+		};
+	}
+
 	try {
 		const validationsByVideoId = parseTitleQualityResponse(textFromAnthropicResponse(body));
 		const validationCount = countValidations(validationsByVideoId);
@@ -195,4 +203,37 @@ export async function validateTitleQualityWithAnthropic(
 			error: 'Anthropic returned an unreadable title validation response.'
 		};
 	}
+}
+
+export async function validateTitleQualityWithAnthropic(
+	titles: TitleInput[]
+): Promise<TitleQualityValidationResult> {
+	if (titles.length === 0) {
+		return { validationsByVideoId: {}, error: null };
+	}
+
+	if (!env.ANTHROPIC_API_KEY) {
+		return {
+			validationsByVideoId: {},
+			error: 'Set ANTHROPIC_API_KEY to run spelling, grammar, and readability checks.'
+		};
+	}
+
+	const validationsByVideoId: Record<string, VideoValidation[]> = {};
+	const errors: string[] = [];
+
+	for (const batch of chunkTitleQualityInputs(titles)) {
+		const result = await validateTitleQualityBatchWithAnthropic(batch);
+
+		Object.assign(validationsByVideoId, result.validationsByVideoId);
+
+		if (result.error) {
+			errors.push(result.error);
+		}
+	}
+
+	return {
+		validationsByVideoId,
+		error: errors[0] ?? null
+	};
 }

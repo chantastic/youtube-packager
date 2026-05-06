@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseTitleQualityResponse } from './anthropic-title-validation';
+import { chunkTitleQualityInputs, parseTitleQualityResponse } from './anthropic-title-validation';
 
 describe('Anthropic title validation parsing', () => {
 	test('maps JSON results to validation objects', () => {
@@ -46,5 +46,18 @@ describe('Anthropic title validation parsing', () => {
 				}
 			]
 		});
+	});
+
+	test('chunks title inputs before sending them to Anthropic', () => {
+		const titles = Array.from({ length: 45 }, (_, index) => ({
+			videoId: `video-${index + 1}`,
+			title: `Video ${index + 1}`
+		}));
+
+		const batches = chunkTitleQualityInputs(titles);
+
+		expect(batches.map((batch) => batch.length)).toEqual([20, 20, 5]);
+		expect(batches[0][0]).toEqual({ videoId: 'video-1', title: 'Video 1' });
+		expect(batches[2][4]).toEqual({ videoId: 'video-45', title: 'Video 45' });
 	});
 });

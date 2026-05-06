@@ -10,6 +10,7 @@
 
 import type * as events from "../events.js";
 import type * as titleQualityChecks from "../titleQualityChecks.js";
+import type * as videos from "../videos.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +21,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   events: typeof events;
   titleQualityChecks: typeof titleQualityChecks;
+  videos: typeof videos;
 }>;
 
 /**

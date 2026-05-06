@@ -21,8 +21,35 @@
 	let editPlaylistId = $state('');
 	let editInput = $state<HTMLInputElement | null>(null);
 
+	type PlaylistStats = PageData['playlistStatsByEventId'][string];
+
 	function preview(format: string, name: string, year: number) {
 		return previewVideoTitle(format, name, year);
+	}
+
+	function playlistStatsFor(eventId: string) {
+		return data.playlistStatsByEventId[eventId];
+	}
+
+	function validationStat(stats: PlaylistStats | undefined, id: string) {
+		return stats?.validationStats.find((validation) => validation.id === id);
+	}
+
+	function badgeClass(tone: 'neutral' | 'pass' | 'warn') {
+		return {
+			neutral: 'border-gray-200 bg-gray-50 text-gray-600',
+			pass: 'border-green-200 bg-green-50 text-green-700',
+			warn: 'border-amber-200 bg-amber-50 text-amber-800'
+		}[tone];
+	}
+
+	function formatSyncDate(value: number) {
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		}).format(new Date(value));
 	}
 
 	function insertAtCursor(
@@ -154,6 +181,9 @@
 					</div>
 				</form>
 			{:else}
+				{@const playlistStats = playlistStatsFor(event._id)}
+				{@const suffixStats = validationStat(playlistStats, 'title-event-suffix')}
+				{@const suffixTotal = suffixStats ? suffixStats.passCount + suffixStats.failCount : 0}
 				<div class="mb-4 rounded-lg border p-4">
 					<div class="flex items-center justify-between">
 						<div>
@@ -163,6 +193,49 @@
 							<p class="mt-1 text-sm text-gray-400">
 								{preview(event.titleFormat ?? defaultTitleFormat, event.name, event.year ?? 0)}
 							</p>
+							<div class="mt-2 flex flex-wrap gap-2">
+								{#if event.youtubePlaylistId}
+									{#if playlistStats}
+										<span class={`rounded border px-2 py-1 text-xs ${badgeClass('neutral')}`}>
+											{playlistStats.videoCount} videos
+										</span>
+										{#if suffixStats && suffixTotal > 0}
+											<span
+												class={`rounded border px-2 py-1 text-xs ${badgeClass(
+													suffixStats.failCount > 0 ? 'warn' : 'pass'
+												)}`}
+											>
+												{suffixStats.passCount}/{suffixTotal} title suffix
+											</span>
+										{:else if suffixStats}
+											<span class={`rounded border px-2 py-1 text-xs ${badgeClass('neutral')}`}>
+												No suffix configured
+											</span>
+										{/if}
+										<span class={`rounded border px-2 py-1 text-xs ${badgeClass('neutral')}`}>
+											Synced {formatSyncDate(playlistStats.lastFetchedAt)}
+										</span>
+									{:else}
+										<span class={`rounded border px-2 py-1 text-xs ${badgeClass('neutral')}`}>
+											Playlist linked
+										</span>
+										<span class={`rounded border px-2 py-1 text-xs ${badgeClass('warn')}`}>
+											Open playlist to sync stats
+										</span>
+									{/if}
+								{:else}
+									<span class={`rounded border px-2 py-1 text-xs ${badgeClass('neutral')}`}>
+										No playlist
+									</span>
+								{/if}
+								<span
+									class="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600"
+								>
+									{event.titleFormat && event.titleFormat !== defaultTitleFormat
+										? 'Custom title format'
+										: 'Default title format'}
+								</span>
+							</div>
 							{#if event.youtubePlaylistId}
 								<p class="mt-1 text-xs text-gray-500">
 									Playlist:
