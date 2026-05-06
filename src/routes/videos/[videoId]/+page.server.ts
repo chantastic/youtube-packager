@@ -8,6 +8,7 @@ import {
 import {
 	downloadYouTubeCaptionTrack,
 	listYouTubeCaptionTracks,
+	updateYouTubeVideoTitle,
 	YouTubeDataApiError,
 	type YouTubeCaptionTrack
 } from '$lib/server/youtube-data-api';
@@ -58,7 +59,12 @@ export const load: PageServerLoad = async ({ params }) => {
 		assignmentValidationsById: Object.fromEntries(
 			videoView.assignments.map((row) => [
 				row.assignment._id,
-				validateVideoBaseline(videoView.video.title, row.event)
+				validateVideoBaseline(videoView.video.title, row.event, {
+					speakers: videoView.speakers.map((speakerRow) => ({
+						name: speakerRow.speaker.name,
+						company: speakerRow.speaker.company
+					}))
+				})
 			])
 		)
 	};
@@ -114,6 +120,34 @@ export const actions: Actions = {
 			youtubeVideoId: params.videoId,
 			videoTitleFormat: optionalString(data, 'videoTitleFormat')
 		});
+	},
+
+	applyTitle: async (event) => {
+		const data = await event.request.formData();
+		const title = optionalString(data, 'title');
+
+		if (!title) {
+			return { titleUpdateError: 'Choose a title before updating YouTube.' };
+		}
+
+		try {
+			const auth = youtubeAuthContext(event);
+			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
+			const updatedVideo = await updateYouTubeVideoTitle(event.params.videoId, title, accessToken);
+
+			await getConvexClient().mutation(api.videos.updateTitle, {
+				youtubeVideoId: event.params.videoId,
+				title: updatedVideo.title
+			});
+
+			return { titleUpdateMessage: 'Updated title on YouTube.' };
+		} catch (caught) {
+			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
+				return { titleUpdateError: caught.message };
+			}
+
+			throw caught;
+		}
 	},
 
 	addSpeaker: async ({ request, params }) => {

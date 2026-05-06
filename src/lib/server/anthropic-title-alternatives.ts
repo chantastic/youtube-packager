@@ -7,7 +7,11 @@ import {
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
 } from '$lib/title-format';
-import { youtubeTitleMaxLength } from '$lib/video-validation';
+import {
+	validateTitleFocus,
+	youtubeTitleFocusLength,
+	youtubeTitleMaxLength
+} from '$lib/video-validation';
 
 const anthropicApiUrl = 'https://api.anthropic.com/v1/messages';
 const anthropicVersion = '2023-06-01';
@@ -134,6 +138,7 @@ Rules:
 - Avoid vague hype, unsupported claims, clickbait, and titles that overpromise beyond the video context.
 - Preserve important proper nouns and technical terms.
 - Favor clear, searchable, readable titles over cleverness.
+- Put the concrete topic or hook in the first ${youtubeTitleFocusLength} characters.
 - Keep baseTitles concise enough that the final formatted title can be <= ${youtubeTitleMaxLength} characters.
 - Do not include angle brackets.
 
@@ -164,9 +169,13 @@ export function finalizeTitleAlternatives(
 
 	for (const baseTitle of baseTitles) {
 		const finalTitle = formatComposedVideoTitle(baseTitle, video, event);
+		const titleFocus = validateTitleFocus(finalTitle, event, {
+			speakers: video.speaker ? [{ name: video.speaker, company: video.company }] : []
+		});
 
 		if (
 			finalTitle.length <= youtubeTitleMaxLength &&
+			titleFocus.status !== 'fail' &&
 			finalTitle !== currentFormattedTitle &&
 			!seen.has(finalTitle)
 		) {

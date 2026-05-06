@@ -48,6 +48,33 @@ describe('Anthropic title validation parsing', () => {
 		});
 	});
 
+	test('omits null optional fields from Anthropic responses', () => {
+		expect(
+			parseTitleQualityResponse(
+				JSON.stringify({
+					results: [
+						{
+							videoId: 'abc123',
+							status: 'pass',
+							message: 'Looks clean',
+							details: [],
+							suggested: null
+						}
+					]
+				})
+			)
+		).toEqual({
+			abc123: [
+				{
+					id: 'title-quality',
+					label: 'Title quality',
+					status: 'pass',
+					message: 'Looks clean'
+				}
+			]
+		});
+	});
+
 	test('chunks title inputs before sending them to Anthropic', () => {
 		const titles = Array.from({ length: 45 }, (_, index) => ({
 			videoId: `video-${index + 1}`,

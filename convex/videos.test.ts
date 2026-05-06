@@ -251,6 +251,31 @@ test('existing speakers can be assigned to another video', async () => {
 	});
 });
 
+test('video title can be updated after a YouTube metadata write', async () => {
+	const t = convexTest(schema, modules);
+	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+
+	await t.mutation(api.videos.syncPlaylistForEvent, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
+		}
+	});
+	await t.mutation(api.videos.updateTitle, {
+		youtubeVideoId: 'video-1',
+		title: 'New title'
+	});
+
+	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(videoDoc?.title).toBe('New title');
+});
+
 test('a video can have assignments in multiple playlists', async () => {
 	const t = convexTest(schema, modules);
 	const firstEventId = await t.mutation(api.events.create, { name: 'FirstConf', year: 2026 });

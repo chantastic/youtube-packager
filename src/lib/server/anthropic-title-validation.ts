@@ -95,8 +95,12 @@ export function parseTitleQualityResponse(value: string): Record<string, VideoVa
 				label: 'Title quality',
 				status: result.status,
 				message: result.message,
-				details: result.details,
-				suggested: result.suggested
+				...(Array.isArray(result.details) && result.details.length
+					? { details: result.details.filter((detail): detail is string => typeof detail === 'string') }
+					: {}),
+				...(typeof result.suggested === 'string' && result.suggested.length
+					? { suggested: result.suggested }
+					: {})
 			}
 		];
 	}

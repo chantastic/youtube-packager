@@ -43,4 +43,25 @@ describe('Anthropic title alternatives', () => {
 		expect(alternatives).toEqual(['A Better Title — Chan, WorkOS | TestConf 2026']);
 		expect(alternatives[0].length).toBeLessThanOrEqual(100);
 	});
+
+	test('filters alternatives that fail the first 55 character check', () => {
+		const alternatives = finalizeTitleAlternatives(
+			['Overview of Agent-Native Auth', 'Build Agent-Native Auth That Works'],
+			'Current Title — Chan, WorkOS | TestConf 2026',
+			{
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoTitleFormat: '{title} — {speaker}, {company}'
+			},
+			{
+				name: 'TestConf',
+				year: 2026,
+				titleFormat: '{title} | {event_name} {year}'
+			}
+		);
+
+		expect(alternatives).toEqual([
+			'Build Agent-Native Auth That Works — Chan, WorkOS | TestConf 2026'
+		]);
+	});
 });

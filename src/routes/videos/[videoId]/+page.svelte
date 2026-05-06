@@ -8,7 +8,7 @@
 		videoTitleTokens
 	} from '$lib/title-format';
 	import { youtubePlaylistUrl } from '$lib/youtube';
-	import type { VideoValidation } from '$lib/video-validation';
+	import { youtubeTitleMaxLength, type VideoValidation } from '$lib/video-validation';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -28,6 +28,7 @@
 	let copiedTitle = $state<string | null>(null);
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
+	let applyingTitle = $state<string | null>(null);
 	let speakerSelection = $state('');
 	let selectedSpeakerId = $state('');
 	let speakerName = $state('');
@@ -64,6 +65,26 @@
 
 	function assignmentAlternatives(assignmentId: string) {
 		return titleAlternativesByAssignmentId[assignmentId];
+	}
+
+	function canApplyTitle(title: string) {
+		const trimmedTitle = title.trim();
+
+		return (
+			trimmedTitle.length > 0 &&
+			trimmedTitle.length <= youtubeTitleMaxLength &&
+			trimmedTitle !== data.videoView.video.title
+		);
+	}
+
+	function titleApplyLabel(title: string) {
+		const trimmedTitle = title.trim();
+
+		if (applyingTitle === title) return 'Updating...';
+		if (trimmedTitle === data.videoView.video.title) return 'Current title';
+		if (trimmedTitle.length > youtubeTitleMaxLength) return 'Too long';
+
+		return 'Update YouTube';
 	}
 
 	function videoTitleRecord() {
@@ -167,6 +188,21 @@
 			captionsFetching = true;
 			await update();
 			captionsFetching = false;
+		};
+	}
+
+	function afterTitleApply(title: string) {
+		return () => {
+			applyingTitle = title;
+
+			return async ({ update }: { update: () => Promise<void> }) => {
+				try {
+					await update();
+					await loadTitleQuality();
+				} finally {
+					applyingTitle = null;
+				}
+			};
 		};
 	}
 
@@ -622,6 +658,15 @@
 				{titleAlternativesError}
 			</p>
 		{/if}
+		{#if form?.titleUpdateError}
+			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+				{form.titleUpdateError}
+			</p>
+		{:else if form?.titleUpdateMessage}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				{form.titleUpdateMessage}
+			</p>
+		{/if}
 		{#each data.videoView.assignments as row (row.assignment._id)}
 			{@const validations = assignmentValidations(row.assignment._id)}
 			{@const alternatives = assignmentAlternatives(row.assignment._id)}
@@ -669,6 +714,20 @@
 										>
 											{copiedTitle === title ? 'Copied' : 'Copy'}
 										</button>
+										<form
+											method="POST"
+											action="?/applyTitle"
+											use:enhance={afterTitleApply(title)}
+										>
+											<input type="hidden" name="title" value={title} />
+											<button
+												type="submit"
+												disabled={!canApplyTitle(title) || applyingTitle === title}
+												class="rounded bg-gray-950 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+											>
+												{titleApplyLabel(title)}
+											</button>
+										</form>
 									</div>
 								</div>
 							{/each}

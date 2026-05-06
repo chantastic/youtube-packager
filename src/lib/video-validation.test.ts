@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { validateTitleEventSuffix, validateVideoBaseline } from './video-validation';
+import {
+	validateTitleEventSuffix,
+	validateTitleFocus,
+	validateVideoBaseline
+} from './video-validation';
 
 const event = {
 	name: 'RenderConf',
@@ -39,7 +43,45 @@ describe('video validation', () => {
 		});
 	});
 
-	test('baseline validation returns the title suffix check', () => {
-		expect(validateVideoBaseline('Keynote | RenderConf 2026', event)).toHaveLength(1);
+	test('passes when the first 55 characters lead with the hook', () => {
+		expect(
+			validateTitleFocus('Build Agent-Native Auth That Actually Works | RenderConf 2026', event)
+		).toMatchObject({
+			id: 'title-focus',
+			status: 'pass',
+			message: 'Hook is front-loaded'
+		});
+	});
+
+	test('fails when the title starts with weak framing', () => {
+		expect(validateTitleFocus('Overview of Agent-Native Auth | RenderConf 2026', event)).toMatchObject({
+			id: 'title-focus',
+			status: 'fail',
+			message: 'Starts with weak framing'
+		});
+	});
+
+	test('fails when the title starts with event metadata', () => {
+		expect(validateTitleFocus('RenderConf 2026: Build Better Auth', event)).toMatchObject({
+			id: 'title-focus',
+			status: 'fail',
+			message: 'Starts with event metadata'
+		});
+	});
+
+	test('fails when the title starts with known speaker metadata', () => {
+		expect(
+			validateTitleFocus('Chan: Build Better Auth | RenderConf 2026', event, {
+				speakers: [{ name: 'Chan', company: 'WorkOS' }]
+			})
+		).toMatchObject({
+			id: 'title-focus',
+			status: 'fail',
+			message: 'Starts with speaker metadata'
+		});
+	});
+
+	test('baseline validation returns the title suffix and first 55 checks', () => {
+		expect(validateVideoBaseline('Build Better Auth | RenderConf 2026', event)).toHaveLength(2);
 	});
 });

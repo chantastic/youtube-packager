@@ -176,6 +176,25 @@ export const updateMetadata = mutation({
 	}
 });
 
+export const updateTitle = mutation({
+	args: {
+		youtubeVideoId: v.string(),
+		title: v.string()
+	},
+	handler: async (ctx, { youtubeVideoId, title }) => {
+		const video = await ctx.db
+			.query('videos')
+			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
+			.unique();
+
+		if (!video) {
+			throw new Error('Video not found.');
+		}
+
+		await ctx.db.patch(video._id, { title });
+	}
+});
+
 export const addSpeaker = mutation({
 	args: {
 		youtubeVideoId: v.string(),

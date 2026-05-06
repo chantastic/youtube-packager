@@ -72,6 +72,19 @@ type YouTubeCaptionListResponse = {
 	}>;
 };
 
+type YouTubeVideoListResponse = {
+	items?: Array<{
+		id?: string;
+		snippet?: {
+			title?: string;
+			description?: string;
+			tags?: string[];
+			categoryId?: string;
+			defaultLanguage?: string;
+		};
+	}>;
+};
+
 export type PublicPlaylistVideo = {
 	playlistItemId: string;
 	videoId: string;
@@ -190,6 +203,39 @@ async function youtubeTextGet(path: string, params: Record<string, string>, acce
 	return text;
 }
 
+async function youtubePut<T>(
+	path: string,
+	params: Record<string, string>,
+	accessToken: string,
+	resource: unknown
+) {
+	const url = new URL(`${youtubeApiBaseUrl}${path}`);
+
+	for (const [key, value] of Object.entries(params)) {
+		url.searchParams.set(key, value);
+	}
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(resource)
+	});
+	const body = await response.json().catch(() => ({}));
+
+	if (!response.ok) {
+		const message =
+			typeof body?.error?.message === 'string'
+				? body.error.message
+				: `YouTube API request failed with ${response.status}`;
+		throw new YouTubeDataApiError(message, response.status);
+	}
+
+	return body as T;
+}
+
 async function getPlaylistMetadata(playlistId: string, accessToken: string) {
 	const response = await youtubeGet<YouTubePlaylistListResponse>(
 		'/playlists',
@@ -247,6 +293,84 @@ async function getPlaylistVideos(playlistId: string, accessToken: string) {
 	} while (pageToken);
 
 	return videos.sort((a, b) => a.position - b.position);
+}
+
+async function getVideoSnippet(videoId: string, accessToken: string) {
+	const response = await youtubeGet<YouTubeVideoListResponse>(
+		'/videos',
+		{
+			part: 'snippet',
+			id: videoId,
+			maxResults: '1'
+		},
+		accessToken
+	);
+	const video = response.items?.[0];
+
+	if (!video?.id || !video.snippet) {
+		throw new YouTubeDataApiError('No video found for this YouTube connection.', 404);
+	}
+
+	const snippet = video.snippet;
+
+	if (!snippet.categoryId) {
+		throw new YouTubeDataApiError('YouTube did not return a category for this video.', 400);
+	}
+
+	return {
+		id: video.id,
+		snippet
+	};
+}
+
+export async function updateYouTubeVideoTitle(
+	videoId: string,
+	title: string,
+	accessToken: string
+) {
+	const trimmedTitle = title.trim();
+
+	if (!trimmedTitle) {
+		throw new YouTubeDataApiError('Choose a non-empty title before updating YouTube.', 400);
+	}
+
+	if (trimmedTitle.length > 100) {
+		throw new YouTubeDataApiError('YouTube video titles must be 100 characters or fewer.', 400);
+	}
+
+	if (/[<>]/.test(trimmedTitle)) {
+		throw new YouTubeDataApiError('YouTube video titles cannot contain < or >.', 400);
+	}
+
+	const video = await getVideoSnippet(videoId, accessToken);
+	const snippet = {
+		title: trimmedTitle,
+		categoryId: video.snippet.categoryId,
+		description: video.snippet.description ?? '',
+		...(video.snippet.tags ? { tags: video.snippet.tags } : {}),
+		...(video.snippet.defaultLanguage ? { defaultLanguage: video.snippet.defaultLanguage } : {})
+	};
+	const updatedVideo = await youtubePut<{
+		id?: string;
+		snippet?: {
+			title?: string;
+		};
+	}>(
+		'/videos',
+		{
+			part: 'snippet'
+		},
+		accessToken,
+		{
+			id: video.id,
+			snippet
+		}
+	);
+
+	return {
+		videoId: updatedVideo.id ?? video.id,
+		title: updatedVideo.snippet?.title ?? trimmedTitle
+	};
 }
 
 export async function listYouTubeCaptionTracks(videoId: string, accessToken: string) {
