@@ -27,6 +27,17 @@
 		error: string | null;
 	};
 
+	type GeneratedDescription = {
+		hook: string;
+		metadata: Array<{ label: string; value: string }>;
+		chapters: Array<{ timestamp: string; title: string }>;
+		links: Array<{ label: string; url?: string; placeholder?: string }>;
+		description: string;
+		model: string;
+		chapterTarget: number;
+		durationSeconds: number;
+	};
+
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let titleQualityValidations = $state<VideoValidation[]>([]);
 	let titleQualityError = $state<string | null>(null);
@@ -35,6 +46,10 @@
 	let titleAlternativesError = $state<string | null>(null);
 	let titleAlternativesLoading = $state(false);
 	let copiedTitle = $state<string | null>(null);
+	let generatedDescription = $state<GeneratedDescription | null>(null);
+	let descriptionError = $state<string | null>(null);
+	let descriptionLoading = $state(false);
+	let copiedDescription = $state(false);
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
@@ -314,6 +329,15 @@
 		}, 1600);
 	}
 
+	async function copyDescription(description: string) {
+		await navigator.clipboard.writeText(description);
+		copiedDescription = true;
+
+		setTimeout(() => {
+			copiedDescription = false;
+		}, 1600);
+	}
+
 	async function loadTitleQuality() {
 		titleQualityLoading = true;
 		titleQualityError = null;
@@ -364,6 +388,33 @@
 			titleAlternativesError = 'Title alternatives are temporarily unavailable.';
 		} finally {
 			titleAlternativesLoading = false;
+		}
+	}
+
+	async function loadGeneratedDescription() {
+		descriptionLoading = true;
+		descriptionError = null;
+		generatedDescription = null;
+
+		try {
+			const response = await fetch(
+				`/videos/${encodeURIComponent(data.videoView.video.youtubeVideoId)}/description`,
+				{
+					method: 'POST'
+				}
+			);
+			const body = (await response.json().catch(() => ({}))) as {
+				description?: GeneratedDescription | null;
+				error?: string | null;
+			};
+
+			generatedDescription = body.description ?? null;
+			descriptionError =
+				body.error ?? (response.ok ? null : `Description generation failed with ${response.status}.`);
+		} catch {
+			descriptionError = 'Description generation is temporarily unavailable.';
+		} finally {
+			descriptionLoading = false;
 		}
 	}
 </script>
@@ -431,6 +482,11 @@
 					<dd class="mt-1 text-gray-950">{data.videoView.assignments.length}</dd>
 				</div>
 			</dl>
+			{#if data.refreshError}
+				<p class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+					YouTube refresh failed: {data.refreshError}
+				</p>
+			{/if}
 		</div>
 	</section>
 
@@ -641,8 +697,21 @@
 	</section>
 
 	<section class="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-			<h2 class="text-sm font-semibold text-gray-950">Description</h2>
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
+		>
+			<div>
+				<h2 class="text-sm font-semibold text-gray-950">Description</h2>
+				<p class="mt-1 text-xs text-gray-500">Generate from stored SRT captions</p>
+			</div>
+			<button
+				type="button"
+				onclick={loadGeneratedDescription}
+				disabled={descriptionLoading || data.captions.length === 0}
+				class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+			>
+				{descriptionLoading ? 'Generating...' : 'Generate Description'}
+			</button>
 		</div>
 		<div class="px-4 py-4">
 			{#if data.videoView.video.description}
@@ -651,6 +720,88 @@
 				</p>
 			{:else}
 				<p class="text-sm text-gray-500">No description synced yet.</p>
+			{/if}
+			{#if data.captions.length === 0}
+				<p class="mt-3 text-xs text-amber-700">
+					Fetch captions before generating a structured description.
+				</p>
+			{/if}
+			{#if descriptionError}
+				<p class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+					{descriptionError}
+				</p>
+			{/if}
+			{#if generatedDescription}
+				<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
+					<div class="flex flex-wrap items-start justify-between gap-3">
+						<div>
+							<p class="text-xs font-medium text-gray-500 uppercase">Generated Description</p>
+							<p class="mt-1 text-sm text-gray-500">
+								{generatedDescription.model} · {generatedDescription.description.length.toLocaleString()}
+								chars
+							</p>
+							<p class="mt-1 text-xs text-gray-500">
+								{Math.round(generatedDescription.durationSeconds / 60)} min · {generatedDescription
+									.chapters.length}/{generatedDescription.chapterTarget} chapters
+							</p>
+						</div>
+						<button
+							type="button"
+							onclick={() => copyDescription(generatedDescription!.description)}
+							class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+						>
+							{copiedDescription ? 'Copied' : 'Copy Description'}
+						</button>
+					</div>
+					<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-sm text-blue-950">
+						{generatedDescription.hook}
+					</p>
+					<div class="mt-3 grid gap-3 md:grid-cols-2">
+						{#if generatedDescription.metadata.length}
+							<div>
+								<p class="text-xs font-medium text-gray-500 uppercase">Metadata</p>
+								<dl class="mt-2 space-y-1 text-sm">
+									{#each generatedDescription.metadata as item (`${item.label}-${item.value}`)}
+										<div>
+											<dt class="text-xs text-gray-500">{item.label}</dt>
+											<dd class="text-gray-800">{item.value}</dd>
+										</div>
+									{/each}
+								</dl>
+							</div>
+						{/if}
+						{#if generatedDescription.chapters.length}
+							<div>
+								<p class="text-xs font-medium text-gray-500 uppercase">Chapters</p>
+								<div class="mt-2 space-y-1 text-sm">
+									{#each generatedDescription.chapters as chapter (`${chapter.timestamp}-${chapter.title}`)}
+										<p class="text-gray-800">
+											<span class="font-mono text-gray-500">{chapter.timestamp}</span>
+											{chapter.title}
+										</p>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+					{#if generatedDescription.links.length}
+						<div class="mt-3">
+							<p class="text-xs font-medium text-gray-500 uppercase">Links</p>
+							<div class="mt-2 space-y-1 text-sm">
+								{#each generatedDescription.links as link (`${link.label}-${link.url ?? link.placeholder}`)}
+									<p class="text-gray-800">
+										{link.label}: <span class="text-gray-500">{link.url ?? link.placeholder}</span>
+									</p>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					<details class="mt-3">
+						<summary class="cursor-pointer text-xs text-gray-600">Full generated text</summary>
+						<pre
+							class="mt-2 max-h-96 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{generatedDescription.description}</pre>
+					</details>
+				</div>
 			{/if}
 		</div>
 	</section>

@@ -12,6 +12,7 @@ import {
 } from '$lib/server/youtube-connection';
 import {
 	downloadYouTubeCaptionTrack,
+	getYouTubeVideoData,
 	listYouTubeCaptionTracks,
 	updateYouTubeVideoTitle,
 	YouTubeDataApiError,
@@ -85,19 +86,39 @@ function videoTitleRecord(
 	};
 }
 
-export const load: PageServerLoad = async ({ params }) => {
-	const videoView = await getConvexClient().query(api.videos.getViewByYoutubeVideoId, {
-		youtubeVideoId: params.videoId
+export const load: PageServerLoad = async (event) => {
+	const client = getConvexClient();
+	let videoView = await client.query(api.videos.getViewByYoutubeVideoId, {
+		youtubeVideoId: event.params.videoId
 	});
+	let refreshError: string | null = null;
 
 	if (!videoView) {
 		throw error(404, 'Video not found.');
 	}
 
+	try {
+		const auth = youtubeAuthContext(event);
+		const accessToken = await getConnectedYouTubeAccessToken(auth);
+		const refreshedVideo = await getYouTubeVideoData(event.params.videoId, accessToken);
+
+		await client.mutation(api.videos.refreshFromYouTube, refreshedVideo);
+		videoView =
+			(await client.query(api.videos.getViewByYoutubeVideoId, {
+				youtubeVideoId: event.params.videoId
+			})) ?? videoView;
+	} catch (caught) {
+		if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
+			refreshError = caught.message;
+		} else {
+			throw caught;
+		}
+	}
+
 	const captions = await convexAdminFunction(internal.videoCaptions.listByYoutubeVideoId, {
-		youtubeVideoId: params.videoId
+		youtubeVideoId: event.params.videoId
 	});
-	const availableSpeakers = await getConvexClient().query(api.videos.listSpeakers, {});
+	const availableSpeakers = await client.query(api.videos.listSpeakers, {});
 	const speakers = videoView.speakers.map((speakerRow) => ({
 		name: speakerRow.speaker.name,
 		company: speakerRow.speaker.company
@@ -108,6 +129,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		videoView,
 		captions,
 		availableSpeakers,
+		refreshError,
 		assignmentValidationsById: Object.fromEntries(
 			videoView.assignments.map((row) => [
 				row.assignment._id,

@@ -15,6 +15,8 @@ GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/integrations/youtube/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=base64_32_byte_secret
 ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_DESCRIPTION_MODEL=claude-opus-4-7
+ANTHROPIC_DESCRIPTION_EFFORT=high
 ```
 
 YouTube Data API calls use the connected Google OAuth account. The app stores the
@@ -29,7 +31,9 @@ openssl rand -base64 32
 
 `ANTHROPIC_API_KEY` is used server-side for spelling, grammar, and readability checks on
 video titles. You can optionally set `ANTHROPIC_MODEL`; otherwise the app uses
-`claude-haiku-4-5-20251001`.
+`claude-haiku-4-5-20251001`. Structured description generation uses
+`ANTHROPIC_DESCRIPTION_MODEL`; otherwise the app uses `claude-opus-4-7`. For Opus 4.7
+description generation, `ANTHROPIC_DESCRIPTION_EFFORT` defaults to `high`.
 
 ## Development
 

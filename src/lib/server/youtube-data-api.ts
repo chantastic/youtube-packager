@@ -75,7 +75,7 @@ type YouTubeCaptionListResponse = {
 type YouTubeVideoListResponse = {
 	items?: Array<{
 		id?: string;
-		snippet?: {
+		snippet?: YouTubeSnippet & {
 			title?: string;
 			description?: string;
 			tags?: string[];
@@ -93,6 +93,18 @@ export type PublicPlaylistVideo = {
 	position: number;
 	videoUrl: string;
 	playlistVideoUrl: string;
+	studioEditUrl: string;
+	thumbnailUrl?: string;
+	channelTitle?: string;
+	publishedAt?: string;
+	videoPublishedAt?: string;
+};
+
+export type PublicVideoData = {
+	youtubeVideoId: string;
+	title: string;
+	description?: string;
+	videoUrl: string;
 	studioEditUrl: string;
 	thumbnailUrl?: string;
 	channelTitle?: string;
@@ -320,6 +332,26 @@ async function getVideoSnippet(videoId: string, accessToken: string) {
 	return {
 		id: video.id,
 		snippet
+	};
+}
+
+export async function getYouTubeVideoData(
+	videoId: string,
+	accessToken: string
+): Promise<PublicVideoData> {
+	const video = await getVideoSnippet(videoId, accessToken);
+	const publishedAt = video.snippet.publishedAt;
+
+	return {
+		youtubeVideoId: video.id,
+		title: video.snippet.title ?? 'Untitled video',
+		description: video.snippet.description ?? '',
+		videoUrl: youtubeVideoUrl(video.id),
+		studioEditUrl: youtubeStudioVideoEditUrl(video.id),
+		thumbnailUrl: pickThumbnail(video.snippet.thumbnails),
+		channelTitle: video.snippet.channelTitle,
+		publishedAt,
+		videoPublishedAt: publishedAt
 	};
 }
 

@@ -232,6 +232,36 @@ export const updateTitle = mutation({
 	}
 });
 
+export const refreshFromYouTube = mutation({
+	args: {
+		youtubeVideoId: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		videoUrl: v.string(),
+		studioEditUrl: v.string(),
+		thumbnailUrl: v.optional(v.string()),
+		channelTitle: v.optional(v.string()),
+		publishedAt: v.optional(v.string()),
+		videoPublishedAt: v.optional(v.string())
+	},
+	handler: async (ctx, { youtubeVideoId, ...fields }) => {
+		const video = await ctx.db
+			.query('videos')
+			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
+			.unique();
+
+		if (!video) {
+			throw new Error('Video not found.');
+		}
+
+		await ctx.db.patch(video._id, {
+			youtubeVideoId,
+			...fields,
+			lastFetchedAt: Date.now()
+		});
+	}
+});
+
 export const addSpeaker = mutation({
 	args: {
 		youtubeVideoId: v.string(),

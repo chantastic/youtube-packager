@@ -338,6 +338,50 @@ test('video title can be updated after a YouTube metadata write', async () => {
 	expect(videoDoc?.title).toBe('New title');
 });
 
+test('video can be refreshed from YouTube without clearing app metadata', async () => {
+	const t = convexTest(schema, modules);
+	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+
+	await t.mutation(api.videos.syncPlaylistForEvent, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
+		}
+	});
+	await t.mutation(api.videos.updateMetadata, {
+		youtubeVideoId: 'video-1',
+		titleOverride: 'Manual override',
+		videoType: 'keynote'
+	});
+	await t.mutation(api.videos.refreshFromYouTube, {
+		youtubeVideoId: 'video-1',
+		title: 'Fresh title',
+		description: 'Fresh description',
+		videoUrl: 'https://www.youtube.com/watch?v=video-1',
+		studioEditUrl: 'https://studio.youtube.com/video/video-1/edit',
+		thumbnailUrl: 'https://img.youtube.com/vi/video-1/hqdefault.jpg',
+		channelTitle: 'Fresh Channel',
+		publishedAt: '2026-01-01T00:00:00Z',
+		videoPublishedAt: '2026-01-01T00:00:00Z'
+	});
+
+	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(videoDoc).toMatchObject({
+		youtubeVideoId: 'video-1',
+		title: 'Fresh title',
+		description: 'Fresh description',
+		titleOverride: 'Manual override',
+		videoType: 'keynote',
+		channelTitle: 'Fresh Channel'
+	});
+});
+
 test('a video can have assignments in multiple playlists', async () => {
 	const t = convexTest(schema, modules);
 	const firstEventId = await t.mutation(api.events.create, { name: 'FirstConf', year: 2026 });
