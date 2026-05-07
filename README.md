@@ -27,12 +27,7 @@ WORKOS_CLIENT_ID=your_workos_client_id
 WORKOS_API_KEY=your_workos_api_key
 WORKOS_REDIRECT_URI=http://localhost:5173/auth/callback
 WORKOS_COOKIE_PASSWORD=your_32_character_cookie_password
-WORKOS_WEBHOOK_SECRET=your_workos_webhook_secret
 YOUTUBE_PIPES_PROVIDER=google
-ANTHROPIC_API_KEY=your_anthropic_api_key
-ANTHROPIC_MODEL=claude-haiku-4-5-20251001
-ANTHROPIC_DESCRIPTION_MODEL=claude-opus-4-7
-ANTHROPIC_DESCRIPTION_EFFORT=high
 ```
 
 WorkOS AuthKit is configured for Convex. The WorkOS AuthKit component syncs WorkOS users
@@ -51,23 +46,18 @@ pnpm exec convex env set WORKOS_API_KEY <api-key>
 pnpm exec convex env set WORKOS_WEBHOOK_SECRET <webhook-secret>
 ```
 
+AI workflows run in Convex. Set Anthropic values on the Convex deployment:
+
+```sh
+pnpm exec convex env set ANTHROPIC_API_KEY <anthropic-api-key>
+pnpm exec convex env set ANTHROPIC_MODEL claude-haiku-4-5-20251001
+pnpm exec convex env set ANTHROPIC_DESCRIPTION_MODEL claude-opus-4-7
+pnpm exec convex env set ANTHROPIC_DESCRIPTION_EFFORT high
+```
+
 YouTube Data API calls use WorkOS Pipes. WorkOS owns the OAuth lifecycle,
 credential storage, and token refresh; this app asks WorkOS for a fresh provider token
 server-side. Configure the Google provider in Pipes with the YouTube scopes the app needs.
-
-`ANTHROPIC_API_KEY` is used server-side for spelling, grammar, and readability checks on
-video titles. You can optionally set `ANTHROPIC_MODEL`; otherwise the app uses
-`claude-haiku-4-5-20251001`. Structured description generation uses
-`ANTHROPIC_DESCRIPTION_MODEL`; otherwise the app uses `claude-opus-4-7`. For Opus 4.7
-description generation, `ANTHROPIC_DESCRIPTION_EFFORT` defaults to `high`.
-
-Title AI validation runs through Convex workflows. Set the same Anthropic values on the
-Convex deployment:
-
-```sh
-pnpm exec convex env set ANTHROPIC_API_KEY
-pnpm exec convex env set ANTHROPIC_MODEL claude-haiku-4-5-20251001
-```
 
 ## Development
 
