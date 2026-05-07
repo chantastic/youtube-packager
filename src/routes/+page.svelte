@@ -20,7 +20,7 @@
 					<p class="text-sm text-gray-600">Organization: {data.auth.organizationId}</p>
 				{/if}
 			</div>
-			<form method="POST" action="?/signout">
+			<form method="POST" action={resolve('/sign-out')}>
 				<div class="flex flex-wrap gap-2">
 					<a
 						href={resolve('/integrations')}
