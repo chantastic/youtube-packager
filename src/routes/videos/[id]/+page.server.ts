@@ -86,7 +86,10 @@ function videoTitleRecord(
 	};
 }
 
-async function resolveVideoRouteTarget(client: ReturnType<typeof getConvexClient>, routeParam: string) {
+async function resolveVideoRouteTarget(
+	client: ReturnType<typeof getConvexClient>,
+	routeParam: string
+) {
 	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
 		routeParam
 	});
@@ -129,12 +132,9 @@ export const load: PageServerLoad = async (event) => {
 		}
 	}
 
-	const captions = await convexAdminFunction(
-		internal.videoCaptions.collectByVideoIdInternal,
-		{
-			videoId: videoView.video._id
-		}
-	);
+	const captions = await convexAdminFunction(internal.videoCaptions.collectByVideoIdInternal, {
+		videoId: videoView.video._id
+	});
 	const availableSpeakers = await client.query(api.speakers.collect, {});
 	const speakers = videoView.speakers.map((speakerRow) => ({
 		name: speakerRow.speaker.name,
@@ -162,10 +162,7 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	fetchCaptions: async (event) => {
 		const auth = youtubeAuthContext(event);
-		const videoView = (await resolveVideoRouteTarget(
-			getConvexClient(),
-			event.params.id
-		)).videoView;
+		const videoView = (await resolveVideoRouteTarget(getConvexClient(), event.params.id)).videoView;
 		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		try {
@@ -181,22 +178,19 @@ export const actions: Actions = {
 
 			const body = await downloadYouTubeCaptionTrack(track.id, accessToken, 'srt');
 
-			await convexAdminFunction(
-				internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal,
-				{
-					videoId: videoView.video._id,
-					caption: {
-						captionTrackId: track.id,
-						...(track.language !== undefined ? { language: track.language } : {}),
-						...(track.name !== undefined ? { name: track.name } : {}),
-						...(track.trackKind !== undefined ? { trackKind: track.trackKind } : {}),
-						...(track.isAutoSynced !== undefined ? { isAutoSynced: track.isAutoSynced } : {}),
-						...(track.status !== undefined ? { status: track.status } : {}),
-						format: 'srt',
-						body
-					}
+			await convexAdminFunction(internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal, {
+				videoId: videoView.video._id,
+				caption: {
+					captionTrackId: track.id,
+					...(track.language !== undefined ? { language: track.language } : {}),
+					...(track.name !== undefined ? { name: track.name } : {}),
+					...(track.trackKind !== undefined ? { trackKind: track.trackKind } : {}),
+					...(track.isAutoSynced !== undefined ? { isAutoSynced: track.isAutoSynced } : {}),
+					...(track.status !== undefined ? { status: track.status } : {}),
+					format: 'srt',
+					body
 				}
-			);
+			});
 
 			return {
 				captionMessage: `Fetched ${track.language ?? 'unknown'} captions.`

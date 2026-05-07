@@ -49,9 +49,9 @@ This keeps the app reactive even when YouTube or Anthropic work takes time.
 Feature code should not import environment variables or provider token logic directly. Use narrow provider boundaries instead:
 
 ```ts
-getAnthropicApiKey(ctx)
-getWorkosApiKey(ctx)
-getYoutubeAccessToken(ctx, input)
+getAnthropicApiKey(ctx);
+getWorkosApiKey(ctx);
+getYoutubeAccessToken(ctx, input);
 ```
 
 Current strategy:

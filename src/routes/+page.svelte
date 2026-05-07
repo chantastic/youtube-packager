@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -22,13 +23,13 @@
 			<form method="POST" action="?/signout">
 				<div class="flex flex-wrap gap-2">
 					<a
-						href="/integrations"
+						href={resolve('/integrations')}
 						class="rounded bg-gray-950 px-4 py-2 text-white transition-colors hover:bg-gray-800"
 					>
 						Integrations
 					</a>
 					<a
-						href="/events"
+						href={resolve('/events')}
 						class="rounded border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-white"
 					>
 						Events
@@ -46,7 +47,7 @@
 		<div class="rounded-lg border border-blue-200 bg-blue-50 p-6">
 			<p class="mb-4 text-gray-700">You are not signed in.</p>
 			<a
-				href="/sign-in"
+				href={resolve('/sign-in')}
 				class="inline-block rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
 			>
 				Sign In with WorkOS

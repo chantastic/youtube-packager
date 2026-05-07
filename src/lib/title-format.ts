@@ -14,12 +14,7 @@ export type VideoTitleFormatRecord = {
 	videoType?: VideoType;
 };
 
-export type VideoType =
-	| 'talk'
-	| 'panelDiscussion'
-	| 'keynote'
-	| 'interview'
-	| 'custom';
+export type VideoType = 'talk' | 'panelDiscussion' | 'keynote' | 'interview' | 'custom';
 
 const titlePlaceholder = '__YTP_TITLE__';
 
