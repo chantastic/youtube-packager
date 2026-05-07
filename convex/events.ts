@@ -3,40 +3,23 @@ import { mutation, query } from './_generated/server';
 
 const eventTypeValidator = v.union(v.literal('conference'), v.literal('interviews'));
 
-export const list = query({
+export const collect = query({
 	args: {},
 	handler: async (ctx) => {
 		return await ctx.db.query('events').order('asc').take(100);
 	}
 });
 
-export const get = query({
+export const find = query({
 	args: { id: v.id('events') },
 	handler: async (ctx, { id }) => {
 		return await ctx.db.get(id);
 	}
 });
 
-export const create = mutation({
+export const upsert = mutation({
 	args: {
-		name: v.string(),
-		editionTitle: v.optional(v.string()),
-		eventType: v.optional(eventTypeValidator),
-		year: v.number(),
-		titleFormat: v.optional(v.string()),
-		youtubePlaylistId: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		return await ctx.db.insert('events', {
-			...args,
-			eventType: args.eventType ?? 'conference'
-		});
-	}
-});
-
-export const update = mutation({
-	args: {
-		id: v.id('events'),
+		id: v.optional(v.id('events')),
 		name: v.string(),
 		editionTitle: v.optional(v.string()),
 		eventType: v.optional(eventTypeValidator),
@@ -45,16 +28,33 @@ export const update = mutation({
 		youtubePlaylistId: v.optional(v.string())
 	},
 	handler: async (ctx, { id, ...fields }) => {
-		await ctx.db.patch(id, {
+		const document = {
 			...fields,
 			eventType: fields.eventType ?? 'conference'
-		});
+		};
+
+		if (id) {
+			await ctx.db.patch(id, document);
+			return await ctx.db.get(id);
+		}
+
+		const newId = await ctx.db.insert('events', document);
+
+		return await ctx.db.get(newId);
 	}
 });
 
-export const remove = mutation({
+export const destroy = mutation({
 	args: { id: v.id('events') },
 	handler: async (ctx, { id }) => {
+		const event = await ctx.db.get(id);
+
+		if (!event) {
+			return null;
+		}
+
 		await ctx.db.delete(id);
+
+		return event;
 	}
 });

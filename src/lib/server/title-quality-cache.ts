@@ -59,9 +59,12 @@ export async function planTitleQualityCache(titles: TitleInput[]): Promise<Title
 			cacheKey: await titleQualityCacheKey(title)
 		}))
 	);
-	const cached = await getConvexClient().query(api.titleQualityChecks.getMany, {
-		keys: entries.map((entry) => entry.cacheKey)
-	});
+	const cached = await getConvexClient().query(
+		api.titleQualityChecks.collectByVideoIdAndTitleHashAndModelAndValidationVersion,
+		{
+			keys: entries.map((entry) => entry.cacheKey)
+		}
+	);
 	const cachedByKey = new Map(
 		cached.map((check) => [
 			`${check.videoId}:${check.titleHash}:${check.model}:${check.validationVersion}`,

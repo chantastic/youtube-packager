@@ -6,6 +6,7 @@ import {
 	formatVideoRecordTitle,
 	getDefaultVideoTypeTitleFormat,
 	getDefaultVideoTitleFormat,
+	getTitleHookParts,
 	normalizeVideoType,
 	normalizeVideoTitleFormat
 } from './title-format';
@@ -53,9 +54,7 @@ describe('title formatting', () => {
 	});
 
 	test('uses type-specific defaults when no custom video format is set', () => {
-		expect(normalizeVideoTitleFormat(undefined, 'panelDiscussion')).toBe(
-			'{title} — {video_type}'
-		);
+		expect(normalizeVideoTitleFormat(undefined, 'panelDiscussion')).toBe('{title} — {video_type}');
 		expect(getDefaultVideoTitleFormat('interview')).toBe('{title} — {speaker}, {company}');
 		expect(getDefaultVideoTypeTitleFormat('interview')).toBe(
 			'{title} — {speaker}, {company} {event_suffix}'
@@ -202,5 +201,20 @@ describe('title formatting', () => {
 				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
 			)
 		).toBe('Building AuthKit');
+	});
+
+	test('uses the composed title segment as the hook source before format metadata', () => {
+		expect(
+			getTitleHookParts(
+				'The Future of Agentic AI: Why MCP Moved to the Linux Foundation — Panel Discussion | MCP Night',
+				{ name: 'MCP Night', titleFormat: '{title} | {event_name}' },
+				{ videoType: 'panelDiscussion' },
+				55
+			)
+		).toMatchObject({
+			source: 'The Future of Agentic AI: Why MCP Moved to the Linux Foundation',
+			focus: 'The Future of Agentic AI: Why MCP Moved to the Linux Fo',
+			rest: 'undation'
+		});
 	});
 });

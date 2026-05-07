@@ -38,7 +38,5 @@ export function eventTypeLabelFor(value: unknown) {
 export function defaultVideoTypeForEventType(value: unknown) {
 	const eventType = normalizeEventType(value);
 
-	return (
-		eventTypeOptions.find((option) => option.value === eventType)?.defaultVideoType ?? 'talk'
-	);
+	return eventTypeOptions.find((option) => option.value === eventType)?.defaultVideoType ?? 'talk';
 }

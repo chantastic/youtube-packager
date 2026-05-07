@@ -14,7 +14,7 @@ function organizationKey(organizationId?: string) {
 	return organizationId ?? '';
 }
 
-export const getByAuth = internalQuery({
+export const findByUserIdAndOrganizationKeyInternal = internalQuery({
 	args: {
 		userId: v.string(),
 		organizationId: v.optional(v.string())
@@ -29,7 +29,7 @@ export const getByAuth = internalQuery({
 	}
 });
 
-export const upsert = internalMutation({
+export const upsertInternal = internalMutation({
 	args: connectionFieldsValidator,
 	handler: async (ctx, args) => {
 		const now = Date.now();
@@ -55,14 +55,16 @@ export const upsert = internalMutation({
 
 		if (existing) {
 			await ctx.db.replace(existing._id, connection);
-			return existing._id;
+			return await ctx.db.get(existing._id);
 		}
 
-		return await ctx.db.insert('youtubeConnections', connection);
+		const id = await ctx.db.insert('youtubeConnections', connection);
+
+		return await ctx.db.get(id);
 	}
 });
 
-export const markNeedsReauthorization = internalMutation({
+export const upsertNeedsReauthorizationByUserIdAndOrganizationKeyInternal = internalMutation({
 	args: {
 		userId: v.string(),
 		organizationId: v.optional(v.string()),
@@ -82,11 +84,14 @@ export const markNeedsReauthorization = internalMutation({
 				updatedAt: Date.now(),
 				...(lastError !== undefined ? { lastError } : {})
 			});
+			return await ctx.db.get(connection._id);
 		}
+
+		return null;
 	}
 });
 
-export const remove = internalMutation({
+export const destroyByUserIdAndOrganizationKeyInternal = internalMutation({
 	args: {
 		userId: v.string(),
 		organizationId: v.optional(v.string())
@@ -101,6 +106,9 @@ export const remove = internalMutation({
 
 		if (connection) {
 			await ctx.db.delete(connection._id);
+			return connection;
 		}
+
+		return null;
 	}
 });

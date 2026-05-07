@@ -33,9 +33,10 @@ function video(overrides: Partial<VideoSnapshot> = {}) {
 
 test('syncPlaylistForEvent stores top-level videos, assignments, and event stats', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -45,8 +46,8 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 			validationContextKey: 'testconf-2026',
 			validationStats: [
 				{
-					id: 'title-event-suffix',
-					label: 'Title suffix',
+					id: 'event',
+					label: 'Event',
 					passCount: 1,
 					failCount: 1,
 					infoCount: 0
@@ -64,11 +65,11 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 		}
 	});
 
-	const assignments = await t.query(api.videos.listAssignmentsByEvent, { eventId });
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const assignments = await t.query(api.playlistAssignmentView.getForEvent, { eventId });
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
-	const stats = await t.query(api.videos.getStatsByEventIds, {
+	const stats = await t.query(api.eventPlaylistStats.collectByEventId, {
 		eventIds: [eventId]
 	});
 
@@ -96,7 +97,7 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 		videoCount: 2,
 		validationStats: [
 			{
-				id: 'title-event-suffix',
+				id: 'event',
 				passCount: 1,
 				failCount: 1,
 				infoCount: 0
@@ -107,13 +108,14 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 
 test('event type sets the default video type for ingested videos', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, {
+	const event = await t.mutation(api.events.upsert, {
 		name: 'Customer Chats',
 		eventType: 'interviews',
 		year: 2026
 	});
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -123,7 +125,7 @@ test('event type sets the default video type for ingested videos', async () => {
 		}
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'interview-1'
 	});
 
@@ -135,9 +137,10 @@ test('event type sets the default video type for ingested videos', async () => {
 
 test('syncPlaylistForEvent replaces stale assignments without duplicating videos', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -149,7 +152,7 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 			]
 		}
 	});
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -166,8 +169,8 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 		}
 	});
 
-	const assignments = await t.query(api.videos.listAssignmentsByEvent, { eventId });
-	const stats = await t.query(api.videos.getStatsByEventIds, {
+	const assignments = await t.query(api.playlistAssignmentView.getForEvent, { eventId });
+	const stats = await t.query(api.eventPlaylistStats.collectByEventId, {
 		eventIds: [eventId]
 	});
 
@@ -186,9 +189,10 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 
 test('speaker assignments and video title format survive playlist syncs', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -197,19 +201,19 @@ test('speaker assignments and video title format survive playlist syncs', async 
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
-	await t.mutation(api.videos.updateMetadata, {
+	await t.mutation(api.videos.upsertMetadataByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		titleOverride: 'A Fully Custom Video Title',
 		videoTitleFormat: '{title} — {speaker}, {company}',
 		videoType: 'panelDiscussion'
 	});
-	await t.mutation(api.videos.addSpeaker, {
+	await t.mutation(api.videos.upsertSpeakerAssignmentByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		name: 'Chan',
 		company: 'WorkOS',
 		position: 'Developer Advocate'
 	});
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -219,10 +223,10 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		}
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
-	const videoView = await t.query(api.videos.getViewByYoutubeVideoId, {
+	const videoView = await t.query(api.videoView.getByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
@@ -243,9 +247,10 @@ test('speaker assignments and video title format survive playlist syncs', async 
 
 test('video title override can be cleared', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -254,16 +259,16 @@ test('video title override can be cleared', async () => {
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
-	await t.mutation(api.videos.updateMetadata, {
+	await t.mutation(api.videos.upsertMetadataByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		titleOverride: 'A Fully Custom Video Title'
 	});
-	await t.mutation(api.videos.updateMetadata, {
+	await t.mutation(api.videos.upsertMetadataByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		clearTitleOverride: true
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
@@ -272,9 +277,10 @@ test('video title override can be cleared', async () => {
 
 test('existing speakers can be assigned to another video', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -286,21 +292,21 @@ test('existing speakers can be assigned to another video', async () => {
 			]
 		}
 	});
-	await t.mutation(api.videos.addSpeaker, {
+	await t.mutation(api.videos.upsertSpeakerAssignmentByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		name: 'Chan',
 		company: 'WorkOS',
 		position: 'Developer Advocate'
 	});
 
-	const speakers = await t.query(api.videos.listSpeakers, {});
+	const speakers = await t.query(api.speakers.collect, {});
 
-	await t.mutation(api.videos.addSpeaker, {
+	await t.mutation(api.videos.upsertSpeakerAssignmentByYoutubeVideoId, {
 		youtubeVideoId: 'video-2',
 		speakerId: speakers[0]._id
 	});
 
-	const videoView = await t.query(api.videos.getViewByYoutubeVideoId, {
+	const videoView = await t.query(api.videoView.getByYoutubeVideoId, {
 		youtubeVideoId: 'video-2'
 	});
 
@@ -315,9 +321,10 @@ test('existing speakers can be assigned to another video', async () => {
 
 test('video title can be updated after a YouTube metadata write', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -326,12 +333,12 @@ test('video title can be updated after a YouTube metadata write', async () => {
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
-	await t.mutation(api.videos.updateTitle, {
+	await t.mutation(api.videos.upsertTitleByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		title: 'New title'
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
@@ -340,9 +347,10 @@ test('video title can be updated after a YouTube metadata write', async () => {
 
 test('video can be refreshed from YouTube without clearing app metadata', async () => {
 	const t = convexTest(schema, modules);
-	const eventId = await t.mutation(api.events.create, { name: 'TestConf', year: 2026 });
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -351,12 +359,12 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
-	await t.mutation(api.videos.updateMetadata, {
+	await t.mutation(api.videos.upsertMetadataByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		titleOverride: 'Manual override',
 		videoType: 'keynote'
 	});
-	await t.mutation(api.videos.refreshFromYouTube, {
+	await t.mutation(api.videos.upsertYoutubeSnapshotByYoutubeVideoId, {
 		youtubeVideoId: 'video-1',
 		title: 'Fresh title',
 		description: 'Fresh description',
@@ -368,7 +376,7 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 		videoPublishedAt: '2026-01-01T00:00:00Z'
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
@@ -384,10 +392,12 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 
 test('a video can have assignments in multiple playlists', async () => {
 	const t = convexTest(schema, modules);
-	const firstEventId = await t.mutation(api.events.create, { name: 'FirstConf', year: 2026 });
-	const secondEventId = await t.mutation(api.events.create, { name: 'SecondConf', year: 2026 });
+	const firstEvent = await t.mutation(api.events.upsert, { name: 'FirstConf', year: 2026 });
+	const firstEventId = firstEvent!._id;
+	const secondEvent = await t.mutation(api.events.upsert, { name: 'SecondConf', year: 2026 });
+	const secondEventId = secondEvent!._id;
 
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId: firstEventId,
 		playlist: {
 			playlistId: 'PL123',
@@ -396,7 +406,7 @@ test('a video can have assignments in multiple playlists', async () => {
 			videos: [video({ youtubeVideoId: 'shared-video' })]
 		}
 	});
-	await t.mutation(api.videos.syncPlaylistForEvent, {
+	await t.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 		eventId: secondEventId,
 		playlist: {
 			playlistId: 'PL456',
@@ -412,15 +422,15 @@ test('a video can have assignments in multiple playlists', async () => {
 		}
 	});
 
-	const videoDoc = await t.query(api.videos.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'shared-video'
 	});
 	expect(videoDoc).not.toBeNull();
 
-	const assignments = await t.query(api.videos.listAssignmentsByVideo, {
+	const assignments = await t.query(api.playlistAssignments.collectByVideoId, {
 		videoId: videoDoc!._id
 	});
-	const videoView = await t.query(api.videos.getViewByYoutubeVideoId, {
+	const videoView = await t.query(api.videoView.getByYoutubeVideoId, {
 		youtubeVideoId: 'shared-video'
 	});
 

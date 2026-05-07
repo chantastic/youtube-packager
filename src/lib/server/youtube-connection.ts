@@ -40,7 +40,10 @@ export async function getYouTubeConnection(auth: { userId: string; organizationI
 		throw new YouTubeConnectionError(adminConfigError, 500);
 	}
 
-	return await convexAdminFunction(internal.youtubeConnections.getByAuth, auth);
+	return await convexAdminFunction(
+		internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
+		auth
+	);
 }
 
 export async function getConnectedYouTubeAccessToken(
@@ -73,10 +76,13 @@ export async function getConnectedYouTubeAccessToken(
 	} catch (caught) {
 		const message = caught instanceof Error ? caught.message : 'Could not refresh YouTube access.';
 
-		await convexAdminFunction(internal.youtubeConnections.markNeedsReauthorization, {
-			...auth,
-			lastError: message
-		});
+		await convexAdminFunction(
+			internal.youtubeConnections.upsertNeedsReauthorizationByUserIdAndOrganizationKeyInternal,
+			{
+				...auth,
+				lastError: message
+			}
+		);
 
 		throw new YouTubeConnectionError(message, 401);
 	}

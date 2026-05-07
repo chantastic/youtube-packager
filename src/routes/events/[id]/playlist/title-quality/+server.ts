@@ -1,59 +1,147 @@
 import { json } from '@sveltejs/kit';
-import { validateTitleQualityWithAnthropic } from '$lib/server/anthropic-title-validation';
-import { planTitleQualityCache, saveTitleQualityCache } from '$lib/server/title-quality-cache';
+import { getConvexClient } from '$lib/server/convex';
+import { validateTitleAiChecksWithAnthropic } from '$lib/server/anthropic-title-validation';
+import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
+import {
+	buildTitleAiValidationInputs,
+	titleAiValidationInputKey,
+	type TitleAiValidationInput
+} from '$lib/title-ai-validation';
+import type { VideoValidation } from '$lib/video-validation';
+import { api } from '../../../../../../convex/_generated/api';
+import type { FunctionReturnType } from 'convex/server';
+import type { Id } from '../../../../../../convex/_generated/dataModel';
 import type { RequestHandler } from './$types';
 
-type TitleQualityRequestBody = {
-	titles?: Array<{
-		videoId?: unknown;
-		title?: unknown;
-	}>;
-};
+type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentView.getForEvent>[number];
+type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
 
-function normalizeTitles(body: TitleQualityRequestBody) {
-	return (body.titles ?? [])
-		.map((title) => ({
-			videoId: typeof title.videoId === 'string' ? title.videoId : '',
-			title: typeof title.title === 'string' ? title.title : ''
-		}))
-		.filter((title) => title.videoId && title.title);
+function videoRecordForValidation(row: AssignmentRow) {
+	const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
+	const company = [
+		...new Set(
+			row.speakers
+				.map((speakerRow) => speakerRow.speaker.company)
+				.filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+	const position = [
+		...new Set(
+			row.speakers
+				.map((speakerRow) => speakerRow.speaker.position)
+				.filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+
+	return {
+		speaker: speaker || undefined,
+		company: company || undefined,
+		position: position || undefined,
+		titleOverride: row.video.titleOverride,
+		videoTitleFormat: row.video.videoTitleFormat,
+		videoType: row.video.videoType
+	};
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-	const body = (await request.json().catch(() => ({}))) as TitleQualityRequestBody;
-	const titles = normalizeTitles(body);
+function speakerRecordsForValidation(row: AssignmentRow) {
+	return row.speakers.map((speakerRow) => ({
+		name: speakerRow.speaker.name,
+		company: speakerRow.speaker.company,
+		position: speakerRow.speaker.position
+	}));
+}
 
-	if (titles.length === 0) {
+function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventRow) {
+	const inputsByKey = new Map<string, TitleAiValidationInput>();
+
+	for (const row of assignments) {
+		for (const input of buildTitleAiValidationInputs({
+			videoId: row.video.youtubeVideoId,
+			title: row.video.title,
+			event,
+			speakers: speakerRecordsForValidation(row),
+			video: videoRecordForValidation(row)
+		})) {
+			inputsByKey.set(titleAiValidationInputKey(input), input);
+		}
+	}
+
+	return [...inputsByKey.values()];
+}
+
+export const POST: RequestHandler = async ({ params }) => {
+	const client = getConvexClient();
+	const event = await client.query(api.events.find, {
+		id: params.id as Id<'events'>
+	});
+
+	if (!event) {
 		return json(
 			{
 				validationsByVideoId: {},
-				error: 'No titles were provided for validation.'
+				error: 'Event not found.'
+			},
+			{ status: 404 }
+		);
+	}
+
+	const assignments = await client.query(api.playlistAssignmentView.getForEvent, {
+		eventId: event._id
+	});
+	const inputs = titleAiInputsForAssignments(assignments, event);
+
+	if (inputs.length === 0) {
+		return json(
+			{
+				validationsByVideoId: {},
+				error: 'No videos were found for validation.'
 			},
 			{ status: 400 }
 		);
 	}
 
-	const cachePlan = await planTitleQualityCache(titles);
-	const freshResult = await validateTitleQualityWithAnthropic(cachePlan.misses);
-	const freshEntries = cachePlan.entries
-		.filter((entry) => freshResult.validationsByVideoId[entry.videoId]?.length)
-		.map((entry) => ({
-			...entry.cacheKey,
-			title: entry.title,
-			validations: freshResult.validationsByVideoId[entry.videoId],
-			checkedAt: Date.now()
-		}));
+	const cachePlan = await planAiValidationCache(inputs);
+	const freshResult = await validateTitleAiChecksWithAnthropic(
+		cachePlan.misses.map((entry) => ({
+			...entry,
+			requestId: entry.cacheKeyString
+		}))
+	);
+	const now = Date.now();
+	const freshEntries = cachePlan.misses.flatMap((entry) => {
+		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
 
-	await saveTitleQualityCache(freshEntries);
+		return validation
+			? [
+					{
+						...entry,
+						validation,
+						checkedAt: now
+					}
+				]
+			: [];
+	});
+
+	await saveAiValidationCache(freshEntries);
 
 	return json({
-		validationsByVideoId: {
-			...cachePlan.cachedValidationsByVideoId,
-			...freshResult.validationsByVideoId
-		},
+		validationsByVideoId: cachePlan.entries.reduce<Record<string, VideoValidation[]>>(
+			(result, entry) => {
+				const validation =
+					cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
+					freshResult.validationsByRequestId[entry.cacheKeyString];
+
+				if (validation) {
+					result[entry.videoId] = [...(result[entry.videoId] ?? []), validation];
+				}
+
+				return result;
+			},
+			{}
+		),
 		error: freshResult.error,
 		cache: {
-			hits: titles.length - cachePlan.misses.length,
+			hits: inputs.length - cachePlan.misses.length,
 			misses: cachePlan.misses.length,
 			writes: freshEntries.length
 		}

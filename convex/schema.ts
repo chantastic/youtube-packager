@@ -98,7 +98,8 @@ export default defineSchema({
 				label: v.string(),
 				passCount: v.number(),
 				failCount: v.number(),
-				infoCount: v.number()
+				infoCount: v.number(),
+				pendingCount: v.optional(v.number())
 			})
 		),
 		lastFetchedAt: v.number()
@@ -126,7 +127,12 @@ export default defineSchema({
 			v.object({
 				id: v.string(),
 				label: v.string(),
-				status: v.union(v.literal('pass'), v.literal('fail'), v.literal('info')),
+				status: v.union(
+					v.literal('pass'),
+					v.literal('fail'),
+					v.literal('info'),
+					v.literal('pending')
+				),
 				message: v.string(),
 				expected: v.optional(v.string()),
 				details: v.optional(v.array(v.string())),
@@ -139,5 +145,38 @@ export default defineSchema({
 		'titleHash',
 		'model',
 		'validationVersion'
+	]),
+	aiValidationChecks: defineTable({
+		videoId: v.string(),
+		field: v.string(),
+		checkId: v.string(),
+		inputHash: v.string(),
+		inputSnapshot: v.string(),
+		model: v.string(),
+		promptVersion: v.string(),
+		modelConfigHash: v.string(),
+		validation: v.object({
+			id: v.string(),
+			label: v.string(),
+			status: v.union(
+				v.literal('pass'),
+				v.literal('fail'),
+				v.literal('info'),
+				v.literal('pending')
+			),
+			message: v.string(),
+			expected: v.optional(v.string()),
+			details: v.optional(v.array(v.string())),
+			suggested: v.optional(v.string())
+		}),
+		checkedAt: v.number()
+	}).index('by_cache_key', [
+		'videoId',
+		'field',
+		'checkId',
+		'inputHash',
+		'model',
+		'promptVersion',
+		'modelConfigHash'
 	])
 });

@@ -8,9 +8,15 @@
  * @module
  */
 
+import type * as aiValidationChecks from "../aiValidationChecks.js";
+import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
+import type * as playlistAssignmentView from "../playlistAssignmentView.js";
+import type * as playlistAssignments from "../playlistAssignments.js";
+import type * as speakers from "../speakers.js";
 import type * as titleQualityChecks from "../titleQualityChecks.js";
 import type * as videoCaptions from "../videoCaptions.js";
+import type * as videoView from "../videoView.js";
 import type * as videos from "../videos.js";
 import type * as youtubeConnections from "../youtubeConnections.js";
 
@@ -21,9 +27,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiValidationChecks: typeof aiValidationChecks;
+  eventPlaylistStats: typeof eventPlaylistStats;
   events: typeof events;
+  playlistAssignmentView: typeof playlistAssignmentView;
+  playlistAssignments: typeof playlistAssignments;
+  speakers: typeof speakers;
   titleQualityChecks: typeof titleQualityChecks;
   videoCaptions: typeof videoCaptions;
+  videoView: typeof videoView;
   videos: typeof videos;
   youtubeConnections: typeof youtubeConnections;
 }>;

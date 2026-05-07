@@ -355,11 +355,7 @@ export async function getYouTubeVideoData(
 	};
 }
 
-export async function updateYouTubeVideoTitle(
-	videoId: string,
-	title: string,
-	accessToken: string
-) {
+export async function updateYouTubeVideoTitle(videoId: string, title: string, accessToken: string) {
 	const trimmedTitle = title.trim();
 
 	if (!trimmedTitle) {

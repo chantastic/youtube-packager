@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { chunkTitleQualityInputs, parseTitleQualityResponse } from './anthropic-title-validation';
+import {
+	chunkTitleQualityInputs,
+	parseTitleAiValidationResponse,
+	parseTitleQualityResponse
+} from './anthropic-title-validation';
 
 describe('Anthropic title validation parsing', () => {
 	test('maps JSON results to validation objects', () => {
@@ -20,8 +24,8 @@ describe('Anthropic title validation parsing', () => {
 		).toEqual({
 			abc123: [
 				{
-					id: 'title-quality',
-					label: 'Title quality',
+					id: 'mechanics',
+					label: 'Mechanics',
 					status: 'fail',
 					message: 'Possible grammar issue',
 					details: ['Use sentence case for readability.'],
@@ -39,8 +43,8 @@ describe('Anthropic title validation parsing', () => {
 		).toEqual({
 			abc123: [
 				{
-					id: 'title-quality',
-					label: 'Title quality',
+					id: 'mechanics',
+					label: 'Mechanics',
 					status: 'pass',
 					message: 'Looks clean'
 				}
@@ -66,8 +70,8 @@ describe('Anthropic title validation parsing', () => {
 		).toEqual({
 			abc123: [
 				{
-					id: 'title-quality',
-					label: 'Title quality',
+					id: 'mechanics',
+					label: 'Mechanics',
 					status: 'pass',
 					message: 'Looks clean'
 				}
@@ -86,5 +90,55 @@ describe('Anthropic title validation parsing', () => {
 		expect(batches.map((batch) => batch.length)).toEqual([20, 20, 5]);
 		expect(batches[0][0]).toEqual({ videoId: 'video-1', title: 'Video 1' });
 		expect(batches[2][4]).toEqual({ videoId: 'video-45', title: 'Video 45' });
+	});
+
+	test('maps mixed AI validation responses by request id', () => {
+		expect(
+			parseTitleAiValidationResponse(
+				JSON.stringify({
+					results: [
+						{
+							requestId: 'video-1:title:hook',
+							status: 'fail',
+							message: 'Too vague'
+						},
+						{
+							requestId: 'video-1:title:mechanics',
+							status: 'pass',
+							message: 'Looks clean'
+						}
+					]
+				}),
+				[
+					{
+						requestId: 'video-1:title:hook',
+						videoId: 'video-1',
+						checkId: 'hook',
+						label: 'Hook',
+						input: { hookText: 'Intro to Auth' }
+					},
+					{
+						requestId: 'video-1:title:mechanics',
+						videoId: 'video-1',
+						checkId: 'mechanics',
+						label: 'Mechanics',
+						input: { title: 'Intro to Auth' }
+					}
+				]
+			)
+		).toEqual({
+			'video-1:title:hook': {
+				id: 'hook',
+				label: 'Hook',
+				status: 'fail',
+				message: 'Too vague'
+			},
+			'video-1:title:mechanics': {
+				id: 'mechanics',
+				label: 'Mechanics',
+				status: 'pass',
+				message: 'Looks clean'
+			}
+		});
 	});
 });

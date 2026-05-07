@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+	buildTitleAlternativesPrompt,
 	finalizeTitleAlternatives,
 	parseTitleAlternativesResponse
 } from './anthropic-title-alternatives';
@@ -105,5 +106,47 @@ describe('Anthropic title alternatives', () => {
 		expect(alternatives).toEqual([
 			'Build Agent-Native Auth That Works — Chan, WorkOS | TestConf 2026 Keynote'
 		]);
+	});
+
+	test('includes title validation warnings in the generation prompt', () => {
+		const prompt = buildTitleAlternativesPrompt({
+			currentTitle: 'Overview of Agent-Native Auth — Chan, WorkOS | TestConf 2026',
+			video: {
+				speaker: 'Chan',
+				company: 'WorkOS',
+				videoTitleFormat: '{title} — {speaker}, {company}'
+			},
+			assignments: [
+				{
+					assignmentId: 'assignment-1',
+					event: {
+						name: 'TestConf',
+						year: 2026,
+						titleFormat: '{title} | {event_name} {year}'
+					},
+					titleValidations: [
+						{
+							id: 'hook',
+							label: 'Hook',
+							status: 'fail',
+							message: 'Starts with weak framing',
+							details: ['"Overview" wastes prime title space.'],
+							expected: 'Clear topic or hook in the first 55 characters'
+						},
+						{
+							id: 'format',
+							label: 'Format',
+							status: 'pass',
+							message: 'Matches selected format'
+						}
+					]
+				}
+			]
+		});
+
+		expect(prompt).toContain('Use titleWarnings as feedback');
+		expect(prompt).toContain('"titleWarnings"');
+		expect(prompt).toContain('Starts with weak framing');
+		expect(prompt).not.toContain('Matches selected format');
 	});
 });

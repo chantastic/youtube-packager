@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import {
 		deriveBaseTitle,
 		deriveComposedBaseTitle,
 		formatComposedVideoTitle,
 		formatVideoTitle,
+		getTitleHookParts,
 		normalizeVideoType,
 		normalizeTitleFormat,
 		previewVideoTitle,
@@ -15,13 +17,32 @@
 		youtubeTitleFocusLength,
 		type VideoValidation
 	} from '$lib/video-validation';
+	import {
+		Check,
+		CirclePlay,
+		ClipboardCopy,
+		FileText,
+		ListVideo,
+		RefreshCw,
+		SquarePen
+	} from 'lucide-svelte';
+	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let copiedVideoId = $state<string | null>(null);
-	let titleQualityValidationsByVideoId = $state<Record<string, VideoValidation[]>>({});
-	let titleQualityError = $state<string | null>(null);
+	let loadedTitleQualityValidationsByVideoId = $state<Record<string, VideoValidation[]> | null>(
+		null
+	);
+	let loadedTitleQualityError = $state<string | null | undefined>(undefined);
+	let titleQualityValidationsByVideoId = $derived.by(
+		(): Record<string, VideoValidation[]> =>
+			loadedTitleQualityValidationsByVideoId ?? data.titleQualityValidationsByVideoId
+	);
+	let titleQualityError = $derived(loadedTitleQualityError ?? data.titleQualityError);
 	let titleQualityLoading = $state(false);
 	let updatingVideoType = $state<string | null>(null);
 
@@ -115,10 +136,62 @@
 		return [...baselineValidations(videoId, videoTitle), ...titleQualityValidations(videoId)];
 	}
 
-	function titleFocusParts(title: string) {
+	function validationMatchesFilter(validations: VideoValidation[]) {
+		const filter = data.validationFilter;
+
+		if (!filter) return true;
+
+		const validation = validations.find((candidate) => candidate.id === filter.id);
+		if (!validation) return false;
+
+		return filter.status ? validation.status === filter.status : true;
+	}
+
+	function filteredVideos() {
+		if (!data.playlist) return [];
+
+		return data.playlist.videos.filter((video) =>
+			validationMatchesFilter(validationsForVideo(video.videoId, video.title))
+		);
+	}
+
+	function activeValidationLabel() {
+		const filter = data.validationFilter;
+
+		if (!filter || !data.playlist) return '';
+
+		const firstMatch = data.playlist.videos
+			.flatMap((video) => validationsForVideo(video.videoId, video.title))
+			.find((validation) => validation.id === filter.id);
+
+		return firstMatch?.label ?? filter.id;
+	}
+
+	function filterStatusLabel() {
+		const status = data.validationFilter?.status;
+
+		if (status === 'fail') return 'failing';
+		if (status === 'pass') return 'passing';
+		if (status === 'info') return 'informational';
+		if (status === 'pending') return 'pending';
+		return 'matching';
+	}
+
+	function clearValidationFilterHref() {
+		return resolve('/events/[id]/playlist', { id: data.event._id });
+	}
+
+	function titleFocusParts(videoId: string, title: string) {
+		const hook = getTitleHookParts(
+			title,
+			data.event,
+			videoTitleRecord(videoId) ?? undefined,
+			youtubeTitleFocusLength
+		).focus;
+
 		return {
-			focus: title.slice(0, youtubeTitleFocusLength),
-			rest: title.slice(youtubeTitleFocusLength)
+			focus: title.slice(0, hook.length),
+			rest: title.slice(hook.length)
 		};
 	}
 
@@ -128,9 +201,7 @@
 		}
 
 		const checks = data.playlist.videos.flatMap((video) =>
-			baselineValidations(video.videoId, video.title).filter(
-				(check) => check.id === 'title-event-suffix'
-			)
+			baselineValidations(video.videoId, video.title).filter((check) => check.id === 'event')
 		);
 		const actionableChecks = checks.filter((check) => check.status !== 'info');
 
@@ -146,10 +217,15 @@
 		}
 
 		return {
-			checked: data.playlist.videos.filter(
-				(video) => titleQualityValidationsByVideoId[video.videoId]?.length
-			).length,
-			total: data.playlist.videos.length
+			checked: data.playlist.videos.reduce(
+				(total, video) =>
+					total +
+					(titleQualityValidationsByVideoId[video.videoId]?.filter(
+						(validation) => validation.status !== 'pending'
+					).length ?? 0),
+				0
+			),
+			total: data.playlist.videos.length * 2
 		};
 	}
 
@@ -157,7 +233,8 @@
 		return {
 			pass: 'border-green-200 bg-green-50 text-green-700',
 			fail: 'border-amber-200 bg-amber-50 text-amber-800',
-			info: 'border-gray-200 bg-gray-50 text-gray-600'
+			info: 'border-gray-200 bg-gray-50 text-gray-600',
+			pending: 'border-slate-200 bg-slate-50 text-slate-600'
 		}[status];
 	}
 
@@ -210,32 +287,22 @@
 		}
 
 		titleQualityLoading = true;
-		titleQualityError = null;
+		loadedTitleQualityError = null;
 
 		try {
 			const response = await fetch(`/events/${data.event._id}/playlist/title-quality`, {
-				method: 'POST',
-				headers: {
-					'content-type': 'application/json'
-				},
-				body: JSON.stringify({
-					titles: playlist.videos.map((video) => ({
-						videoId: video.videoId,
-						title: video.title
-					}))
-				})
+				method: 'POST'
 			});
 			const body = (await response.json().catch(() => ({}))) as {
 				validationsByVideoId?: Record<string, VideoValidation[]>;
 				error?: string | null;
 			};
 
-			titleQualityValidationsByVideoId = body.validationsByVideoId ?? {};
-			titleQualityError =
-				body.error ??
-				(response.ok ? null : `Title quality validation failed with ${response.status}.`);
+			loadedTitleQualityValidationsByVideoId = body.validationsByVideoId ?? {};
+			loadedTitleQualityError =
+				body.error ?? (response.ok ? null : `AI title validation failed with ${response.status}.`);
 		} catch {
-			titleQualityError = 'Title quality validation is temporarily unavailable.';
+			loadedTitleQualityError = 'AI title validation is temporarily unavailable.';
 		} finally {
 			titleQualityLoading = false;
 		}
@@ -247,23 +314,12 @@
 </svelte:head>
 
 <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<a href="/events" class="text-sm text-blue-600 hover:underline">Events</a>
-			<h1 class="mt-2 text-3xl font-bold tracking-normal text-gray-950">
-				{eventDisplayTitle()}
-			</h1>
-			<p class="mt-1 text-sm text-gray-500">
-				{data.event.year} · {normalizeTitleFormat(data.event.titleFormat)}
-			</p>
-		</div>
-		<a
-			href="/events"
-			class="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-		>
-			Edit Event
-		</a>
-	</div>
+	<PageHeader
+		backHref="/events"
+		backLabel="Events"
+		title={eventDisplayTitle()}
+		subtitle={`${data.event.year} · ${normalizeTitleFormat(data.event.titleFormat)}`}
+	/>
 
 	{#if !data.event.youtubePlaylistId}
 		<section class="rounded-lg border border-amber-200 bg-amber-50 p-5">
@@ -298,36 +354,31 @@
 					{/if}
 				</div>
 				<div class="flex flex-wrap gap-2">
-					<a
+					<ExternalLinkButton
 						href={data.playlist.url}
-						target="_blank"
-						rel="noreferrer"
-						class="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-					>
-						Open Playlist
-					</a>
-					<a
+						icon={CirclePlay}
+						label="Open playlist"
+						labelVisible
+					/>
+					<ExternalLinkButton
 						href={data.playlist.studioContentUrl}
-						target="_blank"
-						rel="noreferrer"
-						class="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-					>
-						Studio Content
-					</a>
-					<a
+						icon={ListVideo}
+						label="Studio content"
+						labelVisible
+					/>
+					<ExternalLinkButton
 						href={data.playlist.studioEditUrl}
-						target="_blank"
-						rel="noreferrer"
-						class="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-					>
-						Studio Edit
-					</a>
-					<a
+						icon={SquarePen}
+						label="Studio edit"
+						labelVisible
+					/>
+					<IconButton
 						href={`/events/${data.event._id}/playlist`}
-						class="rounded bg-gray-950 px-3 py-2 text-sm text-white hover:bg-gray-800"
-					>
-						Refresh
-					</a>
+						icon={RefreshCw}
+						label="Refresh playlist"
+						labelVisible
+						tone="primary"
+					/>
 				</div>
 			</div>
 			<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
@@ -341,10 +392,11 @@
 					)}
 				</p>
 				<p class="mt-1 text-xs text-gray-500">
-					First {youtubeTitleFocusLength} characters are highlighted in each title.
+					The hook uses the title segment before formatting, capped at {youtubeTitleFocusLength}
+					characters.
 				</p>
 				{#if titleQualityLoading}
-					<p class="mt-1 text-xs text-gray-500">Checking title quality...</p>
+					<p class="mt-1 text-xs text-gray-500">Checking AI title validations...</p>
 				{:else if titleQualityError}
 					<p class="mt-1 text-xs text-amber-700">{titleQualityError}</p>
 				{:else}
@@ -359,6 +411,22 @@
 		</section>
 
 		<section class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+			{#if data.validationFilter}
+				<div
+					class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-blue-50 px-4 py-3"
+				>
+					<p class="text-sm font-medium text-blue-950">
+						Showing {filterStatusLabel()}
+						{activeValidationLabel()} videos
+					</p>
+					<a
+						href={clearValidationFilterHref()}
+						class="text-sm font-medium text-blue-700 hover:text-blue-900 hover:underline"
+					>
+						Clear filter
+					</a>
+				</div>
+			{/if}
 			<div
 				class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500 uppercase md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 			>
@@ -370,11 +438,11 @@
 				<div class="hidden md:block">Actions</div>
 			</div>
 
-			{#each data.playlist.videos as video (video.playlistItemId)}
+			{#each filteredVideos() as video (video.playlistItemId)}
 				{@const nextTitle = formattedTitle(video.videoId, video.title)}
 				{@const validations = validationsForVideo(video.videoId, video.title)}
-				{@const currentTitleParts = titleFocusParts(video.title)}
-				{@const formattedTitleParts = titleFocusParts(nextTitle)}
+				{@const currentTitleParts = titleFocusParts(video.videoId, video.title)}
+				{@const formattedTitleParts = titleFocusParts(video.videoId, nextTitle)}
 				<article
 					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 				>
@@ -469,29 +537,23 @@
 							{/each}
 						</div>
 						<div class="mt-3 flex flex-wrap gap-2 md:hidden">
-							<a
-								href={`/videos/${video.videoId}`}
-								class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">Details</a
-							>
-							<a
+							<IconButton href={`/videos/${video.videoId}`} icon={FileText} label="Video details" />
+							<ExternalLinkButton
 								href={video.playlistVideoUrl}
-								target="_blank"
-								rel="noreferrer"
-								class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">Watch</a
-							>
-							<a
+								icon={CirclePlay}
+								label="Watch on YouTube"
+							/>
+							<ExternalLinkButton
 								href={video.studioEditUrl}
-								target="_blank"
-								rel="noreferrer"
-								class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700">Studio</a
-							>
-							<button
-								type="button"
+								icon={SquarePen}
+								label="Open in YouTube Studio"
+							/>
+							<IconButton
+								icon={copiedVideoId === video.videoId ? Check : ClipboardCopy}
+								label={copiedVideoId === video.videoId ? 'Copied title' : 'Copy formatted title'}
 								onclick={() => copyTitle(video.videoId, nextTitle)}
-								class="rounded bg-gray-950 px-2 py-1 text-xs text-white"
-							>
-								{copiedVideoId === video.videoId ? 'Copied' : 'Copy Title'}
-							</button>
+								tone="primary"
+							/>
 						</div>
 					</div>
 					<div class="hidden min-w-0 md:block">
@@ -528,36 +590,31 @@
 						{/if}
 					</div>
 					<div class="hidden items-start gap-2 md:flex">
-						<a
-							href={`/videos/${video.videoId}`}
-							class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-							>Details</a
-						>
-						<a
+						<IconButton href={`/videos/${video.videoId}`} icon={FileText} label="Video details" />
+						<ExternalLinkButton
 							href={video.playlistVideoUrl}
-							target="_blank"
-							rel="noreferrer"
-							class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-							>Watch</a
-						>
-						<a
+							icon={CirclePlay}
+							label="Watch on YouTube"
+						/>
+						<ExternalLinkButton
 							href={video.studioEditUrl}
-							target="_blank"
-							rel="noreferrer"
-							class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-							>Studio</a
-						>
-						<button
-							type="button"
+							icon={SquarePen}
+							label="Open in YouTube Studio"
+						/>
+						<IconButton
+							icon={copiedVideoId === video.videoId ? Check : ClipboardCopy}
+							label={copiedVideoId === video.videoId ? 'Copied title' : 'Copy formatted title'}
 							onclick={() => copyTitle(video.videoId, nextTitle)}
-							class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800"
-						>
-							{copiedVideoId === video.videoId ? 'Copied' : 'Copy Title'}
-						</button>
+							tone="primary"
+						/>
 					</div>
 				</article>
 			{:else}
-				<p class="px-4 py-8 text-sm text-gray-500">No public videos found in this playlist.</p>
+				<p class="px-4 py-8 text-sm text-gray-500">
+					{data.validationFilter
+						? 'No videos match this validation filter.'
+						: 'No public videos found in this playlist.'}
+				</p>
 			{/each}
 		</section>
 	{/if}

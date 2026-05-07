@@ -50,6 +50,7 @@
 	},
 	"dependencies": {
 		"@workos/authkit-sveltekit": "^0.3.0",
-		"convex": "^1.37.0"
+		"convex": "^1.37.0",
+		"lucide-svelte": "^1.0.1"
 	}
 }

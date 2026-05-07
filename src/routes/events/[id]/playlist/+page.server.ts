@@ -7,24 +7,139 @@ import {
 } from '$lib/server/youtube-connection';
 import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
 import { isVideoType, normalizeVideoType } from '$lib/title-format';
+import { planAiValidationCache } from '$lib/server/ai-validation-cache';
 import {
+	buildTitleAiValidationInputs,
+	titleAiValidationInputKey,
+	type TitleAiValidationInput
+} from '$lib/title-ai-validation';
+import {
+	pendingVideoValidation,
 	summarizeVideoValidations,
 	validateVideoBaseline,
+	type VideoValidation,
 	videoValidationContextKey
 } from '$lib/video-validation';
 import { api } from '../../../../../convex/_generated/api';
+import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
+
+type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentView.getForEvent>[number];
+type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
+
+function validationFilterFromUrl(url: URL) {
+	const id = url.searchParams.get('validation')?.trim();
+	const statusParam = url.searchParams.get('status');
+	const status =
+		statusParam === 'pass' ||
+		statusParam === 'fail' ||
+		statusParam === 'info' ||
+		statusParam === 'pending'
+			? statusParam
+			: null;
+
+	return id ? { id, status } : null;
+}
 
 function optionalString(data: FormData, key: string) {
 	const value = data.get(key);
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+function videoRecordForValidation(row: AssignmentRow) {
+	const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
+	const company = [
+		...new Set(
+			row.speakers
+				.map((speakerRow) => speakerRow.speaker.company)
+				.filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+	const position = [
+		...new Set(
+			row.speakers
+				.map((speakerRow) => speakerRow.speaker.position)
+				.filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+
+	return {
+		speaker: speaker || undefined,
+		company: company || undefined,
+		position: position || undefined,
+		titleOverride: row.video.titleOverride,
+		videoTitleFormat: row.video.videoTitleFormat,
+		videoType: row.video.videoType
+	};
+}
+
+function speakerRecordsForValidation(row: AssignmentRow) {
+	return row.speakers.map((speakerRow) => ({
+		name: speakerRow.speaker.name,
+		company: speakerRow.speaker.company,
+		position: speakerRow.speaker.position
+	}));
+}
+
+function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventRow) {
+	const inputsByKey = new Map<string, TitleAiValidationInput>();
+
+	for (const row of assignments) {
+		for (const input of buildTitleAiValidationInputs({
+			videoId: row.video.youtubeVideoId,
+			title: row.video.title,
+			event,
+			speakers: speakerRecordsForValidation(row),
+			video: videoRecordForValidation(row)
+		})) {
+			inputsByKey.set(titleAiValidationInputKey(input), input);
+		}
+	}
+
+	return [...inputsByKey.values()];
+}
+
+async function cachedTitleAiValidationsByVideoId(assignments: AssignmentRow[], event: EventRow) {
+	const inputs = titleAiInputsForAssignments(assignments, event);
+
+	if (!inputs.length) {
+		return {};
+	}
+
+	const cachePlan = await planAiValidationCache(inputs);
+	const entriesByInputKey = new Map(
+		cachePlan.entries.map((entry) => [titleAiValidationInputKey(entry), entry])
+	);
+	const validationsByVideoId: Record<string, VideoValidation[]> = {};
+
+	for (const row of assignments) {
+		const validations = buildTitleAiValidationInputs({
+			videoId: row.video.youtubeVideoId,
+			title: row.video.title,
+			event,
+			speakers: speakerRecordsForValidation(row),
+			video: videoRecordForValidation(row)
+		}).map((input) => {
+			const entry = entriesByInputKey.get(titleAiValidationInputKey(input));
+
+			return entry
+				? (cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
+						pendingVideoValidation(input.checkId, input.label))
+				: pendingVideoValidation(input.checkId, input.label);
+		});
+
+		validationsByVideoId[row.video.youtubeVideoId] = validations;
+	}
+
+	return validationsByVideoId;
+}
+
+export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const auth = youtubeAuthContext({ locals });
 	const client = getConvexClient();
-	const event = await client.query(api.events.get, {
+	const validationFilter = validationFilterFromUrl(url);
+	const event = await client.query(api.events.find, {
 		id: params.id as Id<'events'>
 	});
 
@@ -38,6 +153,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			playlist: null,
 			playlistAssignments: [],
 			playlistError: null,
+			validationFilter,
 			titleQualityValidationsByVideoId: {},
 			titleQualityError: null
 		};
@@ -50,7 +166,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			playlist.videos.map((video) => validateVideoBaseline(video.title, event))
 		);
 
-		await client.mutation(api.videos.syncPlaylistForEvent, {
+		await client.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
 			eventId: event._id,
 			playlist: {
 				playlistId: playlist.playlistId,
@@ -77,16 +193,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				}))
 			}
 		});
-		const playlistAssignments = await client.query(api.videos.listAssignmentsByEvent, {
+		const playlistAssignments = await client.query(api.playlistAssignmentView.getForEvent, {
 			eventId: event._id
 		});
+		const titleQualityValidationsByVideoId = await cachedTitleAiValidationsByVideoId(
+			playlistAssignments,
+			event
+		);
 
 		return {
 			event,
 			playlist,
 			playlistAssignments,
 			playlistError: null,
-			titleQualityValidationsByVideoId: {},
+			validationFilter,
+			titleQualityValidationsByVideoId,
 			titleQualityError: null
 		};
 	} catch (err) {
@@ -99,6 +220,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 					status: err.status,
 					message: err.message
 				},
+				validationFilter,
 				titleQualityValidationsByVideoId: {},
 				titleQualityError: null
 			};
@@ -120,7 +242,7 @@ export const actions: Actions = {
 			});
 		}
 
-		await getConvexClient().mutation(api.videos.updateMetadata, {
+		await getConvexClient().mutation(api.videos.upsertMetadataByYoutubeVideoId, {
 			youtubeVideoId,
 			videoType: normalizeVideoType(videoType)
 		});

@@ -18,6 +18,10 @@
 		youtubeTitleMaxLength,
 		type VideoValidation
 	} from '$lib/video-validation';
+	import { CirclePlay, ListVideo, SquarePen } from 'lucide-svelte';
+	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -102,7 +106,8 @@
 		return {
 			pass: 'border-green-200 bg-green-50 text-green-700',
 			fail: 'border-amber-200 bg-amber-50 text-amber-800',
-			info: 'border-gray-200 bg-gray-50 text-gray-600'
+			info: 'border-gray-200 bg-gray-50 text-gray-600',
+			pending: 'border-slate-200 bg-slate-50 text-slate-600'
 		}[status];
 	}
 
@@ -175,7 +180,9 @@
 	}
 
 	function titleOverrideLength() {
-		return normalizeTitleOverride(selectedTitleOverride())?.length ?? titleOverrideInput.trim().length;
+		return (
+			normalizeTitleOverride(selectedTitleOverride())?.length ?? titleOverrideInput.trim().length
+		);
 	}
 
 	function assignmentTitleValidations(
@@ -252,7 +259,13 @@
 	}
 
 	function afterMetadataUpdate() {
-		return async ({ update, result }: { update: () => Promise<void>; result: { type: string } }) => {
+		return async ({
+			update,
+			result
+		}: {
+			update: () => Promise<void>;
+			result: { type: string };
+		}) => {
 			await update();
 			if (result.type !== 'success') {
 				metadataSaved = false;
@@ -356,10 +369,9 @@
 
 			titleQualityValidations = body.validations ?? [];
 			titleQualityError =
-				body.error ??
-				(response.ok ? null : `Title quality validation failed with ${response.status}.`);
+				body.error ?? (response.ok ? null : `AI title validation failed with ${response.status}.`);
 		} catch {
-			titleQualityError = 'Title quality validation is temporarily unavailable.';
+			titleQualityError = 'AI title validation is temporarily unavailable.';
 		} finally {
 			titleQualityLoading = false;
 		}
@@ -410,7 +422,8 @@
 
 			generatedDescription = body.description ?? null;
 			descriptionError =
-				body.error ?? (response.ok ? null : `Description generation failed with ${response.status}.`);
+				body.error ??
+				(response.ok ? null : `Description generation failed with ${response.status}.`);
 		} catch {
 			descriptionError = 'Description generation is temporarily unavailable.';
 		} finally {
@@ -424,33 +437,30 @@
 </svelte:head>
 
 <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<a href="/events" class="text-sm text-blue-600 hover:underline">Events</a>
-			<h1 class="mt-2 text-3xl font-bold tracking-normal text-gray-950">
-				{data.videoView.video.title}
-			</h1>
-			<p class="mt-1 font-mono text-sm text-gray-500">{data.videoView.video.youtubeVideoId}</p>
-		</div>
+	<PageHeader
+		backHref="/events"
+		backLabel="Events"
+		title={data.videoView.video.title}
+		subtitle={data.videoView.video.youtubeVideoId}
+	>
 		<div class="flex flex-wrap gap-2">
-			<a
+			<ExternalLinkButton
 				href={data.videoView.video.videoUrl}
-				target="_blank"
-				rel="noreferrer"
-				class="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-			>
-				Watch
-			</a>
-			<a
+				icon={CirclePlay}
+				label="Watch on YouTube"
+				labelVisible
+				size="md"
+			/>
+			<ExternalLinkButton
 				href={data.videoView.video.studioEditUrl}
-				target="_blank"
-				rel="noreferrer"
-				class="rounded bg-gray-950 px-3 py-2 text-sm text-white hover:bg-gray-800"
-			>
-				Studio
-			</a>
+				icon={SquarePen}
+				label="Open in Studio"
+				labelVisible
+				size="md"
+				tone="primary"
+			/>
 		</div>
-	</div>
+	</PageHeader>
 
 	<section class="mb-6 grid gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
 		{#if data.videoView.video.thumbnailUrl}
@@ -483,7 +493,9 @@
 				</div>
 			</dl>
 			{#if data.refreshError}
-				<p class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+				<p
+					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+				>
 					YouTube refresh failed: {data.refreshError}
 				</p>
 			{/if}
@@ -599,7 +611,10 @@
 				<p class="mt-3 text-xs text-gray-500">
 					Effective format:
 					<span class="font-mono"
-						>{normalizeComposedVideoTitleFormat(selectedVideoTitleFormat(), selectedVideoType)}</span
+						>{normalizeComposedVideoTitleFormat(
+							selectedVideoTitleFormat(),
+							selectedVideoType
+						)}</span
 					>
 				</p>
 			{/if}
@@ -727,7 +742,9 @@
 				</p>
 			{/if}
 			{#if descriptionError}
-				<p class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+				<p
+					class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+				>
 					{descriptionError}
 				</p>
 			{/if}
@@ -904,7 +921,7 @@
 		</div>
 		<div class="px-4 py-4">
 			{#if titleQualityLoading}
-				<p class="text-sm text-gray-500">Checking title quality...</p>
+				<p class="text-sm text-gray-500">Checking AI title validations...</p>
 			{:else if titleQualityError}
 				<p class="text-sm text-amber-700">{titleQualityError}</p>
 			{:else if titleQualityValidations.length}
@@ -927,7 +944,7 @@
 					{/if}
 				{/each}
 			{:else}
-				<p class="text-sm text-gray-500">No video-level checks have returned yet.</p>
+				<p class="text-sm text-gray-500">No AI title checks have returned yet.</p>
 			{/if}
 		</div>
 	</section>
@@ -1026,28 +1043,21 @@
 					{/if}
 				</div>
 				<div class="flex flex-wrap gap-2">
-					<a
+					<IconButton
 						href={`/events/${row.event._id}/playlist`}
-						class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-					>
-						Event Playlist
-					</a>
-					<a
+						icon={ListVideo}
+						label="Event playlist"
+					/>
+					<ExternalLinkButton
 						href={youtubePlaylistUrl(row.assignment.playlistId)}
-						target="_blank"
-						rel="noreferrer"
-						class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-					>
-						Playlist
-					</a>
-					<a
+						icon={ListVideo}
+						label="Open YouTube playlist"
+					/>
+					<ExternalLinkButton
 						href={row.assignment.playlistVideoUrl}
-						target="_blank"
-						rel="noreferrer"
-						class="rounded border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-					>
-						Watch Here
-					</a>
+						icon={CirclePlay}
+						label="Watch from playlist"
+					/>
 				</div>
 			</article>
 		{:else}

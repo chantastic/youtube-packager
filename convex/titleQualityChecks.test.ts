@@ -10,7 +10,7 @@ const cacheKey = {
 	videoId: 'video-1',
 	titleHash: 'hash-1',
 	model: 'claude-haiku-4-5-20251001',
-	validationVersion: 'title-quality-v1'
+	validationVersion: 'title-mechanics-v1'
 };
 
 const check = {
@@ -18,8 +18,8 @@ const check = {
 	title: 'A clean title',
 	validations: [
 		{
-			id: 'title-quality',
-			label: 'Title quality',
+			id: 'mechanics',
+			label: 'Mechanics',
 			status: 'pass' as const,
 			message: 'Looks clean'
 		}
@@ -34,9 +34,12 @@ test('upsertMany stores and getMany retrieves title quality checks', async () =>
 		checks: [check]
 	});
 
-	const checks = await t.query(api.titleQualityChecks.getMany, {
-		keys: [cacheKey]
-	});
+	const checks = await t.query(
+		api.titleQualityChecks.collectByVideoIdAndTitleHashAndModelAndValidationVersion,
+		{
+			keys: [cacheKey]
+		}
+	);
 
 	expect(checks).toHaveLength(1);
 	expect(checks[0]).toMatchObject(check);
@@ -54,8 +57,8 @@ test('upsertMany replaces existing title quality checks', async () => {
 				...check,
 				validations: [
 					{
-						id: 'title-quality',
-						label: 'Title quality',
+						id: 'mechanics',
+						label: 'Mechanics',
 						status: 'fail' as const,
 						message: 'Needs review'
 					}
@@ -65,9 +68,12 @@ test('upsertMany replaces existing title quality checks', async () => {
 		]
 	});
 
-	const checks = await t.query(api.titleQualityChecks.getMany, {
-		keys: [cacheKey]
-	});
+	const checks = await t.query(
+		api.titleQualityChecks.collectByVideoIdAndTitleHashAndModelAndValidationVersion,
+		{
+			keys: [cacheKey]
+		}
+	);
 
 	expect(checks).toHaveLength(1);
 	expect(checks[0].validations[0]).toMatchObject({

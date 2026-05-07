@@ -8,7 +8,8 @@ const validationStatValidator = v.object({
 	label: v.string(),
 	passCount: v.number(),
 	failCount: v.number(),
-	infoCount: v.number()
+	infoCount: v.number(),
+	pendingCount: v.optional(v.number())
 });
 
 const playlistVideoSnapshotValidator = v.object({
@@ -40,7 +41,7 @@ function defaultVideoTypeForEventType(eventType: string | undefined) {
 	return eventType === 'interviews' ? 'interview' : 'talk';
 }
 
-export const getByYoutubeVideoId = query({
+export const findByYoutubeVideoId = query({
 	args: {
 		youtubeVideoId: v.string()
 	},
@@ -52,142 +53,7 @@ export const getByYoutubeVideoId = query({
 	}
 });
 
-export const getViewByYoutubeVideoId = query({
-	args: {
-		youtubeVideoId: v.string()
-	},
-	handler: async (ctx, { youtubeVideoId }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
-
-		if (!video) {
-			return null;
-		}
-
-		const assignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-			.take(100);
-		const assignmentsWithEvents = [];
-		const speakerAssignments = await ctx.db
-			.query('videoSpeakers')
-			.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-			.take(100);
-		const speakers = [];
-
-		for (const assignment of assignments) {
-			const event = await ctx.db.get(assignment.eventId);
-
-			if (event) {
-				assignmentsWithEvents.push({ assignment, event });
-			}
-		}
-
-		for (const speakerAssignment of speakerAssignments.sort((a, b) => a.position - b.position)) {
-			const speaker = await ctx.db.get(speakerAssignment.speakerId);
-
-			if (speaker) {
-				speakers.push({ assignment: speakerAssignment, speaker });
-			}
-		}
-
-		return {
-			video,
-			speakers,
-			assignments: assignmentsWithEvents
-		};
-	}
-});
-
-export const getStatsByEventIds = query({
-	args: {
-		eventIds: v.array(v.id('events'))
-	},
-	handler: async (ctx, { eventIds }) => {
-		const stats = [];
-
-		for (const eventId of eventIds.slice(0, 100)) {
-			const eventStats = await ctx.db
-				.query('eventPlaylistStats')
-				.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-				.unique();
-
-			if (eventStats) {
-				stats.push(eventStats);
-			}
-		}
-
-		return stats;
-	}
-});
-
-export const listAssignmentsByEvent = query({
-	args: {
-		eventId: v.id('events')
-	},
-	handler: async (ctx, { eventId }) => {
-		const assignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-			.take(500);
-		const rows = [];
-
-		for (const assignment of assignments.sort((a, b) => a.position - b.position)) {
-			const video = await ctx.db.get(assignment.videoId);
-
-			if (video) {
-				const speakerAssignments = await ctx.db
-					.query('videoSpeakers')
-					.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-					.take(100);
-				const speakers = [];
-
-				for (const speakerAssignment of speakerAssignments.sort(
-					(a, b) => a.position - b.position
-				)) {
-					const speaker = await ctx.db.get(speakerAssignment.speakerId);
-
-					if (speaker) {
-						speakers.push({ assignment: speakerAssignment, speaker });
-					}
-				}
-
-				rows.push({ assignment, video, speakers });
-			}
-		}
-
-		return rows;
-	}
-});
-
-export const listAssignmentsByVideo = query({
-	args: {
-		videoId: v.id('videos')
-	},
-	handler: async (ctx, { videoId }) => {
-		return await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
-			.take(100);
-	}
-});
-
-export const listSpeakers = query({
-	args: {},
-	handler: async (ctx) => {
-		const speakers = await ctx.db.query('speakers').take(500);
-
-		return speakers.sort((a, b) =>
-			[a.name, a.company ?? '', a.position ?? '']
-				.join(' ')
-				.localeCompare([b.name, b.company ?? '', b.position ?? ''].join(' '))
-		);
-	}
-});
-
-export const updateMetadata = mutation({
+export const upsertMetadataByYoutubeVideoId = mutation({
 	args: {
 		youtubeVideoId: v.string(),
 		clearTitleOverride: v.optional(v.boolean()),
@@ -210,10 +76,12 @@ export const updateMetadata = mutation({
 			...(titleOverride !== undefined ? { titleOverride } : {}),
 			...(clearTitleOverride ? { titleOverride: undefined } : {})
 		});
+
+		return await ctx.db.get(video._id);
 	}
 });
 
-export const updateTitle = mutation({
+export const upsertTitleByYoutubeVideoId = mutation({
 	args: {
 		youtubeVideoId: v.string(),
 		title: v.string()
@@ -229,10 +97,12 @@ export const updateTitle = mutation({
 		}
 
 		await ctx.db.patch(video._id, { title });
+
+		return await ctx.db.get(video._id);
 	}
 });
 
-export const refreshFromYouTube = mutation({
+export const upsertYoutubeSnapshotByYoutubeVideoId = mutation({
 	args: {
 		youtubeVideoId: v.string(),
 		title: v.string(),
@@ -259,10 +129,12 @@ export const refreshFromYouTube = mutation({
 			...fields,
 			lastFetchedAt: Date.now()
 		});
+
+		return await ctx.db.get(video._id);
 	}
 });
 
-export const addSpeaker = mutation({
+export const upsertSpeakerAssignmentByYoutubeVideoId = mutation({
 	args: {
 		youtubeVideoId: v.string(),
 		speakerId: v.optional(v.id('speakers')),
@@ -313,7 +185,7 @@ export const addSpeaker = mutation({
 	}
 });
 
-export const removeSpeaker = mutation({
+export const destroySpeakerAssignmentByYoutubeVideoIdAndSpeakerId = mutation({
 	args: {
 		youtubeVideoId: v.string(),
 		speakerId: v.id('speakers')
@@ -337,11 +209,14 @@ export const removeSpeaker = mutation({
 
 		if (assignment) {
 			await ctx.db.delete(assignment._id);
+			return assignment;
 		}
+
+		return null;
 	}
 });
 
-export const syncPlaylistForEvent = mutation({
+export const upsertPlaylistSnapshotByEventId = mutation({
 	args: {
 		eventId: v.id('events'),
 		playlist: v.object({
@@ -452,7 +327,7 @@ async function assignSpeakerToVideo(
 		.unique();
 
 	if (existingAssignment) {
-		return existingAssignment._id;
+		return existingAssignment;
 	}
 
 	const speakerAssignments = await ctx.db
@@ -462,11 +337,13 @@ async function assignSpeakerToVideo(
 	const assignmentPosition =
 		speakerAssignments.reduce((max, assignment) => Math.max(max, assignment.position), -1) + 1;
 
-	return await ctx.db.insert('videoSpeakers', {
+	const id = await ctx.db.insert('videoSpeakers', {
 		videoId,
 		speakerId,
 		position: assignmentPosition
 	});
+
+	return await ctx.db.get(id);
 }
 
 async function upsertVideo(

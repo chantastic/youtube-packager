@@ -14,12 +14,14 @@ function speakerNames(
 	}>
 ) {
 	return speakers
-		.map((row) => [row.speaker.name, row.speaker.position, row.speaker.company].filter(Boolean).join(', '))
+		.map((row) =>
+			[row.speaker.name, row.speaker.position, row.speaker.company].filter(Boolean).join(', ')
+		)
 		.join('; ');
 }
 
 export const POST: RequestHandler = async ({ params }) => {
-	const videoView = await getConvexClient().query(api.videos.getViewByYoutubeVideoId, {
+	const videoView = await getConvexClient().query(api.videoView.getByYoutubeVideoId, {
 		youtubeVideoId: params.videoId
 	});
 
@@ -27,9 +29,12 @@ export const POST: RequestHandler = async ({ params }) => {
 		throw error(404, 'Video not found.');
 	}
 
-	const captions = await convexAdminFunction(internal.videoCaptions.listByYoutubeVideoId, {
-		youtubeVideoId: params.videoId
-	});
+	const captions = await convexAdminFunction(
+		internal.videoCaptions.collectByYoutubeVideoIdInternal,
+		{
+			youtubeVideoId: params.videoId
+		}
+	);
 	const caption = captions[0];
 
 	if (!caption) {

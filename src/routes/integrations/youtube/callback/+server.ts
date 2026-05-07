@@ -59,7 +59,10 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const mode = event.cookies.get(modeCookie) as YouTubeOAuthMode | undefined;
-	const existingConnection = await convexAdminFunction(internal.youtubeConnections.getByAuth, auth);
+	const existingConnection = await convexAdminFunction(
+		internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
+		auth
+	);
 
 	try {
 		const token = await exchangeYouTubeAuthorizationCode(code, event.url.origin);
@@ -80,7 +83,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const encrypted = await encryptRefreshToken(refreshToken);
 
-		await convexAdminFunction(internal.youtubeConnections.upsert, {
+		await convexAdminFunction(internal.youtubeConnections.upsertInternal, {
 			...auth,
 			refreshTokenCiphertext: encrypted.ciphertext,
 			refreshTokenIv: encrypted.iv,
@@ -89,10 +92,13 @@ export const GET: RequestHandler = async (event) => {
 		});
 	} catch (caught) {
 		clearOAuthCookies(event);
-		await convexAdminFunction(internal.youtubeConnections.markNeedsReauthorization, {
-			...auth,
-			lastError: caught instanceof Error ? caught.message : 'YouTube OAuth failed.'
-		});
+		await convexAdminFunction(
+			internal.youtubeConnections.upsertNeedsReauthorizationByUserIdAndOrganizationKeyInternal,
+			{
+				...auth,
+				lastError: caught instanceof Error ? caught.message : 'YouTube OAuth failed.'
+			}
+		);
 		throw redirect(303, '/integrations?error=youtube_oauth_failed');
 	}
 

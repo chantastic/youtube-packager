@@ -12,7 +12,7 @@ const captionValidator = {
 	body: v.string()
 };
 
-export const listByYoutubeVideoId = internalQuery({
+export const collectByYoutubeVideoIdInternal = internalQuery({
 	args: {
 		youtubeVideoId: v.string()
 	},
@@ -26,7 +26,7 @@ export const listByYoutubeVideoId = internalQuery({
 	}
 });
 
-export const upsertForYoutubeVideoId = internalMutation({
+export const upsertByYoutubeVideoIdAndCaptionTrackIdInternal = internalMutation({
 	args: {
 		youtubeVideoId: v.string(),
 		caption: v.object(captionValidator)
@@ -63,9 +63,11 @@ export const upsertForYoutubeVideoId = internalMutation({
 
 		if (existing) {
 			await ctx.db.replace(existing._id, document);
-			return existing._id;
+			return await ctx.db.get(existing._id);
 		}
 
-		return await ctx.db.insert('videoCaptions', document);
+		const id = await ctx.db.insert('videoCaptions', document);
+
+		return await ctx.db.get(id);
 	}
 });

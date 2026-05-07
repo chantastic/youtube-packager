@@ -418,8 +418,7 @@ function normalizeMetadata(value: unknown): GeneratedDescription['metadata'] {
 
 	return value
 		.map((item) => {
-			const record =
-				item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+			const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
 
 			return {
 				label: cleanLine(record.label),
@@ -434,8 +433,7 @@ function normalizeChapters(value: unknown): DescriptionChapter[] {
 
 	return value
 		.map((item) => {
-			const record =
-				item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+			const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
 
 			return {
 				timestamp: cleanLine(record.timestamp),
@@ -471,8 +469,7 @@ function normalizeLinks(value: unknown): DescriptionLink[] {
 
 	return value
 		.map((item) => {
-			const record =
-				item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+			const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
 			const url = cleanLine(record.url);
 			const placeholder = cleanLine(record.placeholder);
 

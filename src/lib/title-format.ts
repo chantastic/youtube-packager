@@ -194,9 +194,7 @@ function videoTypeOptionFor(value: unknown) {
 export function getDefaultVideoTitleFormat(videoType?: VideoType) {
 	const normalizedType = normalizeVideoType(videoType);
 
-	return (
-		videoTypeOptionFor(normalizedType)?.defaultTitleFormat ?? defaultVideoTitleFormat
-	);
+	return videoTypeOptionFor(normalizedType)?.defaultTitleFormat ?? defaultVideoTitleFormat;
 }
 
 export function getDefaultComposedVideoTitleFormat(videoType?: VideoType) {
@@ -214,7 +212,9 @@ export function getDefaultVideoTypeTitleFormat(videoType?: VideoType) {
 export function normalizeVideoTitleFormat(format?: string, videoType?: VideoType) {
 	const normalizedType = normalizeVideoType(videoType);
 	const normalized = format?.trim();
-	return canCustomizeVideoTitleFormat(normalizedType) && normalized && normalized.includes('{title}')
+	return canCustomizeVideoTitleFormat(normalizedType) &&
+		normalized &&
+		normalized.includes('{title}')
 		? normalized
 		: getDefaultVideoTitleFormat(normalizedType);
 }
@@ -223,7 +223,9 @@ export function normalizeComposedVideoTitleFormat(format?: string, videoType?: V
 	const normalizedType = normalizeVideoType(videoType);
 	const normalized = format?.trim();
 
-	return canCustomizeVideoTitleFormat(normalizedType) && normalized && normalized.includes('{title}')
+	return canCustomizeVideoTitleFormat(normalizedType) &&
+		normalized &&
+		normalized.includes('{title}')
 		? normalized
 		: getDefaultVideoTypeTitleFormat(normalizedType);
 }
@@ -428,4 +430,30 @@ export function deriveComposedBaseTitle(
 		video.videoTitleFormat,
 		video
 	);
+}
+
+export function deriveTitleHookSource(
+	currentTitle: string,
+	event: TitleFormatEvent,
+	video?: VideoTitleFormatRecord
+) {
+	return video
+		? deriveComposedBaseTitle(currentTitle, video, event)
+		: deriveBaseTitle(currentTitle, event.titleFormat, event);
+}
+
+export function getTitleHookParts(
+	currentTitle: string,
+	event: TitleFormatEvent,
+	video: VideoTitleFormatRecord | undefined,
+	maxLength: number
+) {
+	const source = deriveTitleHookSource(currentTitle, event, video);
+	const focus = source.slice(0, maxLength);
+
+	return {
+		source,
+		focus,
+		rest: source.slice(focus.length)
+	};
 }

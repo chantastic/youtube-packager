@@ -68,7 +68,10 @@ export const load: PageServerLoad = async (event) => {
 	const configError = youtubeOAuthConfigError() ?? adminConfigError;
 	const connection = adminConfigError
 		? null
-		: await convexAdminFunction(internal.youtubeConnections.getByAuth, auth);
+		: await convexAdminFunction(
+				internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
+				auth
+			);
 	const scopes = connection?.scopes ?? [];
 
 	return {
@@ -134,7 +137,10 @@ export const actions: Actions = {
 			return fail(400, { error: adminConfigError });
 		}
 
-		const connection = await convexAdminFunction(internal.youtubeConnections.getByAuth, auth);
+		const connection = await convexAdminFunction(
+			internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
+			auth
+		);
 
 		if (!connection) {
 			return fail(400, { error: 'Connect YouTube before testing the API connection.' });
@@ -161,10 +167,13 @@ export const actions: Actions = {
 		} catch (caught) {
 			const message = caught instanceof Error ? caught.message : 'YouTube API test failed.';
 
-			await convexAdminFunction(internal.youtubeConnections.markNeedsReauthorization, {
-				...auth,
-				lastError: message
-			});
+			await convexAdminFunction(
+				internal.youtubeConnections.upsertNeedsReauthorizationByUserIdAndOrganizationKeyInternal,
+				{
+					...auth,
+					lastError: message
+				}
+			);
 
 			return fail(400, { error: message });
 		}
@@ -178,7 +187,10 @@ export const actions: Actions = {
 			return fail(400, { error: adminConfigError });
 		}
 
-		const connection = await convexAdminFunction(internal.youtubeConnections.getByAuth, auth);
+		const connection = await convexAdminFunction(
+			internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
+			auth
+		);
 
 		if (connection) {
 			try {
@@ -193,6 +205,9 @@ export const actions: Actions = {
 			}
 		}
 
-		await convexAdminFunction(internal.youtubeConnections.remove, auth);
+		await convexAdminFunction(
+			internal.youtubeConnections.destroyByUserIdAndOrganizationKeyInternal,
+			auth
+		);
 	}
 };

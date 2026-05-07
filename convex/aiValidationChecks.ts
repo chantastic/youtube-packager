@@ -20,27 +20,33 @@ const validationValidator = v.object({
 
 const cacheKeyValidator = v.object({
 	videoId: v.string(),
-	titleHash: v.string(),
+	field: v.string(),
+	checkId: v.string(),
+	inputHash: v.string(),
 	model: v.string(),
-	validationVersion: v.string()
+	promptVersion: v.string(),
+	modelConfigHash: v.string()
 });
 
-export const collectByVideoIdAndTitleHashAndModelAndValidationVersion = query({
+export const collectByCacheKey = query({
 	args: {
 		keys: v.array(cacheKeyValidator)
 	},
 	handler: async (ctx, { keys }) => {
 		const checks = [];
 
-		for (const key of keys.slice(0, 100)) {
+		for (const key of keys.slice(0, 500)) {
 			const check = await ctx.db
-				.query('titleQualityChecks')
-				.withIndex('by_videoId_and_titleHash_and_model_and_validationVersion', (q) =>
+				.query('aiValidationChecks')
+				.withIndex('by_cache_key', (q) =>
 					q
 						.eq('videoId', key.videoId)
-						.eq('titleHash', key.titleHash)
+						.eq('field', key.field)
+						.eq('checkId', key.checkId)
+						.eq('inputHash', key.inputHash)
 						.eq('model', key.model)
-						.eq('validationVersion', key.validationVersion)
+						.eq('promptVersion', key.promptVersion)
+						.eq('modelConfigHash', key.modelConfigHash)
 				)
 				.unique();
 
@@ -58,11 +64,14 @@ export const upsertMany = mutation({
 		checks: v.array(
 			v.object({
 				videoId: v.string(),
-				titleHash: v.string(),
-				title: v.string(),
+				field: v.string(),
+				checkId: v.string(),
+				inputHash: v.string(),
+				inputSnapshot: v.string(),
 				model: v.string(),
-				validationVersion: v.string(),
-				validations: v.array(validationValidator),
+				promptVersion: v.string(),
+				modelConfigHash: v.string(),
+				validation: validationValidator,
 				checkedAt: v.number()
 			})
 		)
@@ -70,15 +79,18 @@ export const upsertMany = mutation({
 	handler: async (ctx, { checks }) => {
 		const writtenChecks = [];
 
-		for (const check of checks.slice(0, 100)) {
+		for (const check of checks.slice(0, 500)) {
 			const existing = await ctx.db
-				.query('titleQualityChecks')
-				.withIndex('by_videoId_and_titleHash_and_model_and_validationVersion', (q) =>
+				.query('aiValidationChecks')
+				.withIndex('by_cache_key', (q) =>
 					q
 						.eq('videoId', check.videoId)
-						.eq('titleHash', check.titleHash)
+						.eq('field', check.field)
+						.eq('checkId', check.checkId)
+						.eq('inputHash', check.inputHash)
 						.eq('model', check.model)
-						.eq('validationVersion', check.validationVersion)
+						.eq('promptVersion', check.promptVersion)
+						.eq('modelConfigHash', check.modelConfigHash)
 				)
 				.unique();
 
@@ -90,7 +102,7 @@ export const upsertMany = mutation({
 					writtenChecks.push(writtenCheck);
 				}
 			} else {
-				const id = await ctx.db.insert('titleQualityChecks', check);
+				const id = await ctx.db.insert('aiValidationChecks', check);
 				const writtenCheck = await ctx.db.get(id);
 
 				if (writtenCheck) {

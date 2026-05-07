@@ -13,6 +13,7 @@ import {
 } from '$lib/title-format';
 import {
 	validateTitleFocus,
+	type VideoValidation,
 	youtubeTitleFocusLength,
 	youtubeTitleMaxLength
 } from '$lib/video-validation';
@@ -29,18 +30,19 @@ type AnthropicMessageResponse = {
 	stop_reason?: string;
 };
 
-type AssignmentInput = {
+export type TitleAlternativesAssignmentInput = {
 	assignmentId: string;
 	event: TitleFormatEvent;
+	titleValidations?: VideoValidation[];
 };
 
-type SpeakerContextInput = {
+export type SpeakerContextInput = {
 	name: string;
 	company?: string;
 	position?: string;
 };
 
-type VideoContextInput = {
+export type VideoContextInput = {
 	youtubeVideoId: string;
 	title: string;
 	description?: string;
@@ -50,12 +52,12 @@ type VideoContextInput = {
 	speakers: SpeakerContextInput[];
 };
 
-type TitleAlternativesInput = {
+export type TitleAlternativesInput = {
 	currentTitle: string;
 	description?: string;
 	video: VideoTitleFormatRecord;
 	videoContext?: VideoContextInput;
-	assignments: AssignmentInput[];
+	assignments: TitleAlternativesAssignmentInput[];
 };
 
 type TitleAlternativeItem = {
@@ -95,7 +97,21 @@ function textFromAnthropicResponse(response: AnthropicMessageResponse) {
 	return response.content?.find((item) => item.type === 'text' && item.text)?.text ?? '';
 }
 
-function buildPrompt(input: TitleAlternativesInput) {
+function titleWarningsForPrompt(validations: VideoValidation[] = []) {
+	return validations
+		.filter((validation) => validation.status === 'fail' || validation.status === 'info')
+		.map((validation) => ({
+			id: validation.id,
+			label: validation.label,
+			status: validation.status,
+			message: validation.message,
+			expected: validation.expected,
+			details: validation.details,
+			suggested: validation.suggested
+		}));
+}
+
+export function buildTitleAlternativesPrompt(input: TitleAlternativesInput) {
 	const videoType = normalizeVideoType(input.video.videoType);
 	const videoContext = {
 		youtubeVideoId: input.videoContext?.youtubeVideoId,
@@ -108,14 +124,10 @@ function buildPrompt(input: TitleAlternativesInput) {
 		titleOverride: input.video.titleOverride,
 		videoType,
 		videoTypeLabel: videoTypeLabelFor(videoType),
-		videoTitleFormat: normalizeVideoTitleFormat(
-			input.video.videoTitleFormat,
-			videoType
-		),
+		videoTitleFormat: normalizeVideoTitleFormat(input.video.videoTitleFormat, videoType),
 		formattedSpeakerText:
 			videoType === 'panelDiscussion' ? videoTypeLabelFor(videoType) : input.video.speaker,
-		formattedCompanyText:
-			videoType === 'panelDiscussion' ? undefined : input.video.company,
+		formattedCompanyText: videoType === 'panelDiscussion' ? undefined : input.video.company,
 		formattedPositionText: input.video.position
 	};
 	const formattingVideo = { ...input.video, titleOverride: undefined };
@@ -127,7 +139,12 @@ function buildPrompt(input: TitleAlternativesInput) {
 		titleFormat: normalizeTitleFormat(assignment.event.titleFormat),
 		eventSuffix: getTitleEventSuffix(assignment.event.titleFormat, assignment.event),
 		finalTitleFormat: getComposedVideoTitleFormat(formattingVideo, assignment.event),
-		currentBaseTitle: deriveComposedBaseTitle(input.currentTitle, formattingVideo, assignment.event)
+		currentBaseTitle: deriveComposedBaseTitle(
+			input.currentTitle,
+			formattingVideo,
+			assignment.event
+		),
+		titleWarnings: titleWarningsForPrompt(assignment.titleValidations)
 	}));
 
 	return `Generate concise YouTube title alternatives for each playlist assignment.
@@ -158,6 +175,10 @@ Rules:
 - Favor clear, searchable, readable titles over cleverness.
 - Put the concrete topic or hook in the first ${youtubeTitleFocusLength} characters.
 - Keep baseTitles concise enough that the final formatted title can be <= ${youtubeTitleMaxLength} characters.
+- Use titleWarnings as feedback about problems in the current title.
+- Prioritize fixing Hook and Mechanics warnings in the generated baseTitles.
+- If a warning is about Profile, Event, or Format, do not copy that metadata into baseTitles; the final formatter handles speaker, company, type, and event text.
+- Do not blindly copy suggested text if it conflicts with the title format, context, or length limit.
 - Do not include angle brackets.
 
 Video context:
@@ -269,7 +290,7 @@ export async function generateTitleAlternativesWithAnthropic(
 				messages: [
 					{
 						role: 'user',
-						content: buildPrompt(input)
+						content: buildTitleAlternativesPrompt(input)
 					}
 				]
 			})

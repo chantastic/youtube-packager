@@ -66,9 +66,9 @@ describe('YouTube Data API helpers', () => {
 	test('rejects titles over the YouTube title length limit before calling YouTube', async () => {
 		const fetchMock = vi.spyOn(globalThis, 'fetch');
 
-		await expect(updateYouTubeVideoTitle('video-1', 'x'.repeat(101), 'access-token')).rejects.toThrow(
-			'100 characters or fewer'
-		);
+		await expect(
+			updateYouTubeVideoTitle('video-1', 'x'.repeat(101), 'access-token')
+		).rejects.toThrow('100 characters or fewer');
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });
