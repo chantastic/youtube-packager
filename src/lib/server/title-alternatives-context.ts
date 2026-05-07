@@ -9,6 +9,7 @@ import { validateVideoBaseline, type VideoValidation } from '$lib/video-validati
 
 export type TitleAlternativesVideoView = {
 	video: {
+		_id: string;
 		youtubeVideoId: string;
 		title: string;
 		description?: string;
@@ -87,7 +88,7 @@ export function prepareTitleAlternativesValidationContext(
 
 	for (const row of videoView.assignments) {
 		const inputs = buildTitleAiValidationInputs({
-			videoId: videoView.video.youtubeVideoId,
+			videoId: videoView.video._id,
 			title: videoView.video.title,
 			event: row.event,
 			speakers: validationSpeakers,

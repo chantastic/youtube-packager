@@ -55,7 +55,7 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 
 	for (const row of assignments) {
 		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video.youtubeVideoId,
+			videoId: row.video._id,
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
@@ -87,6 +87,9 @@ export const POST: RequestHandler = async ({ params }) => {
 	const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 		eventId: event._id
 	});
+	const youtubeVideoIdByVideoId = new Map<string, string>(
+		assignments.map((row) => [row.video._id, row.video.youtubeVideoId])
+	);
 	const inputs = titleAiInputsForAssignments(assignments, event);
 
 	if (inputs.length === 0) {
@@ -135,7 +138,9 @@ export const POST: RequestHandler = async ({ params }) => {
 					freshResult.validationsByRequestId[entry.cacheKeyString];
 
 				if (validation) {
-					result[entry.videoId] = [...(result[entry.videoId] ?? []), validation];
+					const responseVideoId = youtubeVideoIdByVideoId.get(entry.videoId) ?? entry.videoId;
+
+					result[responseVideoId] = [...(result[responseVideoId] ?? []), validation];
 				}
 
 				return result;

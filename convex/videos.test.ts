@@ -232,14 +232,18 @@ test('speaker assignments and video title format survive playlist syncs', async 
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
-	await t.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
+	const originalVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	await t.mutation(api.videoCommands.setMetadata, {
+		videoId: originalVideoDoc!._id,
 		titleOverride: 'A Fully Custom Video Title',
 		videoTitleFormat: '{title} — {speaker}, {company}',
 		videoType: 'panelDiscussion'
 	});
-	await t.mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
+	await t.mutation(api.videoCommands.assignSpeaker, {
+		videoId: originalVideoDoc!._id,
 		name: 'Chan',
 		company: 'WorkOS',
 		position: 'Developer Advocate'
@@ -290,20 +294,24 @@ test('video title override can be cleared', async () => {
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
-	await t.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
-		titleOverride: 'A Fully Custom Video Title'
-	});
-	await t.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
-		clearTitleOverride: true
-	});
-
 	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
-	expect(videoDoc?.titleOverride).toBeUndefined();
+	await t.mutation(api.videoCommands.setMetadata, {
+		videoId: videoDoc!._id,
+		titleOverride: 'A Fully Custom Video Title'
+	});
+	await t.mutation(api.videoCommands.setMetadata, {
+		videoId: videoDoc!._id,
+		clearTitleOverride: true
+	});
+
+	const updatedVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(updatedVideoDoc?.titleOverride).toBeUndefined();
 });
 
 test('existing speakers can be assigned to another video', async () => {
@@ -323,8 +331,15 @@ test('existing speakers can be assigned to another video', async () => {
 			]
 		}
 	});
-	await t.mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
+	const firstVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+	const secondVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-2'
+	});
+
+	await t.mutation(api.videoCommands.assignSpeaker, {
+		videoId: firstVideoDoc!._id,
 		name: 'Chan',
 		company: 'WorkOS',
 		position: 'Developer Advocate'
@@ -332,16 +347,13 @@ test('existing speakers can be assigned to another video', async () => {
 
 	const speakers = await t.query(api.speakers.collect, {});
 
-	await t.mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-		youtubeVideoId: 'video-2',
+	await t.mutation(api.videoCommands.assignSpeaker, {
+		videoId: secondVideoDoc!._id,
 		speakerId: speakers[0]._id
 	});
 
-	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
-		youtubeVideoId: 'video-2'
-	});
 	const videoView = await t.query(api.videoViews.get, {
-		id: videoDoc!._id
+		id: secondVideoDoc!._id
 	});
 
 	expect(speakers).toHaveLength(1);
@@ -367,16 +379,20 @@ test('video title can be updated after a YouTube metadata write', async () => {
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
-	await t.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
-		title: 'New title'
-	});
-
 	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
-	expect(videoDoc?.title).toBe('New title');
+	await t.mutation(api.videoCommands.recordTitle, {
+		videoId: videoDoc!._id,
+		title: 'New title'
+	});
+
+	const updatedVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(updatedVideoDoc?.title).toBe('New title');
 });
 
 test('video can be refreshed from YouTube without clearing app metadata', async () => {
@@ -393,12 +409,17 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
-	await t.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-		youtubeVideoId: 'video-1',
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	await t.mutation(api.videoCommands.setMetadata, {
+		videoId: videoDoc!._id,
 		titleOverride: 'Manual override',
 		videoType: 'keynote'
 	});
-	await t.mutation(api.videoCommands.recordYoutubeSnapshotByYoutubeVideoId, {
+	await t.mutation(api.videoCommands.recordYoutubeSnapshot, {
+		videoId: videoDoc!._id,
 		youtubeVideoId: 'video-1',
 		title: 'Fresh title',
 		description: 'Fresh description',
@@ -410,11 +431,11 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 		videoPublishedAt: '2026-01-01T00:00:00Z'
 	});
 
-	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+	const updatedVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
 
-	expect(videoDoc).toMatchObject({
+	expect(updatedVideoDoc).toMatchObject({
 		youtubeVideoId: 'video-1',
 		title: 'Fresh title',
 		description: 'Fresh description',
@@ -422,6 +443,35 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 		videoType: 'keynote',
 		channelTitle: 'Fresh Channel'
 	});
+});
+
+test('video refresh rejects snapshots for a different YouTube video', async () => {
+	const t = convexTest(schema, modules);
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
+
+	await t.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
+		}
+	});
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	await expect(
+		t.mutation(api.videoCommands.recordYoutubeSnapshot, {
+			videoId: videoDoc!._id,
+			youtubeVideoId: 'different-video',
+			title: 'Wrong video',
+			videoUrl: 'https://www.youtube.com/watch?v=different-video',
+			studioEditUrl: 'https://studio.youtube.com/video/different-video/edit'
+		})
+	).rejects.toThrow('YouTube snapshot does not match this video.');
 });
 
 test('a video can have assignments in multiple playlists', async () => {

@@ -33,17 +33,21 @@ async function seedVideo(t: ReturnType<typeof convexTest>) {
 		}
 	});
 
-	return event!._id;
+	const seededVideo = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	return seededVideo!._id;
 }
 
-test('upsert stores and replaces captions by YouTube video ID and caption track ID', async () => {
+test('upsert stores and replaces captions by video ID and caption track ID', async () => {
 	const t = convexTest(schema, modules);
-	await seedVideo(t);
+	const videoId = await seedVideo(t);
 
 	const created = await t.mutation(
-		internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal,
+		internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal,
 		{
-			youtubeVideoId: 'video-1',
+			videoId,
 			caption: {
 				captionTrackId: 'caption-1',
 				language: 'en',
@@ -57,9 +61,9 @@ test('upsert stores and replaces captions by YouTube video ID and caption track 
 		}
 	);
 	const replaced = await t.mutation(
-		internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal,
+		internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal,
 		{
-			youtubeVideoId: 'video-1',
+			videoId,
 			caption: {
 				captionTrackId: 'caption-1',
 				language: 'en',
@@ -72,8 +76,8 @@ test('upsert stores and replaces captions by YouTube video ID and caption track 
 			}
 		}
 	);
-	const captions = await t.query(internal.videoCaptions.collectByYoutubeVideoIdInternal, {
-		youtubeVideoId: 'video-1'
+	const captions = await t.query(internal.videoCaptions.collectByVideoIdInternal, {
+		videoId
 	});
 
 	expect(replaced?._id).toBe(created?._id);
@@ -87,15 +91,15 @@ test('upsert stores and replaces captions by YouTube video ID and caption track 
 	});
 });
 
-test('collectByYoutubeVideoIdInternal sorts captions by newest fetch first', async () => {
+test('collectByVideoIdInternal sorts captions by newest fetch first', async () => {
 	const t = convexTest(schema, modules);
-	await seedVideo(t);
+	const videoId = await seedVideo(t);
 
 	vi.useFakeTimers();
 	try {
 		vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-		await t.mutation(internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal, {
-			youtubeVideoId: 'video-1',
+		await t.mutation(internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal, {
+			videoId,
 			caption: {
 				captionTrackId: 'caption-1',
 				language: 'en',
@@ -105,8 +109,8 @@ test('collectByYoutubeVideoIdInternal sorts captions by newest fetch first', asy
 		});
 
 		vi.setSystemTime(new Date('2026-01-01T00:00:05.000Z'));
-		await t.mutation(internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal, {
-			youtubeVideoId: 'video-1',
+		await t.mutation(internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal, {
+			videoId,
 			caption: {
 				captionTrackId: 'caption-2',
 				language: 'es',
@@ -118,8 +122,8 @@ test('collectByYoutubeVideoIdInternal sorts captions by newest fetch first', asy
 		vi.useRealTimers();
 	}
 
-	const captions = await t.query(internal.videoCaptions.collectByYoutubeVideoIdInternal, {
-		youtubeVideoId: 'video-1'
+	const captions = await t.query(internal.videoCaptions.collectByVideoIdInternal, {
+		videoId
 	});
 
 	expect(captions.map((caption) => caption.captionTrackId)).toEqual(['caption-2', 'caption-1']);
@@ -127,10 +131,22 @@ test('collectByYoutubeVideoIdInternal sorts captions by newest fetch first', asy
 
 test('upsert rejects captions when the video has not been ingested', async () => {
 	const t = convexTest(schema, modules);
+	const missingVideoId = await t.run(async (ctx) => {
+		const id = await ctx.db.insert('videos', {
+			youtubeVideoId: 'deleted-video',
+			title: 'Deleted video',
+			videoUrl: 'https://www.youtube.com/watch?v=deleted-video',
+			studioEditUrl: 'https://studio.youtube.com/video/deleted-video/edit',
+			lastFetchedAt: Date.now()
+		});
+
+		await ctx.db.delete(id);
+		return id;
+	});
 
 	await expect(
-		t.mutation(internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal, {
-			youtubeVideoId: 'missing-video',
+		t.mutation(internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal, {
+			videoId: missingVideoId,
 			caption: {
 				captionTrackId: 'caption-1',
 				format: 'srt',

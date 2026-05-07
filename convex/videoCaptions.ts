@@ -12,30 +12,27 @@ const captionValidator = {
 	body: v.string()
 };
 
-export const collectByYoutubeVideoIdInternal = internalQuery({
+export const collectByVideoIdInternal = internalQuery({
 	args: {
-		youtubeVideoId: v.string()
+		videoId: v.id('videos')
 	},
-	handler: async (ctx, { youtubeVideoId }) => {
+	handler: async (ctx, { videoId }) => {
 		const captions = await ctx.db
 			.query('videoCaptions')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
+			.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
 			.take(50);
 
 		return captions.sort((a, b) => b.fetchedAt - a.fetchedAt);
 	}
 });
 
-export const upsertByYoutubeVideoIdAndCaptionTrackIdInternal = internalMutation({
+export const upsertByVideoIdAndCaptionTrackIdInternal = internalMutation({
 	args: {
-		youtubeVideoId: v.string(),
+		videoId: v.id('videos'),
 		caption: v.object(captionValidator)
 	},
-	handler: async (ctx, { youtubeVideoId, caption }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
+	handler: async (ctx, { videoId, caption }) => {
+		const video = await ctx.db.get(videoId);
 
 		if (!video) {
 			throw new Error('Video not found.');
@@ -43,13 +40,13 @@ export const upsertByYoutubeVideoIdAndCaptionTrackIdInternal = internalMutation(
 
 		const existing = await ctx.db
 			.query('videoCaptions')
-			.withIndex('by_youtubeVideoId_and_captionTrackId', (q) =>
-				q.eq('youtubeVideoId', youtubeVideoId).eq('captionTrackId', caption.captionTrackId)
+			.withIndex('by_videoId_and_captionTrackId', (q) =>
+				q.eq('videoId', video._id).eq('captionTrackId', caption.captionTrackId)
 			)
 			.unique();
 		const document = {
 			videoId: video._id,
-			youtubeVideoId,
+			youtubeVideoId: video.youtubeVideoId,
 			captionTrackId: caption.captionTrackId,
 			...(caption.language !== undefined ? { language: caption.language } : {}),
 			...(caption.name !== undefined ? { name: caption.name } : {}),

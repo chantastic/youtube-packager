@@ -41,24 +41,16 @@ function defaultVideoTypeForEventType(eventType: string | undefined) {
 	return eventType === 'interviews' ? 'interview' : 'talk';
 }
 
-export const setMetadataByYoutubeVideoId = mutation({
+export const setMetadata = mutation({
 	args: {
-		youtubeVideoId: v.string(),
+		videoId: v.id('videos'),
 		clearTitleOverride: v.optional(v.boolean()),
 		titleOverride: v.optional(v.string()),
 		videoTitleFormat: v.optional(v.string()),
 		videoType: v.optional(videoTypeValidator)
 	},
-	handler: async (ctx, { youtubeVideoId, clearTitleOverride, titleOverride, ...fields }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
-
-		if (!video) {
-			throw new Error('Video not found.');
-		}
-
+	handler: async (ctx, { videoId, clearTitleOverride, titleOverride, ...fields }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
 		await ctx.db.patch(video._id, {
 			...fields,
 			...(titleOverride !== undefined ? { titleOverride } : {}),
@@ -69,29 +61,22 @@ export const setMetadataByYoutubeVideoId = mutation({
 	}
 });
 
-export const recordTitleByYoutubeVideoId = mutation({
+export const recordTitle = mutation({
 	args: {
-		youtubeVideoId: v.string(),
+		videoId: v.id('videos'),
 		title: v.string()
 	},
-	handler: async (ctx, { youtubeVideoId, title }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
-
-		if (!video) {
-			throw new Error('Video not found.');
-		}
-
+	handler: async (ctx, { videoId, title }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
 		await ctx.db.patch(video._id, { title });
 
 		return await ctx.db.get(video._id);
 	}
 });
 
-export const recordYoutubeSnapshotByYoutubeVideoId = mutation({
+export const recordYoutubeSnapshot = mutation({
 	args: {
+		videoId: v.id('videos'),
 		youtubeVideoId: v.string(),
 		title: v.string(),
 		description: v.optional(v.string()),
@@ -102,14 +87,11 @@ export const recordYoutubeSnapshotByYoutubeVideoId = mutation({
 		publishedAt: v.optional(v.string()),
 		videoPublishedAt: v.optional(v.string())
 	},
-	handler: async (ctx, { youtubeVideoId, ...fields }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
+	handler: async (ctx, { videoId, youtubeVideoId, ...fields }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
 
-		if (!video) {
-			throw new Error('Video not found.');
+		if (video.youtubeVideoId !== youtubeVideoId) {
+			throw new Error('YouTube snapshot does not match this video.');
 		}
 
 		await ctx.db.patch(video._id, {
@@ -122,24 +104,16 @@ export const recordYoutubeSnapshotByYoutubeVideoId = mutation({
 	}
 });
 
-export const assignSpeakerByYoutubeVideoId = mutation({
+export const assignSpeaker = mutation({
 	args: {
-		youtubeVideoId: v.string(),
+		videoId: v.id('videos'),
 		speakerId: v.optional(v.id('speakers')),
 		name: v.optional(v.string()),
 		company: v.optional(v.string()),
 		position: v.optional(v.string())
 	},
-	handler: async (ctx, { youtubeVideoId, speakerId, name, company, position }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
-
-		if (!video) {
-			throw new Error('Video not found.');
-		}
-
+	handler: async (ctx, { videoId, speakerId, name, company, position }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
 		if (speakerId) {
 			const speaker = await ctx.db.get(speakerId);
 
@@ -173,21 +147,13 @@ export const assignSpeakerByYoutubeVideoId = mutation({
 	}
 });
 
-export const removeSpeakerByYoutubeVideoIdAndSpeakerId = mutation({
+export const removeSpeaker = mutation({
 	args: {
-		youtubeVideoId: v.string(),
+		videoId: v.id('videos'),
 		speakerId: v.id('speakers')
 	},
-	handler: async (ctx, { youtubeVideoId, speakerId }) => {
-		const video = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.unique();
-
-		if (!video) {
-			throw new Error('Video not found.');
-		}
-
+	handler: async (ctx, { videoId, speakerId }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
 		const assignment = await ctx.db
 			.query('videoSpeakers')
 			.withIndex('by_videoId_and_speakerId', (q) =>
@@ -301,6 +267,16 @@ export const recordPlaylistSnapshotByEventId = mutation({
 		};
 	}
 });
+
+async function getVideoOrThrow(ctx: MutationCtx, videoId: Id<'videos'>) {
+	const video = await ctx.db.get(videoId);
+
+	if (!video) {
+		throw new Error('Video not found.');
+	}
+
+	return video;
+}
 
 async function assignSpeakerToVideo(
 	ctx: MutationCtx,

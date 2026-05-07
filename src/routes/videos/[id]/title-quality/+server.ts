@@ -45,7 +45,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		videoType: videoView.video.videoType
 	};
 	const inputs = buildTitleAiValidationInputs({
-		videoId: videoView.video.youtubeVideoId,
+		videoId: videoView.video._id,
 		title: videoView.video.title,
 		...(assignment ? { event: assignment.event } : {}),
 		speakers,

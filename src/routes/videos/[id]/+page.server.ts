@@ -113,7 +113,10 @@ export const load: PageServerLoad = async (event) => {
 		const accessToken = await getConnectedYouTubeAccessToken(auth);
 		const refreshedVideo = await getYouTubeVideoData(videoView.video.youtubeVideoId, accessToken);
 
-		await client.mutation(api.videoCommands.recordYoutubeSnapshotByYoutubeVideoId, refreshedVideo);
+		await client.mutation(api.videoCommands.recordYoutubeSnapshot, {
+			videoId: videoView.video._id,
+			...refreshedVideo
+		});
 		videoView =
 			(await client.query(api.videoViews.get, {
 				id: videoView.video._id
@@ -127,9 +130,9 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const captions = await convexAdminFunction(
-		internal.videoCaptions.collectByYoutubeVideoIdInternal,
+		internal.videoCaptions.collectByVideoIdInternal,
 		{
-			youtubeVideoId: videoView.video.youtubeVideoId
+			videoId: videoView.video._id
 		}
 	);
 	const availableSpeakers = await client.query(api.speakers.collect, {});
@@ -179,9 +182,9 @@ export const actions: Actions = {
 			const body = await downloadYouTubeCaptionTrack(track.id, accessToken, 'srt');
 
 			await convexAdminFunction(
-				internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal,
+				internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal,
 				{
-					youtubeVideoId,
+					videoId: videoView.video._id,
 					caption: {
 						captionTrackId: track.id,
 						...(track.language !== undefined ? { language: track.language } : {}),
@@ -240,8 +243,8 @@ export const actions: Actions = {
 				wroteYouTubeTitle = true;
 			}
 
-			await client.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-				youtubeVideoId,
+			await client.mutation(api.videoCommands.setMetadata, {
+				videoId: videoView.video._id,
 				videoType,
 				...(updatedTitle ? { titleOverride: updatedTitle } : { clearTitleOverride: true }),
 				...(canCustomizeVideoTitleFormat(videoType)
@@ -250,8 +253,8 @@ export const actions: Actions = {
 			});
 
 			if (updatedTitle && existingVideo?.title !== updatedTitle) {
-				await client.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
-					youtubeVideoId,
+				await client.mutation(api.videoCommands.recordTitle, {
+					videoId: videoView.video._id,
 					title: updatedTitle
 				});
 			}
@@ -290,8 +293,8 @@ export const actions: Actions = {
 			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
 			const updatedVideo = await updateYouTubeVideoTitle(youtubeVideoId, title, accessToken);
 
-			await client.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
-				youtubeVideoId,
+			await client.mutation(api.videoCommands.recordTitle, {
+				videoId: videoView.video._id,
 				title: updatedVideo.title
 			});
 
@@ -310,11 +313,10 @@ export const actions: Actions = {
 		const speakerId = optionalString(data, 'speakerId');
 		const name = optionalString(data, 'name');
 		const videoView = (await resolveVideoRouteTarget(getConvexClient(), params.id)).videoView;
-		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		if (speakerId) {
-			await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-				youtubeVideoId,
+			await getConvexClient().mutation(api.videoCommands.assignSpeaker, {
+				videoId: videoView.video._id,
 				speakerId: speakerId as Id<'speakers'>
 			});
 
@@ -325,8 +327,8 @@ export const actions: Actions = {
 			return;
 		}
 
-		await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-			youtubeVideoId,
+		await getConvexClient().mutation(api.videoCommands.assignSpeaker, {
+			videoId: videoView.video._id,
 			name,
 			company: optionalString(data, 'company'),
 			position: optionalString(data, 'position')
@@ -342,12 +344,9 @@ export const actions: Actions = {
 		}
 
 		const videoView = (await resolveVideoRouteTarget(getConvexClient(), params.id)).videoView;
-		await getConvexClient().mutation(
-			api.videoCommands.removeSpeakerByYoutubeVideoIdAndSpeakerId,
-			{
-				youtubeVideoId: videoView.video.youtubeVideoId,
-				speakerId: speakerId as Id<'speakers'>
-			}
-		);
+		await getConvexClient().mutation(api.videoCommands.removeSpeaker, {
+			videoId: videoView.video._id,
+			speakerId: speakerId as Id<'speakers'>
+		});
 	}
 };

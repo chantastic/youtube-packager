@@ -32,9 +32,9 @@ export const POST: RequestHandler = async ({ params }) => {
 	}
 
 	const captions = await convexAdminFunction(
-		internal.videoCaptions.collectByYoutubeVideoIdInternal,
+		internal.videoCaptions.collectByVideoIdInternal,
 		{
-			youtubeVideoId: videoView.video.youtubeVideoId
+			videoId: videoView.video._id
 		}
 	);
 	const caption = captions[0];

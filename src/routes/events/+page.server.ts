@@ -94,7 +94,7 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 
 	for (const row of assignments) {
 		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video.youtubeVideoId,
+			videoId: row.video._id,
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
@@ -120,7 +120,7 @@ function cachedAiValidationsForRow(
 	entriesByInputKey: Map<string, AiValidationCacheEntry>
 ) {
 	return buildTitleAiValidationInputs({
-		videoId: row.video.youtubeVideoId,
+		videoId: row.video._id,
 		title: row.video.title,
 		event,
 		speakers: speakerRecordsForValidation(row),

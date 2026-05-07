@@ -87,7 +87,7 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 
 	for (const row of assignments) {
 		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video.youtubeVideoId,
+			videoId: row.video._id,
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
@@ -115,7 +115,7 @@ async function cachedTitleAiValidationsByVideoId(assignments: AssignmentRow[], e
 
 	for (const row of assignments) {
 		const validations = buildTitleAiValidationInputs({
-			videoId: row.video.youtubeVideoId,
+			videoId: row.video._id,
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
@@ -233,23 +233,23 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 export const actions: Actions = {
 	updateVideoType: async ({ request }) => {
 		const data = await request.formData();
-		const youtubeVideoId = optionalString(data, 'youtubeVideoId');
+		const videoId = optionalString(data, 'videoId');
 		const videoType = optionalString(data, 'videoType');
 
-		if (!youtubeVideoId || !isVideoType(videoType)) {
+		if (!videoId || !isVideoType(videoType)) {
 			return fail(400, {
 				videoTypeError: 'Choose a valid video type.'
 			});
 		}
 
-		await getConvexClient().mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-			youtubeVideoId,
+		await getConvexClient().mutation(api.videoCommands.setMetadata, {
+			videoId: videoId as Id<'videos'>,
 			videoType: normalizeVideoType(videoType)
 		});
 
 		return {
 			videoTypeMessage: 'Video type updated.',
-			videoTypeVideoId: youtubeVideoId
+			videoTypeVideoId: videoId
 		};
 	}
 };

@@ -54,8 +54,16 @@
 		return data.playlistAssignments.find((row) => row.video.youtubeVideoId === videoId);
 	}
 
+	function videoRecordId(videoId: string) {
+		return assignmentRowFor(videoId)?.video._id;
+	}
+
+	function videoStatusKey(videoId: string) {
+		return videoRecordId(videoId) ?? videoId;
+	}
+
 	function videoDetailHref(videoId: string) {
-		return `/videos/${assignmentRowFor(videoId)?.video._id ?? videoId}`;
+		return `/videos/${videoRecordId(videoId) ?? videoId}`;
 	}
 
 	function titleFocusSpeakers(videoId: string) {
@@ -447,6 +455,8 @@
 				{@const validations = validationsForVideo(video.videoId, video.title)}
 				{@const currentTitleParts = titleFocusParts(video.videoId, video.title)}
 				{@const formattedTitleParts = titleFocusParts(video.videoId, nextTitle)}
+				{@const recordId = videoRecordId(video.videoId)}
+				{@const statusKey = videoStatusKey(video.videoId)}
 				<article
 					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 				>
@@ -465,17 +475,17 @@
 					<form
 						method="POST"
 						action="?/updateVideoType"
-						use:enhance={afterVideoTypeUpdate(video.videoId)}
+						use:enhance={afterVideoTypeUpdate(statusKey)}
 						class="hidden md:block"
 					>
-						<input type="hidden" name="youtubeVideoId" value={video.videoId} />
+						<input type="hidden" name="videoId" value={recordId ?? ''} />
 						<label class="sr-only" for={`videoType-desktop-${video.videoId}`}>Video type</label>
 						<select
 							id={`videoType-desktop-${video.videoId}`}
 							name="videoType"
 							value={videoTypeValue(video.videoId)}
 							onchange={submitParentForm}
-							disabled={updatingVideoType === video.videoId}
+							disabled={!recordId || updatingVideoType === statusKey}
 							class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm disabled:cursor-wait disabled:opacity-60"
 						>
 							{#each videoTypeOptions as option (option.value)}
@@ -483,10 +493,10 @@
 							{/each}
 						</select>
 						<button type="submit" class="sr-only">Save video type</button>
-						{#if updatingVideoType === video.videoId}
+						{#if updatingVideoType === statusKey}
 							<p class="mt-1 text-xs text-gray-500">Saving...</p>
-						{:else if form?.videoTypeVideoId === video.videoId && form.videoTypeMessage}
-							<p class="mt-1 text-xs text-green-700">{form.videoTypeMessage}</p>
+						{:else if form?.videoTypeVideoId === recordId && form?.videoTypeMessage}
+							<p class="mt-1 text-xs text-green-700">{form?.videoTypeMessage}</p>
 						{/if}
 						{#if videoTitleRecord(video.videoId)?.titleOverride}
 							<p class="mt-1 text-xs text-gray-500">Override</p>
@@ -504,17 +514,17 @@
 						<form
 							method="POST"
 							action="?/updateVideoType"
-							use:enhance={afterVideoTypeUpdate(video.videoId)}
+							use:enhance={afterVideoTypeUpdate(statusKey)}
 							class="mt-3 md:hidden"
 						>
-							<input type="hidden" name="youtubeVideoId" value={video.videoId} />
+							<input type="hidden" name="videoId" value={recordId ?? ''} />
 							<label class="sr-only" for={`videoType-mobile-${video.videoId}`}>Video type</label>
 							<select
 								id={`videoType-mobile-${video.videoId}`}
 								name="videoType"
 								value={videoTypeValue(video.videoId)}
 								onchange={submitParentForm}
-								disabled={updatingVideoType === video.videoId}
+								disabled={!recordId || updatingVideoType === statusKey}
 								class="max-w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm disabled:cursor-wait disabled:opacity-60"
 							>
 								{#each videoTypeOptions as option (option.value)}
@@ -522,10 +532,10 @@
 								{/each}
 							</select>
 							<button type="submit" class="sr-only">Save video type</button>
-							{#if updatingVideoType === video.videoId}
+							{#if updatingVideoType === statusKey}
 								<p class="mt-1 text-xs text-gray-500">Saving...</p>
-							{:else if form?.videoTypeVideoId === video.videoId && form.videoTypeMessage}
-								<p class="mt-1 text-xs text-green-700">{form.videoTypeMessage}</p>
+							{:else if form?.videoTypeVideoId === recordId && form?.videoTypeMessage}
+								<p class="mt-1 text-xs text-green-700">{form?.videoTypeMessage}</p>
 							{/if}
 							{#if videoTitleRecord(video.videoId)?.titleOverride}
 								<p class="mt-1 text-xs text-gray-500">Override</p>

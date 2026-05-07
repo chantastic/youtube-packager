@@ -7,6 +7,7 @@ import {
 
 const videoView = {
 	video: {
+		_id: 'video-record-1',
 		youtubeVideoId: 'video-1',
 		title: 'Build Agent-Native Auth — Chan, WorkOS | MCP Night 2026',
 		description: 'A practical talk about agent-native authentication.',
@@ -61,6 +62,10 @@ describe('title alternatives context', () => {
 		expect([...context.aiInputsByKey.values()].map((input) => input.checkId)).toEqual([
 			'hook',
 			'mechanics'
+		]);
+		expect([...context.aiInputsByKey.values()].map((input) => input.videoId)).toEqual([
+			'video-record-1',
+			'video-record-1'
 		]);
 		expect(context.aiInputKeysByAssignmentId.get('assignment-1')).toHaveLength(2);
 	});

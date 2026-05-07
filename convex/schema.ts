@@ -62,6 +62,7 @@ export default defineSchema({
 		fetchedAt: v.number()
 	})
 		.index('by_videoId', ['videoId'])
+		.index('by_videoId_and_captionTrackId', ['videoId', 'captionTrackId'])
 		.index('by_youtubeVideoId', ['youtubeVideoId'])
 		.index('by_youtubeVideoId_and_captionTrackId', ['youtubeVideoId', 'captionTrackId']),
 	playlistAssignments: defineTable({
