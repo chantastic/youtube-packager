@@ -1,9 +1,13 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
 import {
+	aiValidationCacheKeyInputValidator,
 	aiValidationCacheKeyValidator,
+	aiValidationCheckWriteInputValidator,
 	aiValidationCheckWriteValidator,
+	type AiValidationCacheKeyInput,
 	type AiValidationCacheKey,
+	type AiValidationCheckWriteInput,
 	type AiValidationCheckWrite
 } from './aiValidationCheckTypes';
 import { requireOrganizationId } from './authz';
@@ -11,15 +15,12 @@ import type { MutationCtx, QueryCtx } from './_generated/server';
 
 export const collectByCacheKey = query({
 	args: {
-		keys: v.array(aiValidationCacheKeyValidator)
+		keys: v.array(aiValidationCacheKeyInputValidator)
 	},
 	handler: async (ctx, { keys }) => {
 		const organizationId = await requireOrganizationId(ctx);
 
-		return await collectByCacheKeyHandler(
-			ctx,
-			keys.map((key) => ({ ...key, organizationId }))
-		);
+		return await collectByCacheKeyHandler(ctx, addOrganizationToCacheKeys(keys, organizationId));
 	}
 });
 
@@ -34,15 +35,12 @@ export const collectByCacheKeyInternal = internalQuery({
 
 export const upsertMany = mutation({
 	args: {
-		checks: v.array(aiValidationCheckWriteValidator)
+		checks: v.array(aiValidationCheckWriteInputValidator)
 	},
 	handler: async (ctx, { checks }) => {
 		const organizationId = await requireOrganizationId(ctx);
 
-		return await upsertManyHandler(
-			ctx,
-			checks.map((check) => ({ ...check, organizationId }))
-		);
+		return await upsertManyHandler(ctx, addOrganizationToChecks(checks, organizationId));
 	}
 });
 
@@ -55,14 +53,18 @@ export const upsertManyInternal = internalMutation({
 	}
 });
 
+function addOrganizationToCacheKeys(keys: AiValidationCacheKeyInput[], organizationId: string) {
+	return keys.map((key) => ({ ...key, organizationId }));
+}
+
+function addOrganizationToChecks(checks: AiValidationCheckWriteInput[], organizationId: string) {
+	return checks.map((check) => ({ ...check, organizationId }));
+}
+
 async function collectByCacheKeyHandler(ctx: QueryCtx, keys: AiValidationCacheKey[]) {
 	const checks = [];
 
 	for (const key of keys.slice(0, 500)) {
-		if (!key.organizationId) {
-			continue;
-		}
-
 		const check = await ctx.db
 			.query('aiValidationChecks')
 			.withIndex('by_organizationId_and_cache_key', (q) =>
@@ -90,10 +92,6 @@ async function upsertManyHandler(ctx: MutationCtx, checks: AiValidationCheckWrit
 	const writtenChecks = [];
 
 	for (const check of checks.slice(0, 500)) {
-		if (!check.organizationId) {
-			continue;
-		}
-
 		const existing = await ctx.db
 			.query('aiValidationChecks')
 			.withIndex('by_organizationId_and_cache_key', (q) =>

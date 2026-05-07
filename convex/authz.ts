@@ -49,18 +49,18 @@ export function organizationIdFromIdentity(identity: UserIdentity) {
 }
 
 export function documentBelongsToOrganization(document: null, organizationId: string): false;
-export function documentBelongsToOrganization<T extends { organizationId?: string }>(
+export function documentBelongsToOrganization<T extends { organizationId: string }>(
 	document: T | null,
 	organizationId: string
 ): document is T;
-export function documentBelongsToOrganization<T extends { organizationId?: string }>(
+export function documentBelongsToOrganization<T extends { organizationId: string }>(
 	document: T | null,
 	organizationId: string
 ) {
 	return Boolean(document && document.organizationId === organizationId);
 }
 
-export function requireDocumentInOrganization<T extends { organizationId?: string }>(
+export function requireDocumentInOrganization<T extends { organizationId: string }>(
 	document: T | null,
 	organizationId: string,
 	message: string
@@ -69,5 +69,5 @@ export function requireDocumentInOrganization<T extends { organizationId?: strin
 		throw new Error(message);
 	}
 
-	return document as T;
+	return document;
 }

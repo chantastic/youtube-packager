@@ -148,6 +148,7 @@ test('upsert rejects captions when the video has not been ingested', async () =>
 	});
 	const missingVideoId = await t.run(async (ctx) => {
 		const id = await ctx.db.insert('videos', {
+			organizationId: 'org_test',
 			youtubeVideoId: 'deleted-video',
 			title: 'Deleted video',
 			videoUrl: 'https://www.youtube.com/watch?v=deleted-video',

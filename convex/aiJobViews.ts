@@ -61,7 +61,7 @@ export const getDescriptionGenerationContextInternal = internalQuery({
 
 		return {
 			job,
-			input: await buildDescriptionGenerationInput(ctx, video, caption),
+			input: await buildDescriptionGenerationInput(ctx, video, caption, job.organizationId),
 			error: null
 		};
 	}
@@ -88,18 +88,21 @@ async function collectDescriptionGenerationJobs(
 async function buildDescriptionGenerationInput(
 	ctx: QueryCtx,
 	video: Doc<'videos'>,
-	caption: Doc<'videoCaptions'>
+	caption: Doc<'videoCaptions'>,
+	organizationId: string
 ): Promise<DescriptionGenerationInput> {
 	const speakerAssignments = await ctx.db
 		.query('videoSpeakers')
-		.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
+		.withIndex('by_organizationId_and_videoId', (q) =>
+			q.eq('organizationId', organizationId).eq('videoId', video._id)
+		)
 		.take(100);
 	const speakers = [];
 
 	for (const assignment of speakerAssignments.sort((a, b) => a.position - b.position)) {
 		const speaker = await ctx.db.get(assignment.speakerId);
 
-		if (speaker) {
+		if (speaker && speaker.organizationId === organizationId) {
 			speakers.push({
 				name: speaker.name,
 				...(speaker.company !== undefined ? { company: speaker.company } : {}),
@@ -110,14 +113,16 @@ async function buildDescriptionGenerationInput(
 
 	const playlistAssignments = await ctx.db
 		.query('playlistAssignments')
-		.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
+		.withIndex('by_organizationId_and_videoId', (q) =>
+			q.eq('organizationId', organizationId).eq('videoId', video._id)
+		)
 		.take(100);
 	const assignments = [];
 
 	for (const assignment of playlistAssignments) {
 		const event = await ctx.db.get(assignment.eventId);
 
-		if (event) {
+		if (event && event.organizationId === organizationId) {
 			assignments.push({
 				assignmentId: assignment._id,
 				event: {
