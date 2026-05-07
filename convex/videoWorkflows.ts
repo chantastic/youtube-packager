@@ -1,12 +1,8 @@
 import { v } from 'convex/values';
 import { action } from './_generated/server';
 import { internal } from './_generated/api';
-import {
-	getAnthropicApiKey,
-	getAnthropicDescriptionEffort,
-	getAnthropicDescriptionModel,
-	getAnthropicModel
-} from './secrets';
+import { anthropicLlmProvider } from './anthropicLlmProvider';
+import type { LlmProvider } from './llmProvider';
 import type { ActionCtx } from './_generated/server';
 import {
 	buildTitleAlternativesPrompt,
@@ -17,18 +13,11 @@ import {
 } from '../src/lib/title-alternatives';
 import {
 	descriptionFromResponse,
-	descriptionOutputConfig,
 	descriptionPromptForInput,
-	isOpus47Model,
 	type DescriptionGenerationInput,
 	type DescriptionGenerationResult
 } from '../src/lib/description-generation';
 
-const anthropicApiUrl = 'https://api.anthropic.com/v1/messages';
-const anthropicVersion = '2023-06-01';
-const defaultModel = 'claude-haiku-4-5-20251001';
-const defaultDescriptionModel = 'claude-opus-4-7';
-const defaultDescriptionEffort = 'high';
 const titleAiValidationBatchSize = 20;
 const titleAiValidationMaxTokens = 4096;
 const titleAlternativesMaxTokens = 2048;
@@ -92,17 +81,6 @@ type AiValidationCacheEntry = TitleAiValidationInput & {
 	inputSnapshot: string;
 };
 
-type AnthropicMessageResponse = {
-	content?: Array<{
-		type?: string;
-		text?: string;
-	}>;
-	stop_reason?: string;
-	error?: {
-		message?: string;
-	};
-};
-
 type TitleAiValidationItem = {
 	requestId?: string;
 	status?: 'pass' | 'fail' | 'info';
@@ -126,8 +104,11 @@ type TitleAiValidationResult = {
 	error: string | null;
 };
 
-function titleAiValidationModel() {
-	return getAnthropicModel(defaultModel);
+function titleAiValidationModel(provider: LlmProvider) {
+	return provider.cacheConfigFor({
+		task: 'titleChecks',
+		maxTokens: titleAiValidationMaxTokens
+	}).model;
 }
 
 function titleAiValidationPromptVersion(checkId: TitleAiValidationCheckId) {
@@ -194,12 +175,14 @@ async function sha256Hex(value: string) {
 		.join('');
 }
 
-async function titleAiValidationModelConfigHash() {
+async function titleAiValidationModelConfigHash(provider: LlmProvider) {
 	return await sha256Hex(
-		JSON.stringify({
-			anthropicVersion,
-			maxTokens: titleAiValidationMaxTokens
-		})
+		JSON.stringify(
+			provider.cacheConfigFor({
+				task: 'titleChecks',
+				maxTokens: titleAiValidationMaxTokens
+			})
+		)
 	);
 }
 
@@ -219,7 +202,10 @@ function cacheKeyString(key: AiValidationCacheKey) {
 	].join(':');
 }
 
-async function aiValidationCacheKey(input: TitleAiValidationInput): Promise<AiValidationCacheKey> {
+async function aiValidationCacheKey(
+	input: TitleAiValidationInput,
+	provider: LlmProvider
+): Promise<AiValidationCacheKey> {
 	const inputSnapshot = JSON.stringify(input.input);
 
 	return {
@@ -227,16 +213,20 @@ async function aiValidationCacheKey(input: TitleAiValidationInput): Promise<AiVa
 		field: input.field,
 		checkId: input.checkId,
 		inputHash: await sha256Hex(inputSnapshot),
-		model: titleAiValidationModel(),
+		model: titleAiValidationModel(provider),
 		promptVersion: titleAiValidationPromptVersion(input.checkId),
-		modelConfigHash: await titleAiValidationModelConfigHash()
+		modelConfigHash: await titleAiValidationModelConfigHash(provider)
 	};
 }
 
-async function planTitleAiValidationCache(ctx: ActionCtx, inputs: TitleAiValidationInput[]) {
+async function planTitleAiValidationCache(
+	ctx: ActionCtx,
+	inputs: TitleAiValidationInput[],
+	provider: LlmProvider
+) {
 	const entries = await Promise.all(
 		inputs.map(async (input) => {
-			const cacheKey = await aiValidationCacheKey(input);
+			const cacheKey = await aiValidationCacheKey(input, provider);
 
 			return {
 				...input,
@@ -271,10 +261,6 @@ async function planTitleAiValidationCache(ctx: ActionCtx, inputs: TitleAiValidat
 		cachedValidationsByCacheKey,
 		misses
 	};
-}
-
-function textFromAnthropicResponse(response: AnthropicMessageResponse) {
-	return response.content?.find((item) => item.type === 'text' && item.text)?.text ?? '';
 }
 
 function stripJsonFence(value: string) {
@@ -324,93 +310,24 @@ function parseTitleAiValidationResponse(
 	return validationsByRequestId;
 }
 
-function anthropicErrorMessage(message: string | undefined, status: number) {
-	const fallback = `Anthropic validation failed with ${status}.`;
-
-	if (!message) {
-		return fallback;
-	}
-
-	if (message.toLowerCase().includes('model')) {
-		return `Anthropic title validation could not use model "${titleAiValidationModel()}". Set ANTHROPIC_MODEL to a model available for this API key.`;
-	}
-
-	return message;
-}
-
-function titleAlternativesErrorMessage(message: string | undefined, status: number) {
-	const fallback = `Anthropic title alternatives failed with ${status}.`;
-
-	if (!message) {
-		return fallback;
-	}
-
-	if (message.toLowerCase().includes('model')) {
-		return `Anthropic title alternatives could not use model "${titleAiValidationModel()}". Set ANTHROPIC_MODEL to a model available for this API key.`;
-	}
-
-	return message;
-}
-
-function descriptionModel() {
-	return getAnthropicDescriptionModel(defaultDescriptionModel);
-}
-
-function descriptionErrorMessage(message: string | undefined, status: number) {
-	const fallback = `Anthropic description generation failed with ${status}.`;
-
-	if (!message) {
-		return fallback;
-	}
-
-	if (message.toLowerCase().includes('model')) {
-		return `Anthropic description generation could not use model "${descriptionModel()}". Set ANTHROPIC_DESCRIPTION_MODEL to a model available for this API key.`;
-	}
-
-	return message;
-}
-
 async function validateTitleAiBatch(
-	requests: TitleAiValidationRequest[]
+	requests: TitleAiValidationRequest[],
+	provider: LlmProvider
 ): Promise<TitleAiValidationResult> {
-	let response: Response;
+	const message = await provider.createMessage({
+		task: 'titleChecks',
+		prompt: buildTitleAiValidationPrompt(requests),
+		maxTokens: titleAiValidationMaxTokens
+	});
 
-	try {
-		response = await fetch(anthropicApiUrl, {
-			method: 'POST',
-			headers: {
-				'x-api-key': getAnthropicApiKey() ?? '',
-				'anthropic-version': anthropicVersion,
-				'content-type': 'application/json'
-			},
-			body: JSON.stringify({
-				model: titleAiValidationModel(),
-				max_tokens: titleAiValidationMaxTokens,
-				messages: [
-					{
-						role: 'user',
-						content: buildTitleAiValidationPrompt(requests)
-					}
-				]
-			})
-		});
-	} catch {
+	if (message.error) {
 		return {
 			validationsByRequestId: {},
-			error: 'Anthropic title validation is temporarily unavailable.'
+			error: message.error
 		};
 	}
 
-	const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse;
-
-	if (!response.ok) {
-		return {
-			validationsByRequestId: {},
-			error: anthropicErrorMessage(body.error?.message, response.status)
-		};
-	}
-
-	if (body.stop_reason === 'max_tokens') {
+	if (message.stopReason === 'max_tokens') {
 		return {
 			validationsByRequestId: {},
 			error: 'Anthropic title validation response was truncated. Try a smaller batch.'
@@ -418,10 +335,7 @@ async function validateTitleAiBatch(
 	}
 
 	try {
-		const validationsByRequestId = parseTitleAiValidationResponse(
-			textFromAnthropicResponse(body),
-			requests
-		);
+		const validationsByRequestId = parseTitleAiValidationResponse(message.text, requests);
 
 		return {
 			validationsByRequestId,
@@ -439,17 +353,11 @@ async function validateTitleAiBatch(
 }
 
 async function validateTitleAiInputs(
-	inputs: Array<TitleAiValidationInput & { requestId: string }>
+	inputs: Array<TitleAiValidationInput & { requestId: string }>,
+	provider: LlmProvider
 ): Promise<TitleAiValidationResult> {
 	if (inputs.length === 0) {
 		return { validationsByRequestId: {}, error: null };
-	}
-
-	if (!getAnthropicApiKey()) {
-		return {
-			validationsByRequestId: {},
-			error: 'Set ANTHROPIC_API_KEY to run AI title checks.'
-		};
 	}
 
 	const requests = inputs.map((input) => ({
@@ -463,7 +371,7 @@ async function validateTitleAiInputs(
 	const errors: string[] = [];
 
 	for (const batch of chunkTitleAiValidationRequests(requests)) {
-		const result = await validateTitleAiBatch(batch);
+		const result = await validateTitleAiBatch(batch, provider);
 
 		Object.assign(validationsByRequestId, result.validationsByRequestId);
 
@@ -508,12 +416,97 @@ function titleAiChecksResult(
 	};
 }
 
+async function generateTitleAlternativesWithProvider(
+	titleInput: TitleAlternativesInput,
+	provider: LlmProvider
+): Promise<TitleAlternativesResult> {
+	if (titleInput.assignments.length === 0) {
+		return { alternativesByAssignmentId: {}, error: null };
+	}
+
+	const message = await provider.createMessage({
+		task: 'titleAlternatives',
+		prompt: buildTitleAlternativesPrompt(titleInput),
+		maxTokens: titleAlternativesMaxTokens
+	});
+
+	if (message.error) {
+		return {
+			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, message.error),
+			error: message.error
+		};
+	}
+
+	if (message.stopReason === 'max_tokens') {
+		const error = 'Anthropic title alternatives response was truncated.';
+
+		return {
+			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
+			error
+		};
+	}
+
+	try {
+		return titleAlternativesFromResponse(titleInput, message.text);
+	} catch {
+		const error = 'Anthropic returned unreadable title alternatives.';
+
+		return {
+			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
+			error
+		};
+	}
+}
+
+async function generateDescriptionWithProvider(
+	descriptionInput: DescriptionGenerationInput,
+	provider: LlmProvider
+): Promise<DescriptionGenerationResult> {
+	const prompt = descriptionPromptForInput(descriptionInput);
+
+	if (prompt.error) {
+		return {
+			description: null,
+			error: prompt.error
+		};
+	}
+
+	const message = await provider.createMessage({
+		task: 'descriptionGeneration',
+		prompt: prompt.prompt,
+		maxTokens: descriptionMaxTokens
+	});
+
+	if (message.error) {
+		return {
+			description: null,
+			error: message.error
+		};
+	}
+
+	if (message.stopReason === 'max_tokens') {
+		return {
+			description: null,
+			error: 'Anthropic description generation response was truncated.'
+		};
+	}
+
+	try {
+		return descriptionFromResponse(descriptionInput, message.text, message.model);
+	} catch {
+		return {
+			description: null,
+			error: 'Anthropic returned an unreadable description.'
+		};
+	}
+}
+
 export const validateTitleAiChecks = action({
 	args: {
 		inputs: v.array(titleAiValidationInputValidator)
 	},
 	handler: async (_ctx, { inputs }): Promise<TitleAiValidationResult> => {
-		return await validateTitleAiInputs(inputs);
+		return await validateTitleAiInputs(inputs, anthropicLlmProvider);
 	}
 });
 
@@ -522,7 +515,7 @@ export const collectCachedTitleAiChecks = action({
 		inputs: v.array(titleAiValidationCacheInputValidator)
 	},
 	handler: async (ctx, { inputs }) => {
-		const cachePlan = await planTitleAiValidationCache(ctx, inputs);
+		const cachePlan = await planTitleAiValidationCache(ctx, inputs, anthropicLlmProvider);
 
 		return {
 			...titleAiChecksResult(cachePlan.entries, cachePlan.cachedValidationsByCacheKey, {}),
@@ -541,7 +534,7 @@ export const buildTitleAiChecks = action({
 		inputs: v.array(titleAiValidationCacheInputValidator)
 	},
 	handler: async (ctx, { inputs }) => {
-		const cachePlan = await planTitleAiValidationCache(ctx, inputs);
+		const cachePlan = await planTitleAiValidationCache(ctx, inputs, anthropicLlmProvider);
 		const freshResult = await validateTitleAiInputs(
 			cachePlan.misses.map((entry) => ({
 				requestId: entry.cacheKeyString,
@@ -550,7 +543,8 @@ export const buildTitleAiChecks = action({
 				checkId: entry.checkId,
 				label: entry.label,
 				input: entry.input
-			}))
+			})),
+			anthropicLlmProvider
 		);
 		const now = Date.now();
 		const freshEntries = cachePlan.misses.flatMap((entry) => {
@@ -596,81 +590,10 @@ export const generateTitleAlternatives = action({
 		input: v.any()
 	},
 	handler: async (_ctx, { input }): Promise<TitleAlternativesResult> => {
-		const titleInput = input as TitleAlternativesInput;
-
-		if (titleInput.assignments.length === 0) {
-			return { alternativesByAssignmentId: {}, error: null };
-		}
-
-		if (!getAnthropicApiKey()) {
-			const error = 'Set ANTHROPIC_API_KEY to generate title alternatives.';
-
-			return {
-				alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
-				error
-			};
-		}
-
-		let response: Response;
-
-		try {
-			response = await fetch(anthropicApiUrl, {
-				method: 'POST',
-				headers: {
-					'x-api-key': getAnthropicApiKey() ?? '',
-					'anthropic-version': anthropicVersion,
-					'content-type': 'application/json'
-				},
-				body: JSON.stringify({
-					model: titleAiValidationModel(),
-					max_tokens: titleAlternativesMaxTokens,
-					messages: [
-						{
-							role: 'user',
-							content: buildTitleAlternativesPrompt(titleInput)
-						}
-					]
-				})
-			});
-		} catch {
-			const error = 'Anthropic title alternatives are temporarily unavailable.';
-
-			return {
-				alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
-				error
-			};
-		}
-
-		const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse;
-
-		if (!response.ok) {
-			const error = titleAlternativesErrorMessage(body.error?.message, response.status);
-
-			return {
-				alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
-				error
-			};
-		}
-
-		if (body.stop_reason === 'max_tokens') {
-			const error = 'Anthropic title alternatives response was truncated.';
-
-			return {
-				alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
-				error
-			};
-		}
-
-		try {
-			return titleAlternativesFromResponse(titleInput, textFromAnthropicResponse(body));
-		} catch {
-			const error = 'Anthropic returned unreadable title alternatives.';
-
-			return {
-				alternativesByAssignmentId: fallbackAlternativesByAssignmentId(titleInput, error),
-				error
-			};
-		}
+		return await generateTitleAlternativesWithProvider(
+			input as TitleAlternativesInput,
+			anthropicLlmProvider
+		);
 	}
 });
 
@@ -679,92 +602,9 @@ export const generateDescription = action({
 		input: v.any()
 	},
 	handler: async (_ctx, { input }): Promise<DescriptionGenerationResult> => {
-		const descriptionInput = input as DescriptionGenerationInput;
-		const prompt = descriptionPromptForInput(descriptionInput);
-
-		if (prompt.error) {
-			return {
-				description: null,
-				error: prompt.error
-			};
-		}
-
-		if (!getAnthropicApiKey()) {
-			return {
-				description: null,
-				error: 'Set ANTHROPIC_API_KEY to generate descriptions.'
-			};
-		}
-
-		let response: Response;
-
-		try {
-			const selectedModel = descriptionModel();
-			response = await fetch(anthropicApiUrl, {
-				method: 'POST',
-				headers: {
-					'x-api-key': getAnthropicApiKey() ?? '',
-					'anthropic-version': anthropicVersion,
-					'content-type': 'application/json'
-				},
-				body: JSON.stringify({
-					model: selectedModel,
-					max_tokens: descriptionMaxTokens,
-					...(isOpus47Model(selectedModel)
-						? {
-								thinking: {
-									type: 'adaptive'
-								}
-							}
-						: {}),
-					output_config: {
-						...descriptionOutputConfig(selectedModel),
-						...(isOpus47Model(selectedModel)
-							? { effort: getAnthropicDescriptionEffort(defaultDescriptionEffort) }
-							: {})
-					},
-					messages: [
-						{
-							role: 'user',
-							content: prompt.prompt
-						}
-					]
-				})
-			});
-		} catch {
-			return {
-				description: null,
-				error: 'Anthropic description generation is temporarily unavailable.'
-			};
-		}
-
-		const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse;
-
-		if (!response.ok) {
-			return {
-				description: null,
-				error: descriptionErrorMessage(body.error?.message, response.status)
-			};
-		}
-
-		if (body.stop_reason === 'max_tokens') {
-			return {
-				description: null,
-				error: 'Anthropic description generation response was truncated.'
-			};
-		}
-
-		try {
-			return descriptionFromResponse(
-				descriptionInput,
-				textFromAnthropicResponse(body),
-				descriptionModel()
-			);
-		} catch {
-			return {
-				description: null,
-				error: 'Anthropic returned an unreadable description.'
-			};
-		}
+		return await generateDescriptionWithProvider(
+			input as DescriptionGenerationInput,
+			anthropicLlmProvider
+		);
 	}
 });

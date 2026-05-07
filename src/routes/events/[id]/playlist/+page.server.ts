@@ -107,7 +107,7 @@ async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event:
 	}
 
 	const cachedTitleAiChecks = await getConvexClient().action(
-		api.anthropicWorkflows.collectCachedTitleAiChecks,
+		api.videoWorkflows.collectCachedTitleAiChecks,
 		{
 			inputs
 		}

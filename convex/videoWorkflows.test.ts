@@ -26,7 +26,7 @@ test('validateTitleAiChecks reports missing Anthropic API key without calling fe
 	const t = convexTest(schema, modules);
 
 	await expect(
-		t.action(api.anthropicWorkflows.validateTitleAiChecks, {
+		t.action(api.videoWorkflows.validateTitleAiChecks, {
 			inputs: [
 				{
 					requestId: 'video-1:title:hook',
@@ -68,7 +68,7 @@ test('validateTitleAiChecks maps Anthropic responses by request id', async () =>
 	const t = convexTest(schema, modules);
 
 	await expect(
-		t.action(api.anthropicWorkflows.validateTitleAiChecks, {
+		t.action(api.videoWorkflows.validateTitleAiChecks, {
 			inputs: [
 				{
 					requestId: 'video-1:title:mechanics',
@@ -124,10 +124,10 @@ test('buildTitleAiChecks writes and reuses cached AI title checks', async () => 
 		label: 'Hook',
 		input: { title: 'Overview of Auth', hookText: 'Overview of Auth' }
 	};
-	const first = await t.action(api.anthropicWorkflows.buildTitleAiChecks, {
+	const first = await t.action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs: [input]
 	});
-	const second = await t.action(api.anthropicWorkflows.buildTitleAiChecks, {
+	const second = await t.action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs: [input]
 	});
 	const validation = {
@@ -170,7 +170,7 @@ test('generateTitleAlternatives formats Anthropic base titles by playlist rules'
 	const t = convexTest(schema, modules);
 
 	await expect(
-		t.action(api.anthropicWorkflows.generateTitleAlternatives, {
+		t.action(api.videoWorkflows.generateTitleAlternatives, {
 			input: {
 				currentTitle: 'Overview of Agent-Native Auth — Chan, WorkOS | TestConf 2026',
 				video: {
@@ -208,7 +208,7 @@ test('generateTitleAlternatives reports missing Anthropic API key without callin
 	const t = convexTest(schema, modules);
 
 	await expect(
-		t.action(api.anthropicWorkflows.generateTitleAlternatives, {
+		t.action(api.videoWorkflows.generateTitleAlternatives, {
 			input: {
 				currentTitle: 'Overview of Agent-Native Auth — Chan, WorkOS | TestConf 2026',
 				video: {
@@ -268,7 +268,7 @@ test('generateDescription sends transcript context and normalizes chapters', asy
 		})
 	);
 	const t = convexTest(schema, modules);
-	const result = await t.action(api.anthropicWorkflows.generateDescription, {
+	const result = await t.action(api.videoWorkflows.generateDescription, {
 		input: {
 			video: {
 				youtubeVideoId: 'video-1',

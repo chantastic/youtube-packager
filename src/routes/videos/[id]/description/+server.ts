@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		});
 	}
 
-	const result = await client.action(api.anthropicWorkflows.generateDescription, {
+	const result = await client.action(api.videoWorkflows.generateDescription, {
 		input: {
 			video: {
 				youtubeVideoId: videoView.video.youtubeVideoId,

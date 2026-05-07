@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ params }) => {
 	const aiValidationsByInputKey = new Map<string, VideoValidation>();
 
 	if (validationContext.aiInputsByKey.size > 0) {
-		const titleAiChecks = await client.action(api.anthropicWorkflows.buildTitleAiChecks, {
+		const titleAiChecks = await client.action(api.videoWorkflows.buildTitleAiChecks, {
 			inputs: [...validationContext.aiInputsByKey.values()]
 		});
 
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		}
 	}
 
-	const result = await client.action(api.anthropicWorkflows.generateTitleAlternatives, {
+	const result = await client.action(api.videoWorkflows.generateTitleAlternatives, {
 		input: buildTitleAlternativesInput(videoView, validationContext, aiValidationsByInputKey)
 	});
 

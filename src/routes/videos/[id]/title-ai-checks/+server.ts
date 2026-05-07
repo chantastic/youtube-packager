@@ -50,7 +50,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		speakers,
 		video: videoRecord
 	});
-	const result = await client.action(api.anthropicWorkflows.buildTitleAiChecks, {
+	const result = await client.action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs
 	});
 

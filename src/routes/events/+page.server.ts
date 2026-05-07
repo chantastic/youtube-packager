@@ -134,7 +134,7 @@ async function buildAiValidationCache(inputs: TitleAiValidationInput[]) {
 		return { checked: 0, total: 0, error: null as string | null };
 	}
 
-	const result = await getConvexClient().action(api.anthropicWorkflows.buildTitleAiChecks, {
+	const result = await getConvexClient().action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs
 	});
 
@@ -208,7 +208,7 @@ export const load: PageServerLoad = async () => {
 	});
 	const aiCache =
 		titleAiInputs.length > 0
-			? await client.action(api.anthropicWorkflows.collectCachedTitleAiChecks, {
+			? await client.action(api.videoWorkflows.collectCachedTitleAiChecks, {
 					inputs: titleAiInputs
 				})
 			: null;
