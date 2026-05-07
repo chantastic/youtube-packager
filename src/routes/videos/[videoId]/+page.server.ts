@@ -88,7 +88,7 @@ function videoTitleRecord(
 
 export const load: PageServerLoad = async (event) => {
 	const client = getConvexClient();
-	let videoView = await client.query(api.videoView.getByYoutubeVideoId, {
+	let videoView = await client.query(api.videoViews.getByYoutubeVideoId, {
 		youtubeVideoId: event.params.videoId
 	});
 	let refreshError: string | null = null;
@@ -102,9 +102,9 @@ export const load: PageServerLoad = async (event) => {
 		const accessToken = await getConnectedYouTubeAccessToken(auth);
 		const refreshedVideo = await getYouTubeVideoData(event.params.videoId, accessToken);
 
-		await client.mutation(api.videos.upsertYoutubeSnapshotByYoutubeVideoId, refreshedVideo);
+		await client.mutation(api.videoCommands.recordYoutubeSnapshotByYoutubeVideoId, refreshedVideo);
 		videoView =
-			(await client.query(api.videoView.getByYoutubeVideoId, {
+			(await client.query(api.videoViews.getByYoutubeVideoId, {
 				youtubeVideoId: event.params.videoId
 			})) ?? videoView;
 	} catch (caught) {
@@ -226,7 +226,7 @@ export const actions: Actions = {
 				wroteYouTubeTitle = true;
 			}
 
-			await client.mutation(api.videos.upsertMetadataByYoutubeVideoId, {
+			await client.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
 				youtubeVideoId: event.params.videoId,
 				videoType,
 				...(updatedTitle ? { titleOverride: updatedTitle } : { clearTitleOverride: true }),
@@ -236,7 +236,7 @@ export const actions: Actions = {
 			});
 
 			if (updatedTitle && existingVideo?.title !== updatedTitle) {
-				await client.mutation(api.videos.upsertTitleByYoutubeVideoId, {
+				await client.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
 					youtubeVideoId: event.params.videoId,
 					title: updatedTitle
 				});
@@ -273,7 +273,7 @@ export const actions: Actions = {
 			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
 			const updatedVideo = await updateYouTubeVideoTitle(event.params.videoId, title, accessToken);
 
-			await getConvexClient().mutation(api.videos.upsertTitleByYoutubeVideoId, {
+			await getConvexClient().mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
 				youtubeVideoId: event.params.videoId,
 				title: updatedVideo.title
 			});
@@ -294,7 +294,7 @@ export const actions: Actions = {
 		const name = optionalString(data, 'name');
 
 		if (speakerId) {
-			await getConvexClient().mutation(api.videos.upsertSpeakerAssignmentByYoutubeVideoId, {
+			await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
 				youtubeVideoId: params.videoId,
 				speakerId: speakerId as Id<'speakers'>
 			});
@@ -306,7 +306,7 @@ export const actions: Actions = {
 			return;
 		}
 
-		await getConvexClient().mutation(api.videos.upsertSpeakerAssignmentByYoutubeVideoId, {
+		await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
 			youtubeVideoId: params.videoId,
 			name,
 			company: optionalString(data, 'company'),
@@ -323,7 +323,7 @@ export const actions: Actions = {
 		}
 
 		await getConvexClient().mutation(
-			api.videos.destroySpeakerAssignmentByYoutubeVideoIdAndSpeakerId,
+			api.videoCommands.removeSpeakerByYoutubeVideoIdAndSpeakerId,
 			{
 				youtubeVideoId: params.videoId,
 				speakerId: speakerId as Id<'speakers'>

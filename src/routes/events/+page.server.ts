@@ -1,7 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClient } from '$lib/server/convex';
-import { validateTitleAiChecksWithAnthropic } from '$lib/server/anthropic-title-validation';
 import {
 	planAiValidationCache,
 	saveAiValidationCache,
@@ -31,7 +30,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../convex/_generated/dataModel';
 import type { PageServerLoad, Actions } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentView.getForEvent>[number];
+type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
 type EventRow = FunctionReturnType<typeof api.events.collect>[number];
 type ValidationBuildState =
 	| {
@@ -142,11 +141,18 @@ async function buildAiValidationCache(inputs: TitleAiValidationInput[]) {
 	}
 
 	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await validateTitleAiChecksWithAnthropic(
-		cachePlan.misses.map((entry) => ({
-			...entry,
-			requestId: entry.cacheKeyString
-		}))
+	const freshResult = await getConvexClient().action(
+		api.anthropicWorkflows.validateTitleAiChecks,
+		{
+			inputs: cachePlan.misses.map((entry) => ({
+				requestId: entry.cacheKeyString,
+				videoId: entry.videoId,
+				field: entry.field,
+				checkId: entry.checkId,
+				label: entry.label,
+				input: entry.input
+			}))
+		}
 	);
 	const now = Date.now();
 	const freshEntries = cachePlan.misses.flatMap((entry) => {
@@ -180,7 +186,7 @@ async function syncPlaylistForEvent(event: EventRow, accessToken: string) {
 	const client = getConvexClient();
 	const playlist = await getYouTubePlaylistData(event.youtubePlaylistId, accessToken);
 
-	await client.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
+	await client.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
 		eventId: event._id,
 		playlist: {
 			playlistId: playlist.playlistId,
@@ -220,7 +226,7 @@ export const load: PageServerLoad = async () => {
 				return [event._id, [] as AssignmentRow[]] as const;
 			}
 
-			const assignments = await client.query(api.playlistAssignmentView.getForEvent, {
+			const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 				eventId: event._id
 			});
 
@@ -364,7 +370,7 @@ export const actions: Actions = {
 			const auth = youtubeAuthContext({ locals });
 			const accessToken = await getConnectedYouTubeAccessToken(auth);
 			const playlist = await syncPlaylistForEvent(event, accessToken);
-			const assignments = await client.query(api.playlistAssignmentView.getForEvent, {
+			const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 				eventId: event._id
 			});
 			const aiChecks = await buildAiValidationCache(

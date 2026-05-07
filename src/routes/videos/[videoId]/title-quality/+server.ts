@@ -1,13 +1,13 @@
 import { error, json } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
-import { validateTitleAiChecksWithAnthropic } from '$lib/server/anthropic-title-validation';
 import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
 import { buildTitleAiValidationInputs } from '$lib/title-ai-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params }) => {
-	const videoView = await getConvexClient().query(api.videoView.getByYoutubeVideoId, {
+	const client = getConvexClient();
+	const videoView = await client.query(api.videoViews.getByYoutubeVideoId, {
 		youtubeVideoId: params.videoId
 	});
 
@@ -51,12 +51,16 @@ export const POST: RequestHandler = async ({ params }) => {
 		video: videoRecord
 	});
 	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await validateTitleAiChecksWithAnthropic(
-		cachePlan.misses.map((entry) => ({
-			...entry,
-			requestId: entry.cacheKeyString
+	const freshResult = await client.action(api.anthropicWorkflows.validateTitleAiChecks, {
+		inputs: cachePlan.misses.map((entry) => ({
+			requestId: entry.cacheKeyString,
+			videoId: entry.videoId,
+			field: entry.field,
+			checkId: entry.checkId,
+			label: entry.label,
+			input: entry.input
 		}))
-	);
+	});
 	const now = Date.now();
 	const freshEntries = cachePlan.misses.flatMap((entry) => {
 		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];

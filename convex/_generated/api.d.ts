@@ -9,14 +9,17 @@
  */
 
 import type * as aiValidationChecks from "../aiValidationChecks.js";
+import type * as anthropicWorkflows from "../anthropicWorkflows.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
-import type * as playlistAssignmentView from "../playlistAssignmentView.js";
+import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
+import type * as secrets from "../secrets.js";
 import type * as speakers from "../speakers.js";
 import type * as titleQualityChecks from "../titleQualityChecks.js";
 import type * as videoCaptions from "../videoCaptions.js";
-import type * as videoView from "../videoView.js";
+import type * as videoCommands from "../videoCommands.js";
+import type * as videoViews from "../videoViews.js";
 import type * as videos from "../videos.js";
 import type * as youtubeConnections from "../youtubeConnections.js";
 
@@ -28,14 +31,17 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   aiValidationChecks: typeof aiValidationChecks;
+  anthropicWorkflows: typeof anthropicWorkflows;
   eventPlaylistStats: typeof eventPlaylistStats;
   events: typeof events;
-  playlistAssignmentView: typeof playlistAssignmentView;
+  playlistAssignmentViews: typeof playlistAssignmentViews;
   playlistAssignments: typeof playlistAssignments;
+  secrets: typeof secrets;
   speakers: typeof speakers;
   titleQualityChecks: typeof titleQualityChecks;
   videoCaptions: typeof videoCaptions;
-  videoView: typeof videoView;
+  videoCommands: typeof videoCommands;
+  videoViews: typeof videoViews;
   videos: typeof videos;
   youtubeConnections: typeof youtubeConnections;
 }>;

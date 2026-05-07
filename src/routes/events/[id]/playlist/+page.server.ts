@@ -25,7 +25,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentView.getForEvent>[number];
+type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
 type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
 
 function validationFilterFromUrl(url: URL) {
@@ -166,7 +166,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			playlist.videos.map((video) => validateVideoBaseline(video.title, event))
 		);
 
-		await client.mutation(api.videos.upsertPlaylistSnapshotByEventId, {
+		await client.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
 			eventId: event._id,
 			playlist: {
 				playlistId: playlist.playlistId,
@@ -193,7 +193,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				}))
 			}
 		});
-		const playlistAssignments = await client.query(api.playlistAssignmentView.getForEvent, {
+		const playlistAssignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 			eventId: event._id
 		});
 		const titleQualityValidationsByVideoId = await cachedTitleAiValidationsByVideoId(
@@ -242,7 +242,7 @@ export const actions: Actions = {
 			});
 		}
 
-		await getConvexClient().mutation(api.videos.upsertMetadataByYoutubeVideoId, {
+		await getConvexClient().mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
 			youtubeVideoId,
 			videoType: normalizeVideoType(videoType)
 		});

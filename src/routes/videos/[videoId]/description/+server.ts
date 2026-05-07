@@ -21,7 +21,7 @@ function speakerNames(
 }
 
 export const POST: RequestHandler = async ({ params }) => {
-	const videoView = await getConvexClient().query(api.videoView.getByYoutubeVideoId, {
+	const videoView = await getConvexClient().query(api.videoViews.getByYoutubeVideoId, {
 		youtubeVideoId: params.videoId
 	});
 

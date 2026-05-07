@@ -49,6 +49,14 @@ video titles. You can optionally set `ANTHROPIC_MODEL`; otherwise the app uses
 `ANTHROPIC_DESCRIPTION_MODEL`; otherwise the app uses `claude-opus-4-7`. For Opus 4.7
 description generation, `ANTHROPIC_DESCRIPTION_EFFORT` defaults to `high`.
 
+Title AI validation runs through Convex workflows. Set the same Anthropic values on the
+Convex deployment:
+
+```sh
+pnpm exec convex env set ANTHROPIC_API_KEY
+pnpm exec convex env set ANTHROPIC_MODEL claude-haiku-4-5-20251001
+```
+
 ## Development
 
 Install dependencies and start the dev server:

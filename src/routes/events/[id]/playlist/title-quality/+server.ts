@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
-import { validateTitleAiChecksWithAnthropic } from '$lib/server/anthropic-title-validation';
 import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
 import {
 	buildTitleAiValidationInputs,
@@ -13,7 +12,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../../convex/_generated/dataModel';
 import type { RequestHandler } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentView.getForEvent>[number];
+type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
 type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
 
 function videoRecordForValidation(row: AssignmentRow) {
@@ -85,7 +84,7 @@ export const POST: RequestHandler = async ({ params }) => {
 		);
 	}
 
-	const assignments = await client.query(api.playlistAssignmentView.getForEvent, {
+	const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 		eventId: event._id
 	});
 	const inputs = titleAiInputsForAssignments(assignments, event);
@@ -101,12 +100,16 @@ export const POST: RequestHandler = async ({ params }) => {
 	}
 
 	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await validateTitleAiChecksWithAnthropic(
-		cachePlan.misses.map((entry) => ({
-			...entry,
-			requestId: entry.cacheKeyString
+	const freshResult = await client.action(api.anthropicWorkflows.validateTitleAiChecks, {
+		inputs: cachePlan.misses.map((entry) => ({
+			requestId: entry.cacheKeyString,
+			videoId: entry.videoId,
+			field: entry.field,
+			checkId: entry.checkId,
+			label: entry.label,
+			input: entry.input
 		}))
-	);
+	});
 	const now = Date.now();
 	const freshEntries = cachePlan.misses.flatMap((entry) => {
 		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
