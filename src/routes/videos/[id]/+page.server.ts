@@ -135,6 +135,9 @@ export const load: PageServerLoad = async (event) => {
 	const captions = await convexAdminFunction(internal.videoCaptions.collectByVideoIdInternal, {
 		videoId: videoView.video._id
 	});
+	const descriptionJob = await client.query(api.aiJobViews.getLatestDescriptionGenerationForVideo, {
+		videoId: videoView.video._id
+	});
 	const availableSpeakers = await client.query(api.speakers.collect, {});
 	const speakers = videoView.speakers.map((speakerRow) => ({
 		name: speakerRow.speaker.name,
@@ -145,6 +148,7 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		videoView,
 		captions,
+		descriptionJob,
 		availableSpeakers,
 		refreshError,
 		assignmentValidationsById: Object.fromEntries(

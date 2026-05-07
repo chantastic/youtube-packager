@@ -1,5 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { aiJobStatusValidator, aiJobTaskValidator } from './aiJobTypes';
+import { generatedDescriptionValidator } from './descriptionGenerationTypes';
 import { videoValidationValidator, validationStatValidator } from './videoValidationTypes';
 
 export default defineSchema({
@@ -127,5 +129,17 @@ export default defineSchema({
 		'model',
 		'promptVersion',
 		'modelConfigHash'
-	])
+	]),
+	aiJobs: defineTable({
+		task: aiJobTaskValidator,
+		status: aiJobStatusValidator,
+		videoId: v.id('videos'),
+		captionId: v.optional(v.id('videoCaptions')),
+		result: v.optional(generatedDescriptionValidator),
+		error: v.optional(v.string()),
+		queuedAt: v.number(),
+		startedAt: v.optional(v.number()),
+		completedAt: v.optional(v.number()),
+		updatedAt: v.number()
+	}).index('by_task_and_videoId_and_queuedAt', ['task', 'videoId', 'queuedAt'])
 });

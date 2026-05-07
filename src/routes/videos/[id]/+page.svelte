@@ -42,6 +42,8 @@
 		durationSeconds: number;
 	};
 
+	type DescriptionJob = NonNullable<PageData['descriptionJob']>;
+
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let titleAiChecks = $state<VideoValidation[]>([]);
 	let titleAiChecksError = $state<string | null>(null);
@@ -50,9 +52,12 @@
 	let titleAlternativesError = $state<string | null>(null);
 	let titleAlternativesLoading = $state(false);
 	let copiedTitle = $state<string | null>(null);
-	let generatedDescription = $state<GeneratedDescription | null>(null);
-	let descriptionError = $state<string | null>(null);
-	let descriptionLoading = $state(false);
+	let descriptionJob = $state<DescriptionJob | null>(currentDescriptionJob());
+	let generatedDescription = $state<GeneratedDescription | null>(
+		currentDescriptionJob()?.result ?? null
+	);
+	let descriptionError = $state<string | null>(descriptionJobError(currentDescriptionJob()));
+	let descriptionLoading = $state(descriptionJobIsActive(currentDescriptionJob()));
 	let copiedDescription = $state(false);
 	let metadataSaved = $state(false);
 	let captionsFetching = $state(false);
@@ -66,6 +71,7 @@
 	let speakerName = $state('');
 	let speakerPosition = $state('');
 	let speakerCompany = $state('');
+	let descriptionPollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	$effect(() => {
 		selectedVideoType = currentVideoType();
@@ -86,8 +92,20 @@
 		return data.videoView.video.titleOverride ?? '';
 	}
 
+	function currentDescriptionJob() {
+		return data.descriptionJob;
+	}
+
 	onMount(() => {
 		void loadTitleAiChecks();
+
+		if (descriptionJobIsActive(descriptionJob)) {
+			scheduleDescriptionJobPoll();
+		}
+
+		return () => {
+			clearDescriptionJobPoll();
+		};
 	});
 
 	function formatDate(value?: number | string) {
@@ -109,6 +127,29 @@
 			info: 'border-gray-200 bg-gray-50 text-gray-600',
 			pending: 'border-slate-200 bg-slate-50 text-slate-600'
 		}[status];
+	}
+
+	function descriptionJobIsActive(job: DescriptionJob | null | undefined) {
+		return job?.status === 'queued' || job?.status === 'running';
+	}
+
+	function descriptionJobError(job: DescriptionJob | null | undefined) {
+		return job?.status === 'error' ? (job.error ?? 'Description generation failed.') : null;
+	}
+
+	function descriptionJobLabel(job: DescriptionJob | null | undefined) {
+		if (!job) return 'No description job';
+		if (job.status === 'queued') return 'Queued';
+		if (job.status === 'running') return 'Running';
+		if (job.status === 'complete') return 'Complete';
+		return 'Error';
+	}
+
+	function descriptionJobTone(job: DescriptionJob | null | undefined) {
+		if (!job) return 'border-gray-200 bg-gray-50 text-gray-600';
+		if (job.status === 'complete') return 'border-green-200 bg-green-50 text-green-700';
+		if (job.status === 'error') return 'border-amber-200 bg-amber-50 text-amber-800';
+		return 'border-blue-200 bg-blue-50 text-blue-700';
 	}
 
 	function titleFocusSpeakers() {
@@ -351,6 +392,53 @@
 		}, 1600);
 	}
 
+	function applyDescriptionJob(job: DescriptionJob | null) {
+		descriptionJob = job;
+		generatedDescription = job?.result ?? null;
+		descriptionError = descriptionJobError(job);
+		descriptionLoading = descriptionJobIsActive(job);
+
+		if (descriptionLoading) {
+			scheduleDescriptionJobPoll();
+		} else {
+			clearDescriptionJobPoll();
+		}
+	}
+
+	function clearDescriptionJobPoll() {
+		if (descriptionPollTimeout) {
+			clearTimeout(descriptionPollTimeout);
+			descriptionPollTimeout = null;
+		}
+	}
+
+	function scheduleDescriptionJobPoll() {
+		clearDescriptionJobPoll();
+
+		descriptionPollTimeout = setTimeout(() => {
+			void refreshDescriptionJob();
+		}, 1500);
+	}
+
+	async function refreshDescriptionJob() {
+		try {
+			const response = await fetch(
+				`/videos/${encodeURIComponent(data.videoView.video._id)}/description`
+			);
+			const body = (await response.json().catch(() => ({}))) as {
+				job?: DescriptionJob | null;
+			};
+
+			applyDescriptionJob(body.job ?? null);
+			descriptionError =
+				descriptionJobError(body.job) ??
+				(response.ok ? null : `Description status failed with ${response.status}.`);
+		} catch {
+			descriptionError = 'Description status is temporarily unavailable.';
+			scheduleDescriptionJobPoll();
+		}
+	}
+
 	async function loadTitleAiChecks() {
 		titleAiChecksLoading = true;
 		titleAiChecksError = null;
@@ -416,18 +504,21 @@
 				}
 			);
 			const body = (await response.json().catch(() => ({}))) as {
-				description?: GeneratedDescription | null;
+				job?: DescriptionJob | null;
 				error?: string | null;
 			};
 
-			generatedDescription = body.description ?? null;
+			applyDescriptionJob(body.job ?? null);
 			descriptionError =
 				body.error ??
 				(response.ok ? null : `Description generation failed with ${response.status}.`);
 		} catch {
 			descriptionError = 'Description generation is temporarily unavailable.';
-		} finally {
 			descriptionLoading = false;
+		} finally {
+			if (!descriptionJobIsActive(descriptionJob)) {
+				descriptionLoading = false;
+			}
 		}
 	}
 </script>
@@ -725,7 +816,7 @@
 				disabled={descriptionLoading || data.captions.length === 0}
 				class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 			>
-				{descriptionLoading ? 'Generating...' : 'Generate Description'}
+				{descriptionLoading ? descriptionJobLabel(descriptionJob) : 'Generate Description'}
 			</button>
 		</div>
 		<div class="px-4 py-4">
@@ -740,6 +831,22 @@
 				<p class="mt-3 text-xs text-amber-700">
 					Fetch captions before generating a structured description.
 				</p>
+			{/if}
+			{#if descriptionJob}
+				<div class={`mt-4 rounded border px-3 py-2 text-sm ${descriptionJobTone(descriptionJob)}`}>
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<p class="font-medium">Description job: {descriptionJobLabel(descriptionJob)}</p>
+						<p class="text-xs opacity-80">
+							{#if descriptionJob.completedAt}
+								Completed {formatDate(descriptionJob.completedAt)}
+							{:else if descriptionJob.startedAt}
+								Started {formatDate(descriptionJob.startedAt)}
+							{:else}
+								Queued {formatDate(descriptionJob.queuedAt)}
+							{/if}
+						</p>
+					</div>
+				</div>
 			{/if}
 			{#if descriptionError}
 				<p

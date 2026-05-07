@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { action } from './_generated/server';
+import { action, internalAction } from './_generated/server';
 import { internal } from './_generated/api';
 import { anthropicLlmProvider } from './anthropicLlmProvider';
 import type { LlmProvider } from './llmProvider';
@@ -538,5 +538,58 @@ export const generateDescription = action({
 			input as DescriptionGenerationInput,
 			anthropicLlmProvider
 		);
+	}
+});
+
+export const generateDescriptionForJob = internalAction({
+	args: {
+		jobId: v.id('aiJobs')
+	},
+	handler: async (ctx, { jobId }): Promise<DescriptionGenerationResult> => {
+		const context = await ctx.runQuery(
+			internal.aiJobViews.getDescriptionGenerationContextInternal,
+			{
+				jobId
+			}
+		);
+
+		if (!context.job) {
+			return {
+				description: null,
+				error: context.error
+			};
+		}
+
+		if (!context.input) {
+			await ctx.runMutation(internal.aiJobCommands.recordDescriptionGenerationErrorInternal, {
+				jobId,
+				error: context.error ?? 'Description generation context is unavailable.'
+			});
+
+			return {
+				description: null,
+				error: context.error
+			};
+		}
+
+		await ctx.runMutation(internal.aiJobCommands.recordDescriptionGenerationRunningInternal, {
+			jobId
+		});
+
+		const result = await generateDescriptionWithProvider(context.input, anthropicLlmProvider);
+
+		if (result.description) {
+			await ctx.runMutation(internal.aiJobCommands.recordDescriptionGenerationCompleteInternal, {
+				jobId,
+				result: result.description
+			});
+		} else {
+			await ctx.runMutation(internal.aiJobCommands.recordDescriptionGenerationErrorInternal, {
+				jobId,
+				error: result.error ?? 'Description generation failed.'
+			});
+		}
+
+		return result;
 	}
 });

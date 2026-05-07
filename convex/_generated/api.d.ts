@@ -8,9 +8,13 @@
  * @module
  */
 
+import type * as aiJobCommands from "../aiJobCommands.js";
+import type * as aiJobTypes from "../aiJobTypes.js";
+import type * as aiJobViews from "../aiJobViews.js";
 import type * as aiValidationCheckTypes from "../aiValidationCheckTypes.js";
 import type * as aiValidationChecks from "../aiValidationChecks.js";
 import type * as anthropicLlmProvider from "../anthropicLlmProvider.js";
+import type * as descriptionGenerationTypes from "../descriptionGenerationTypes.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
 import type * as llmProvider from "../llmProvider.js";
@@ -34,9 +38,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiJobCommands: typeof aiJobCommands;
+  aiJobTypes: typeof aiJobTypes;
+  aiJobViews: typeof aiJobViews;
   aiValidationCheckTypes: typeof aiValidationCheckTypes;
   aiValidationChecks: typeof aiValidationChecks;
   anthropicLlmProvider: typeof anthropicLlmProvider;
+  descriptionGenerationTypes: typeof descriptionGenerationTypes;
   eventPlaylistStats: typeof eventPlaylistStats;
   events: typeof events;
   llmProvider: typeof llmProvider;

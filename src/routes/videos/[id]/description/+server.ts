@@ -1,28 +1,11 @@
 import { error, json } from '@sveltejs/kit';
-import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
-import { api, internal } from '../../../../../convex/_generated/api';
+import { getConvexClient } from '$lib/server/convex';
+import { api } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
 
-function speakerNames(
-	speakers: Array<{
-		speaker: {
-			name: string;
-			company?: string;
-			position?: string;
-		};
-	}>
-) {
-	return speakers
-		.map((row) =>
-			[row.speaker.name, row.speaker.position, row.speaker.company].filter(Boolean).join(', ')
-		)
-		.join('; ');
-}
-
-export const POST: RequestHandler = async ({ params }) => {
-	const client = getConvexClient();
+async function resolveVideoView(client: ReturnType<typeof getConvexClient>, routeParam: string) {
 	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
-		routeParam: params.id
+		routeParam
 	});
 	const videoView = routeTarget?.videoView ?? null;
 
@@ -30,56 +13,25 @@ export const POST: RequestHandler = async ({ params }) => {
 		throw error(404, 'Video not found.');
 	}
 
-	const captions = await convexAdminFunction(internal.videoCaptions.collectByVideoIdInternal, {
+	return videoView;
+}
+
+export const GET: RequestHandler = async ({ params }) => {
+	const client = getConvexClient();
+	const videoView = await resolveVideoView(client, params.id);
+	const job = await client.query(api.aiJobViews.getLatestDescriptionGenerationForVideo, {
 		videoId: videoView.video._id
 	});
-	const caption = captions[0];
 
-	if (!caption) {
-		return json({
-			description: null,
-			error: 'Fetch captions before generating a structured description.'
-		});
-	}
+	return json({ job });
+};
 
-	const result = await client.action(api.videoWorkflows.generateDescription, {
-		input: {
-			video: {
-				youtubeVideoId: videoView.video.youtubeVideoId,
-				title: videoView.video.title,
-				description: videoView.video.description,
-				channelTitle: videoView.video.channelTitle,
-				publishedAt: videoView.video.publishedAt,
-				videoPublishedAt: videoView.video.videoPublishedAt,
-				videoType: videoView.video.videoType
-			},
-			speakers: videoView.speakers.map((row) => ({
-				name: row.speaker.name,
-				company: row.speaker.company,
-				position: row.speaker.position
-			})),
-			assignments: videoView.assignments.map((row) => ({
-				assignmentId: row.assignment._id,
-				event: row.event
-			})),
-			caption: {
-				language: caption.language,
-				name: caption.name,
-				trackKind: caption.trackKind,
-				body: caption.body
-			},
-			host: {
-				label: 'WorkOS',
-				url: 'https://workos.com'
-			}
-		}
+export const POST: RequestHandler = async ({ params }) => {
+	const client = getConvexClient();
+	const videoView = await resolveVideoView(client, params.id);
+	const result = await client.mutation(api.aiJobCommands.requestDescriptionGeneration, {
+		videoId: videoView.video._id
 	});
 
-	return json({
-		...result,
-		context: {
-			captionId: caption._id,
-			speakers: speakerNames(videoView.speakers)
-		}
-	});
+	return json(result);
 };
