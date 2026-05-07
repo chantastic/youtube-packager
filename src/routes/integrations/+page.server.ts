@@ -15,6 +15,17 @@ import {
 	youtubeWriteScope,
 	type YouTubeOAuthMode
 } from '$lib/server/youtube-oauth';
+import {
+	getConnectedYouTubePipesAccessToken,
+	pipesAccessTokenHasScope,
+	youtubeTokenSource
+} from '$lib/server/youtube-connection';
+import {
+	getWorkOSPipesAccessToken,
+	getWorkOSPipesAuthorizationUrl,
+	workosPipesConfigError,
+	workosPipesProvider
+} from '$lib/server/workos-pipes';
 import type { Actions, PageServerLoad } from './$types';
 
 export const csr = false;
@@ -65,26 +76,72 @@ function authorizationUrlFor(event: OAuthActionEvent, mode: YouTubeOAuthMode) {
 export const load: PageServerLoad = async (event) => {
 	const auth = authContext(event);
 	const adminConfigError = convexAdminConfigError();
-	const configError = youtubeOAuthConfigError() ?? adminConfigError;
-	const connection = adminConfigError
+	const directConfigError = youtubeOAuthConfigError() ?? adminConfigError;
+	const pipesConfigError = workosPipesConfigError();
+	let pipesConnection: Awaited<ReturnType<typeof getWorkOSPipesAccessToken>> | null = null;
+	let pipesError: string | null = null;
+
+	if (!pipesConfigError) {
+		try {
+			pipesConnection = await getWorkOSPipesAccessToken(auth);
+		} catch (error) {
+			pipesError = error instanceof Error ? error.message : 'WorkOS Pipes connection check failed.';
+		}
+	}
+
+	const directConnection = adminConfigError
 		? null
 		: await convexAdminFunction(
 				internal.youtubeConnections.findByUserIdAndOrganizationKeyInternal,
 				auth
 			);
-	const scopes = connection?.scopes ?? [];
+	const directScopes = directConnection?.scopes ?? [];
 
 	return {
-		connection,
+		pipesProvider: workosPipesProvider(),
+		pipesConnection,
+		pipesConfigError,
+		pipesError,
+		tokenSource: youtubeTokenSource(),
+		directConnection,
 		readonlyScope: youtubeReadonlyScope,
 		writeScope: youtubeWriteScope,
-		hasReadonlyAccess: hasReadonlyScope(scopes),
-		hasWriteAccess: hasWriteScope(scopes),
-		configError
+		hasPipesReadonlyAccess: pipesConnection
+			? pipesAccessTokenHasScope(pipesConnection, { requireWrite: false })
+			: false,
+		hasPipesWriteAccess: pipesConnection
+			? pipesAccessTokenHasScope(pipesConnection, { requireWrite: true })
+			: false,
+		hasDirectReadonlyAccess: hasReadonlyScope(directScopes),
+		hasDirectWriteAccess: hasWriteScope(directScopes),
+		directConfigError
 	};
 };
 
 export const actions: Actions = {
+	connectPipes: async (event) => {
+		let authorizationUrl: string;
+		const auth = authContext(event);
+
+		try {
+			const configError = workosPipesConfigError();
+
+			if (configError) {
+				throw new Error(configError);
+			}
+
+			authorizationUrl = await getWorkOSPipesAuthorizationUrl(auth, {
+				returnTo: `${event.url.origin}/integrations`
+			});
+		} catch (error) {
+			return fail(400, {
+				error: error instanceof Error ? error.message : 'Could not start WorkOS Pipes.'
+			});
+		}
+
+		throw redirect(303, authorizationUrl);
+	},
+
 	connectReadonly: async (event) => {
 		let authorizationUrl: string;
 
@@ -129,6 +186,27 @@ export const actions: Actions = {
 		throw redirect(303, authorizationUrl);
 	},
 
+	testPipesRead: async (event) => {
+		const auth = authContext(event);
+
+		try {
+			const accessToken = await getConnectedYouTubePipesAccessToken(auth);
+			const channels = await listAuthorizedYouTubeChannels(accessToken);
+
+			return {
+				testResult: {
+					checkedAt: new Date().toISOString(),
+					channels,
+					source: 'WorkOS Pipes'
+				}
+			};
+		} catch (caught) {
+			return fail(400, {
+				error: caught instanceof Error ? caught.message : 'WorkOS Pipes YouTube test failed.'
+			});
+		}
+	},
+
 	testRead: async (event) => {
 		const auth = authContext(event);
 		const adminConfigError = convexAdminConfigError();
@@ -161,7 +239,8 @@ export const actions: Actions = {
 			return {
 				testResult: {
 					checkedAt: new Date().toISOString(),
-					channels
+					channels,
+					source: 'Direct Google OAuth'
 				}
 			};
 		} catch (caught) {

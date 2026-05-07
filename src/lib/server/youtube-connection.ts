@@ -1,12 +1,20 @@
 import { redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { internal } from '../../../convex/_generated/api';
 import { convexAdminConfigError, convexAdminFunction } from '$lib/server/convex';
 import {
 	decryptRefreshToken,
 	hasReadonlyScope,
 	hasWriteScope,
-	refreshYouTubeAccessToken
+	refreshYouTubeAccessToken,
+	youtubeReadonlyScope,
+	youtubeWriteScope
 } from '$lib/server/youtube-oauth';
+import {
+	getWorkOSPipesAccessToken,
+	workosPipesProvider,
+	type WorkOSPipesAccessTokenResult
+} from '$lib/server/workos-pipes';
 
 export class YouTubeConnectionError extends Error {
 	status: number;
@@ -47,6 +55,81 @@ export async function getYouTubeConnection(auth: { userId: string; organizationI
 }
 
 export async function getConnectedYouTubeAccessToken(
+	auth: { userId: string; organizationId?: string },
+	{ requireWrite = false }: { requireWrite?: boolean } = {}
+) {
+	const source = youtubeTokenSource();
+
+	if (source !== 'direct') {
+		try {
+			return await getConnectedYouTubePipesAccessToken(auth, { requireWrite });
+		} catch (caught) {
+			if (source !== 'auto') {
+				throw caught;
+			}
+		}
+	}
+
+	return await getConnectedDirectYouTubeAccessToken(auth, { requireWrite });
+}
+
+export function youtubeTokenSource() {
+	const source = env.YOUTUBE_TOKEN_SOURCE;
+
+	return source === 'direct' || source === 'auto' ? source : 'pipes';
+}
+
+export function pipesAccessTokenHasScope(
+	result: WorkOSPipesAccessTokenResult,
+	{ requireWrite = false }: { requireWrite?: boolean } = {}
+) {
+	if (!result.active) {
+		return false;
+	}
+
+	const requiredScope = requireWrite ? youtubeWriteScope : youtubeReadonlyScope;
+
+	if (result.accessToken.missingScopes.includes(requiredScope)) {
+		return false;
+	}
+
+	if (!result.accessToken.scopes.length) {
+		return true;
+	}
+
+	return requireWrite
+		? hasWriteScope(result.accessToken.scopes)
+		: hasReadonlyScope(result.accessToken.scopes);
+}
+
+export async function getConnectedYouTubePipesAccessToken(
+	auth: { userId: string; organizationId?: string },
+	{ requireWrite = false }: { requireWrite?: boolean } = {}
+) {
+	const result = await getWorkOSPipesAccessToken(auth);
+
+	if (!result.active) {
+		throw new YouTubeConnectionError(
+			result.error === 'needs_reauthorization'
+				? 'Reauthorize YouTube in WorkOS Pipes before using the YouTube API.'
+				: 'Connect YouTube in WorkOS Pipes before using the YouTube API.',
+			401
+		);
+	}
+
+	if (!pipesAccessTokenHasScope(result, { requireWrite })) {
+		throw new YouTubeConnectionError(
+			requireWrite
+				? `Reconnect ${workosPipesProvider()} in WorkOS Pipes with YouTube metadata write access.`
+				: `Reconnect ${workosPipesProvider()} in WorkOS Pipes with YouTube read access.`,
+			403
+		);
+	}
+
+	return result.accessToken.token;
+}
+
+async function getConnectedDirectYouTubeAccessToken(
 	auth: { userId: string; organizationId?: string },
 	{ requireWrite = false }: { requireWrite?: boolean } = {}
 ) {

@@ -49,6 +49,7 @@
 		"wrangler": "^4.88.0"
 	},
 	"dependencies": {
+		"@workos-inc/node": "^9.2.0",
 		"@workos/authkit-sveltekit": "^0.3.0",
 		"convex": "^1.37.0",
 		"lucide-svelte": "^1.0.1"

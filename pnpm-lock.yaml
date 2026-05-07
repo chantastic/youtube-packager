@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@workos-inc/node':
+        specifier: ^9.2.0
+        version: 9.2.0
       '@workos/authkit-sveltekit':
         specifier: ^0.3.0
         version: 0.3.0(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@7.1.0(svelte@5.55.5(@typescript-eslint/types@8.59.2))(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)))(svelte@5.55.5(@typescript-eslint/types@8.59.2))(typescript@6.0.3)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)))(typescript@6.0.3)
@@ -1132,6 +1135,10 @@ packages:
   '@workos-inc/node@8.13.0':
     resolution: {integrity: sha512-NgQKHpwh8AbT4KvAsW91Y+4f4jja2IvFPQ5atcy5NUxUMVRgXzRFEee3erawfXrTmiCVqJjd9PljHySKBXmHKQ==}
     engines: {node: '>=20.15.0'}
+
+  '@workos-inc/node@9.2.0':
+    resolution: {integrity: sha512-JAEjrwgr8aETOS7YzHmSlPj+1LCXonAKGX1/B89hIZ+l+YgQGJrdFZnBqBSlDnqUaOtxDZkGwg7V3LFNkF+evg==}
+    engines: {node: '>=22.11.0'}
 
   '@workos/authkit-session@0.5.1':
     resolution: {integrity: sha512-4nyHhxEfztJmmruMhefmxu/b2ElzswjlUZH/fub1GFXtLN1RNmT552L/VbV0by5ailiJYJ3gk7LJQ61obKHZLw==}
@@ -2883,6 +2890,10 @@ snapshots:
       tinyrainbow: 3.1.0
 
   '@workos-inc/node@8.13.0':
+    dependencies:
+      eventemitter3: 5.0.4
+
+  '@workos-inc/node@9.2.0':
     dependencies:
       eventemitter3: 5.0.4
 

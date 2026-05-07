@@ -23,19 +23,40 @@ Create `.env.local` with:
 ```bash
 PUBLIC_CONVEX_URL=your_convex_url
 CONVEX_ADMIN_TOKEN=your_convex_deploy_key
-GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id
-GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/integrations/youtube/callback
-GOOGLE_TOKEN_ENCRYPTION_KEY=base64_32_byte_secret
+WORKOS_CLIENT_ID=your_workos_client_id
+WORKOS_API_KEY=your_workos_api_key
+WORKOS_REDIRECT_URI=http://localhost:5173/auth/callback
+WORKOS_COOKIE_PASSWORD=your_32_character_cookie_password
+YOUTUBE_TOKEN_SOURCE=pipes
+YOUTUBE_PIPES_PROVIDER=google
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_DESCRIPTION_MODEL=claude-opus-4-7
 ANTHROPIC_DESCRIPTION_EFFORT=high
 ```
 
-YouTube Data API calls use the connected Google OAuth account. The app stores the
-Google refresh token encrypted in Convex and uses `CONVEX_ADMIN_TOKEN` to call the
-internal Convex functions that read/write that connection.
+YouTube Data API calls use WorkOS Pipes by default. WorkOS owns the OAuth lifecycle,
+credential storage, and token refresh; this app asks WorkOS for a fresh provider token
+server-side. Configure the Google provider in Pipes with the YouTube scopes the app needs.
+
+`YOUTUBE_TOKEN_SOURCE` supports:
+
+- `pipes` - use WorkOS Pipes only.
+- `direct` - use the legacy direct Google OAuth connection.
+- `auto` - try Pipes first, then fall back to the legacy direct connection.
+
+The legacy direct Google OAuth path is still available as a fallback. If you use
+`YOUTUBE_TOKEN_SOURCE=direct` or `auto`, also set:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/integrations/youtube/callback
+GOOGLE_TOKEN_ENCRYPTION_KEY=base64_32_byte_secret
+```
+
+The direct path stores the Google refresh token encrypted in Convex and uses
+`CONVEX_ADMIN_TOKEN` to call the internal Convex functions that read/write that connection.
 
 Generate `GOOGLE_TOKEN_ENCRYPTION_KEY` with:
 

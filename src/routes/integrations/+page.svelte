@@ -4,29 +4,54 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	const connectedAt = $derived(
-		data.connection ? new Date(data.connection.connectedAt).toLocaleString() : null
+	const activePipesConnection = $derived(
+		data.pipesConnection?.active === true ? data.pipesConnection : null
+	);
+	const directConnectedAt = $derived(
+		data.directConnection ? new Date(data.directConnection.connectedAt).toLocaleString() : null
 	);
 	const testResult = $derived(form && 'testResult' in form ? form.testResult : null);
 
-	function statusTone() {
-		if (data.configError) return 'border-amber-200 bg-amber-50 text-amber-800';
-		if (!data.connection) return 'border-amber-200 bg-amber-50 text-amber-800';
-		if (data.connection.status === 'needs_reauthorization') {
+	function pipesStatusTone() {
+		if (data.pipesConfigError || data.pipesError)
 			return 'border-amber-200 bg-amber-50 text-amber-800';
-		}
-		if (data.hasWriteAccess) return 'border-green-200 bg-green-50 text-green-700';
-		if (data.hasReadonlyAccess) return 'border-blue-200 bg-blue-50 text-blue-700';
+		if (!data.pipesConnection) return 'border-amber-200 bg-amber-50 text-amber-800';
+		if (!data.pipesConnection.active) return 'border-amber-200 bg-amber-50 text-amber-800';
+		if (data.hasPipesWriteAccess) return 'border-green-200 bg-green-50 text-green-700';
+		if (data.hasPipesReadonlyAccess) return 'border-blue-200 bg-blue-50 text-blue-700';
 
 		return 'border-amber-200 bg-amber-50 text-amber-800';
 	}
 
-	function statusLabel() {
-		if (data.configError) return 'Configuration issue';
-		if (!data.connection) return 'Not connected';
-		if (data.connection.status === 'needs_reauthorization') return 'Reconnect required';
-		if (data.hasWriteAccess) return 'Write access enabled';
-		if (data.hasReadonlyAccess) return 'Read-only connected';
+	function pipesStatusLabel() {
+		if (data.pipesConfigError) return 'Configuration issue';
+		if (data.pipesError) return 'Pipes check failed';
+		if (!data.pipesConnection) return 'Not connected';
+		if (!data.pipesConnection.active) {
+			return data.pipesConnection.error === 'needs_reauthorization'
+				? 'Reconnect required'
+				: 'Not connected';
+		}
+		if (data.hasPipesWriteAccess) return 'Write access ready';
+		if (data.hasPipesReadonlyAccess) return 'Read access ready';
+
+		return 'Missing YouTube scope';
+	}
+
+	function inactivePipesMessage() {
+		if (!data.pipesConnection || data.pipesConnection.active) return null;
+
+		return data.pipesConnection.error === 'needs_reauthorization'
+			? 'WorkOS says this connection needs reauthorization.'
+			: 'WorkOS says this provider is not installed for this user.';
+	}
+
+	function directStatusLabel() {
+		if (data.directConfigError) return 'Configuration issue';
+		if (!data.directConnection) return 'Not connected';
+		if (data.directConnection.status === 'needs_reauthorization') return 'Reconnect required';
+		if (data.hasDirectWriteAccess) return 'Write access enabled';
+		if (data.hasDirectReadonlyAccess) return 'Read-only connected';
 
 		return 'Missing YouTube scope';
 	}
@@ -50,9 +75,11 @@
 		>
 			<div>
 				<h2 class="text-sm font-semibold text-gray-950">YouTube</h2>
-				<p class="mt-1 text-xs text-gray-500">Direct Google OAuth connection</p>
+				<p class="mt-1 text-xs text-gray-500">WorkOS Pipes provider: {data.pipesProvider}</p>
 			</div>
-			<span class={`rounded border px-2 py-1 text-xs ${statusTone()}`}>{statusLabel()}</span>
+			<span class={`rounded border px-2 py-1 text-xs ${pipesStatusTone()}`}>
+				{pipesStatusLabel()}
+			</span>
 		</div>
 
 		{#if form?.error}
@@ -63,17 +90,19 @@
 
 		<div class="grid gap-0 md:grid-cols-[minmax(0,1fr)_280px]">
 			<div class="px-4 py-4">
-				{#if data.configError}
-					<p class="text-sm text-amber-700">{data.configError}</p>
+				{#if data.pipesConfigError}
+					<p class="text-sm text-amber-700">{data.pipesConfigError}</p>
+				{:else if data.pipesError}
+					<p class="text-sm text-amber-700">{data.pipesError}</p>
 				{:else}
 					<dl class="grid gap-3 text-sm sm:grid-cols-2">
 						<div>
 							<dt class="text-gray-500">Connection</dt>
-							<dd class="mt-1 text-gray-950">{statusLabel()}</dd>
+							<dd class="mt-1 text-gray-950">{pipesStatusLabel()}</dd>
 						</div>
 						<div>
-							<dt class="text-gray-500">Connected</dt>
-							<dd class="mt-1 text-gray-950">{connectedAt ?? 'Not connected'}</dd>
+							<dt class="text-gray-500">Token source</dt>
+							<dd class="mt-1 text-gray-950">{data.tokenSource}</dd>
 						</div>
 						<div>
 							<dt class="text-gray-500">Read-only scope</dt>
@@ -89,33 +118,39 @@
 						</div>
 					</dl>
 
-					{#if data.connection}
+					{#if activePipesConnection}
 						<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
 							<p class="text-xs font-medium text-gray-500 uppercase">Granted scopes</p>
-							{#if data.connection.scopes.length}
+							{#if activePipesConnection.accessToken.scopes.length}
 								<ul class="mt-2 space-y-1">
-									{#each data.connection.scopes as scope (scope)}
+									{#each activePipesConnection.accessToken.scopes as scope (scope)}
 										<li class="font-mono text-xs break-all text-gray-700">{scope}</li>
 									{/each}
 								</ul>
 							{:else}
-								<p class="mt-2 text-sm text-gray-500">No granted scopes returned yet.</p>
+								<p class="mt-2 text-sm text-gray-500">WorkOS did not return scope details.</p>
 							{/if}
-							{#if data.connection.lastError}
-								<p class="mt-3 text-sm text-amber-700">{data.connection.lastError}</p>
+
+							{#if activePipesConnection.accessToken.missingScopes.length}
+								<p class="mt-3 text-xs font-medium text-amber-700 uppercase">Missing scopes</p>
+								<ul class="mt-2 space-y-1">
+									{#each activePipesConnection.accessToken.missingScopes as scope (scope)}
+										<li class="font-mono text-xs break-all text-amber-700">{scope}</li>
+									{/each}
+								</ul>
 							{/if}
+
+							<p class="mt-3 text-xs text-gray-500">
+								Expires:
+								{activePipesConnection.accessToken.expiresAt
+									? new Date(activePipesConnection.accessToken.expiresAt).toLocaleString()
+									: 'Unknown'}
+							</p>
 						</div>
 					{:else}
 						<p class="mt-4 text-sm text-gray-600">
-							Connect read-only access first. Enable metadata writes only when you are ready to
-							apply changes from this app.
-						</p>
-					{/if}
-
-					{#if data.hasWriteAccess}
-						<p class="mt-4 text-sm text-gray-600">
-							This app does not implement YouTube delete calls. Metadata writes will be limited to
-							allowlisted update operations.
+							{inactivePipesMessage() ??
+								'Connect YouTube through WorkOS Pipes before using the YouTube API.'}
 						</p>
 					{/if}
 
@@ -123,7 +158,7 @@
 						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
 							<p class="text-sm font-medium text-green-800">YouTube read test succeeded</p>
 							<p class="mt-1 text-xs text-green-700">
-								Checked {new Date(testResult.checkedAt).toLocaleString()}
+								Checked {new Date(testResult.checkedAt).toLocaleString()} via {testResult.source}
 							</p>
 
 							{#if testResult.channels.length}
@@ -149,55 +184,54 @@
 								</ul>
 							{:else}
 								<p class="mt-2 text-sm text-green-700">
-									Token refresh worked, but YouTube did not return a channel for this account.
+									WorkOS returned a token, but YouTube did not return a channel for this account.
 								</p>
 							{/if}
 						</div>
 					{/if}
+
+					<details class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
+						<summary class="cursor-pointer text-sm font-medium text-gray-700">
+							Legacy direct OAuth fallback
+						</summary>
+						<dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+							<div>
+								<dt class="text-gray-500">Status</dt>
+								<dd class="mt-1 text-gray-950">{directStatusLabel()}</dd>
+							</div>
+							<div>
+								<dt class="text-gray-500">Connected</dt>
+								<dd class="mt-1 text-gray-950">{directConnectedAt ?? 'Not connected'}</dd>
+							</div>
+						</dl>
+						{#if data.directConnection?.lastError}
+							<p class="mt-3 text-sm text-amber-700">{data.directConnection.lastError}</p>
+						{/if}
+					</details>
 				{/if}
 			</div>
 
 			<div class="border-t border-gray-100 bg-gray-50 px-4 py-4 md:border-t-0 md:border-l">
 				<div class="space-y-3">
-					<form method="POST" action="?/connectReadonly">
+					<form method="POST" action="?/connectPipes">
 						<button
 							type="submit"
-							disabled={Boolean(data.configError)}
-							class="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-						>
-							{data.hasReadonlyAccess ? 'Reconnect Read-Only' : 'Connect Read-Only'}
-						</button>
-					</form>
-
-					<form method="POST" action="?/connectWrite">
-						<button
-							type="submit"
-							disabled={Boolean(data.configError)}
+							disabled={Boolean(data.pipesConfigError)}
 							class="w-full rounded bg-gray-950 px-3 py-2 text-sm text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 						>
-							{data.hasWriteAccess ? 'Reconnect Writes' : 'Enable Metadata Writes'}
+							{activePipesConnection ? 'Reconnect WorkOS Pipes' : 'Connect WorkOS Pipes'}
 						</button>
 					</form>
 
-					{#if data.connection}
-						<form method="POST" action="?/testRead">
-							<button
-								type="submit"
-								class="w-full rounded border border-green-200 px-3 py-2 text-sm text-green-700 hover:bg-green-50"
-							>
-								Test Read Access
-							</button>
-						</form>
-
-						<form method="POST" action="?/disconnect">
-							<button
-								type="submit"
-								class="w-full rounded border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-							>
-								Disconnect YouTube
-							</button>
-						</form>
-					{/if}
+					<form method="POST" action="?/testPipesRead">
+						<button
+							type="submit"
+							disabled={Boolean(data.pipesConfigError || data.pipesError)}
+							class="w-full rounded border border-green-200 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+						>
+							Test YouTube Access
+						</button>
+					</form>
 
 					<a
 						href="https://studio.youtube.com/"
