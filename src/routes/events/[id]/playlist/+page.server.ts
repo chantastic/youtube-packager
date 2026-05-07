@@ -90,7 +90,8 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row)
+			video: videoRecordForValidation(row),
+			disabledTitleValidationIds: row.video.disabledTitleValidationIds
 		})) {
 			inputsByKey.set(titleAiValidationInputKey(input), input);
 		}
@@ -120,7 +121,8 @@ async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event:
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row)
+			video: videoRecordForValidation(row),
+			disabledTitleValidationIds: row.video.disabledTitleValidationIds
 		}).map((input) => {
 			const validation =
 				cachedTitleAiChecks.validationsByInputKey[titleAiValidationInputKey(input)];

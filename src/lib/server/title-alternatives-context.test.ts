@@ -112,4 +112,34 @@ describe('title alternatives context', () => {
 			message: 'Starts with weak framing'
 		});
 	});
+
+	test('excludes disabled validation checks from title generation context', () => {
+		const viewWithDisabled = {
+			...videoView,
+			video: {
+				...videoView.video,
+				disabledTitleValidationIds: ['hook', 'profile']
+			}
+		} satisfies TitleAlternativesVideoView;
+		const context = prepareTitleAlternativesValidationContext(viewWithDisabled);
+		const aiValidationsByInputKey = new Map(
+			[...context.aiInputsByKey.entries()].map(([inputKey, input]) => [
+				inputKey,
+				{
+					id: input.checkId,
+					label: input.label,
+					status: 'pass' as const,
+					message: 'Looks clean'
+				}
+			])
+		);
+		const input = buildTitleAlternativesInput(viewWithDisabled, context, aiValidationsByInputKey);
+
+		expect([...context.aiInputsByKey.values()].map((item) => item.checkId)).toEqual(['mechanics']);
+		expect(input.assignments[0].titleValidations?.map((validation) => validation.id)).toEqual([
+			'event',
+			'format',
+			'mechanics'
+		]);
+	});
 });

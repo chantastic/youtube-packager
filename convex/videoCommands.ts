@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation } from './_generated/server';
+import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { validationStatValidator } from './videoValidationTypes';
 import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
@@ -59,6 +60,23 @@ export const recordTitle = mutation({
 	handler: async (ctx, { videoId, title }) => {
 		const video = await getVideoOrThrow(ctx, videoId);
 		await ctx.db.patch(video._id, { title });
+
+		return await ctx.db.get(video._id);
+	}
+});
+
+export const setDisabledTitleValidations = mutation({
+	args: {
+		videoId: v.id('videos'),
+		disabledTitleValidationIds: v.array(titleValidationCheckIdValidator)
+	},
+	handler: async (ctx, { videoId, disabledTitleValidationIds }) => {
+		const video = await getVideoOrThrow(ctx, videoId);
+		const dedupedIds = [...new Set(disabledTitleValidationIds)];
+
+		await ctx.db.patch(video._id, {
+			disabledTitleValidationIds: dedupedIds.length ? dedupedIds : undefined
+		});
 
 		return await ctx.db.get(video._id);
 	}
@@ -341,6 +359,9 @@ async function recordVideoSnapshot(
 				: {}),
 			...(existingVideo.titleOverride !== undefined
 				? { titleOverride: existingVideo.titleOverride }
+				: {}),
+			...(existingVideo.disabledTitleValidationIds !== undefined
+				? { disabledTitleValidationIds: existingVideo.disabledTitleValidationIds }
 				: {}),
 			...(existingVideo.videoType !== undefined
 				? { videoType: existingVideo.videoType }

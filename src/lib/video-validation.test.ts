@@ -4,7 +4,8 @@ import {
 	validateTitleEventSuffix,
 	validateTitleFocus,
 	validateTitleProfile,
-	validateVideoBaseline
+	validateVideoBaseline,
+	summarizeVideoValidations
 } from './video-validation';
 
 const event = {
@@ -180,6 +181,45 @@ describe('video validation', () => {
 		);
 
 		expect(validations.map((validation) => validation.id)).toEqual(['profile', 'event', 'format']);
+	});
+
+	test('baseline validation excludes checks disabled on the video record', () => {
+		const validations = validateVideoBaseline(
+			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
+			event,
+			{
+				speakers: [{ name: 'Chan', company: 'WorkOS' }],
+				video: {
+					speaker: 'Chan',
+					company: 'WorkOS',
+					videoType: 'talk'
+				},
+				disabledTitleValidationIds: ['profile', 'format']
+			}
+		);
+
+		expect(validations.map((validation) => validation.id)).toEqual(['event']);
+	});
+
+	test('aggregate validation stats only count active validations', () => {
+		const validations = validateVideoBaseline(
+			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
+			event,
+			{
+				speakers: [{ name: 'Chan', company: 'WorkOS' }],
+				video: {
+					speaker: 'Chan',
+					company: 'WorkOS',
+					videoType: 'talk'
+				},
+				disabledTitleValidationIds: ['profile']
+			}
+		);
+
+		expect(summarizeVideoValidations([validations]).map((validation) => validation.id)).toEqual([
+			'event',
+			'format'
+		]);
 	});
 
 	test('baseline validation omits profile when there is no video context', () => {

@@ -13,6 +13,7 @@
 		videoTypeOptions
 	} from '$lib/title-format';
 	import {
+		filterDisabledTitleValidations,
 		validateVideoBaseline,
 		youtubeTitleFocusLength,
 		type VideoValidation
@@ -134,12 +135,16 @@
 
 		return validateVideoBaseline(videoTitle, data.event, {
 			speakers: titleFocusSpeakers(videoId),
-			...(video ? { video } : {})
+			...(video ? { video } : {}),
+			disabledTitleValidationIds: assignmentRowFor(videoId)?.video.disabledTitleValidationIds
 		});
 	}
 
 	function titleAiChecksForVideo(videoId: string) {
-		return titleAiChecksByVideoId[videoId] ?? [];
+		return filterDisabledTitleValidations(
+			titleAiChecksByVideoId[videoId] ?? [],
+			assignmentRowFor(videoId)?.video.disabledTitleValidationIds
+		);
 	}
 
 	function validationsForVideo(videoId: string, videoTitle: string) {

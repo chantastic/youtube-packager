@@ -44,6 +44,7 @@ type TitleFocusContext = {
 
 type VideoBaselineContext = TitleFocusContext & {
 	video?: VideoTitleFormatRecord;
+	disabledTitleValidationIds?: string[];
 };
 
 const weakTitleOpeners = [
@@ -282,11 +283,14 @@ export function validateVideoBaseline(
 
 	const profileValidation = validateTitleProfile(title, context);
 
-	return [
-		...(profileValidation ? [profileValidation] : []),
-		validateTitleEventSuffix(title, event),
-		...(context.video ? [validateSelectedTitleFormat(title, event, context.video)] : [])
-	];
+	return filterDisabledTitleValidations(
+		[
+			...(profileValidation ? [profileValidation] : []),
+			validateTitleEventSuffix(title, event),
+			...(context.video ? [validateSelectedTitleFormat(title, event, context.video)] : [])
+		],
+		context.disabledTitleValidationIds
+	);
 }
 
 export function pendingVideoValidation(id: string, label = titleCheckLabel(id)): VideoValidation {
@@ -306,6 +310,23 @@ export function videoValidationContextKey(event: TitleFormatEvent) {
 		year: event.year ?? null,
 		titleFormat: normalizeTitleFormat(event.titleFormat)
 	});
+}
+
+export function titleValidationIsDisabled(id: string, disabledTitleValidationIds?: string[]) {
+	return Boolean(disabledTitleValidationIds?.includes(id));
+}
+
+export function filterDisabledTitleValidations<T extends { id: string }>(
+	validations: T[],
+	disabledTitleValidationIds?: string[]
+) {
+	if (!disabledTitleValidationIds?.length) {
+		return validations;
+	}
+
+	const disabledIds = new Set(disabledTitleValidationIds);
+
+	return validations.filter((validation) => !disabledIds.has(validation.id));
 }
 
 export function summarizeVideoValidations(validationsByVideo: VideoValidation[][]) {

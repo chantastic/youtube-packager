@@ -17,6 +17,7 @@ export type TitleAlternativesVideoView = {
 		publishedAt?: string;
 		videoPublishedAt?: string;
 		titleOverride?: string;
+		disabledTitleValidationIds?: string[];
 		videoTitleFormat?: string;
 		videoType?: VideoTitleFormatRecord['videoType'];
 	};
@@ -92,7 +93,8 @@ export function prepareTitleAlternativesValidationContext(
 			title: videoView.video.title,
 			event: row.event,
 			speakers: validationSpeakers,
-			video: videoRecord
+			video: videoRecord,
+			disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 		});
 		const inputKeys = inputs.map(titleAiValidationInputKey);
 
@@ -136,7 +138,8 @@ export function buildTitleAlternativesInput(
 			titleValidations: [
 				...validateVideoBaseline(videoView.video.title, row.event, {
 					speakers: context.validationSpeakers,
-					video: context.videoRecord
+					video: context.videoRecord,
+					disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 				}),
 				...(context.aiInputKeysByAssignmentId.get(row.assignment._id) ?? [])
 					.map((inputKey) => aiValidationsByInputKey.get(inputKey))

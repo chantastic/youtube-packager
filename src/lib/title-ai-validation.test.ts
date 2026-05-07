@@ -86,6 +86,36 @@ describe('title AI validation inputs', () => {
 		]);
 	});
 
+	test('skips disabled AI validation checks', () => {
+		expect(
+			buildTitleAiValidationInputs({
+				videoId: 'video-1',
+				title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+				event: {
+					name: 'TestConf',
+					year: 2026,
+					titleFormat: '{title} | {event_name} {year}'
+				},
+				disabledTitleValidationIds: ['hook']
+			}).map((input) => input.checkId)
+		).toEqual(['mechanics']);
+	});
+
+	test('returns no AI validation inputs when all AI checks are disabled', () => {
+		expect(
+			buildTitleAiValidationInputs({
+				videoId: 'video-1',
+				title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+				event: {
+					name: 'TestConf',
+					year: 2026,
+					titleFormat: '{title} | {event_name} {year}'
+				},
+				disabledTitleValidationIds: ['hook', 'mechanics']
+			})
+		).toEqual([]);
+	});
+
 	test('input key changes when the validation input changes', () => {
 		const first = buildTitleAiValidationInputs({
 			videoId: 'video-1',

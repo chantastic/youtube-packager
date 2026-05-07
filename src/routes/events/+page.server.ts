@@ -102,7 +102,8 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 			title: row.video.title,
 			event,
 			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row)
+			video: videoRecordForValidation(row),
+			disabledTitleValidationIds: row.video.disabledTitleValidationIds
 		})) {
 			inputsByKey.set(titleAiValidationInputKey(input), input);
 		}
@@ -121,7 +122,8 @@ function cachedAiValidationsForRow(
 		title: row.video.title,
 		event,
 		speakers: speakerRecordsForValidation(row),
-		video: videoRecordForValidation(row)
+		video: videoRecordForValidation(row),
+		disabledTitleValidationIds: row.video.disabledTitleValidationIds
 	}).map((input) => {
 		const validation = cachedTitleAiChecks?.validationsByInputKey[titleAiValidationInputKey(input)];
 
@@ -227,7 +229,8 @@ export const load: PageServerLoad = async () => {
 					assignments.map((row) => [
 						...validateVideoBaseline(row.video.title, event, {
 							speakers: speakerRecordsForValidation(row),
-							video: videoRecordForValidation(row)
+							video: videoRecordForValidation(row),
+							disabledTitleValidationIds: row.video.disabledTitleValidationIds
 						}),
 						...cachedAiValidationsForRow(row, event, aiCache)
 					])

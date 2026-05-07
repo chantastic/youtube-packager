@@ -14,10 +14,12 @@
 	} from '$lib/title-format';
 	import { youtubePlaylistUrl } from '$lib/youtube';
 	import {
+		filterDisabledTitleValidations,
 		validateVideoBaseline,
 		youtubeTitleMaxLength,
 		type VideoValidation
 	} from '$lib/video-validation';
+	import { titleCheckDefinitions } from '$lib/title-checks';
 	import { CirclePlay, ListVideo, SquarePen } from 'lucide-svelte';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
@@ -51,6 +53,7 @@
 	let titleAlternativesByAssignmentId = $state<Record<string, AssignmentTitleAlternatives>>({});
 	let titleAlternativesError = $state<string | null>(null);
 	let titleAlternativesLoading = $state(false);
+	let validationPreferencesSaved = $state(false);
 	let copiedTitle = $state<string | null>(null);
 	let descriptionJob = $state<DescriptionJob | null>(currentDescriptionJob());
 	let generatedDescription = $state<GeneratedDescription | null>(
@@ -231,8 +234,20 @@
 	) {
 		return validateVideoBaseline(data.videoView.video.title, event, {
 			speakers: titleFocusSpeakers(),
-			video: videoTitleRecord()
+			video: videoTitleRecord(),
+			disabledTitleValidationIds: data.videoView.video.disabledTitleValidationIds
 		});
+	}
+
+	function activeTitleAiChecks() {
+		return filterDisabledTitleValidations(
+			titleAiChecks,
+			data.videoView.video.disabledTitleValidationIds
+		);
+	}
+
+	function disabledTitleValidationIds() {
+		return new Set(data.videoView.video.disabledTitleValidationIds ?? []);
 	}
 
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
@@ -319,6 +334,30 @@
 
 			setTimeout(() => {
 				metadataSaved = false;
+			}, 1600);
+		};
+	}
+
+	function afterValidationPreferencesUpdate() {
+		return async ({
+			update,
+			result
+		}: {
+			update: () => Promise<void>;
+			result: { type: string };
+		}) => {
+			await update();
+			if (result.type !== 'success') {
+				validationPreferencesSaved = false;
+				return;
+			}
+
+			await loadTitleAiChecks();
+			titleAlternativesByAssignmentId = {};
+			validationPreferencesSaved = true;
+
+			setTimeout(() => {
+				validationPreferencesSaved = false;
 			}, 1600);
 		};
 	}
@@ -1027,13 +1066,45 @@
 			<h2 class="text-sm font-semibold text-gray-950">Video Validations</h2>
 		</div>
 		<div class="px-4 py-4">
+			<form
+				method="POST"
+				action="?/setValidationPreferences"
+				use:enhance={afterValidationPreferencesUpdate}
+				class="mb-4 rounded border border-gray-200 bg-gray-50 p-3"
+			>
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<p class="text-xs font-medium text-gray-500 uppercase">Active checks</p>
+						<div class="mt-2 flex flex-wrap gap-3">
+							{#each titleCheckDefinitions as check (check.id)}
+								<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+									<input
+										type="checkbox"
+										name="enabledTitleValidationIds"
+										value={check.id}
+										checked={!disabledTitleValidationIds().has(check.id)}
+										class="rounded border-gray-300 text-gray-950 focus:ring-gray-950"
+									/>
+									{check.label}
+								</label>
+							{/each}
+						</div>
+					</div>
+					<button
+						type="submit"
+						class="rounded bg-white px-2.5 py-1.5 text-xs text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"
+					>
+						{validationPreferencesSaved ? 'Saved' : 'Save Checks'}
+					</button>
+				</div>
+			</form>
 			{#if titleAiChecksLoading}
 				<p class="text-sm text-gray-500">Checking AI title validations...</p>
 			{:else if titleAiChecksError}
 				<p class="text-sm text-amber-700">{titleAiChecksError}</p>
-			{:else if titleAiChecks.length}
+			{:else if activeTitleAiChecks().length}
 				<div class="flex flex-wrap gap-2">
-					{#each titleAiChecks as validation (validation.id)}
+					{#each activeTitleAiChecks() as validation (validation.id)}
 						<span
 							class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
 							title={validation.expected ? `Expected: ${validation.expected}` : undefined}
@@ -1042,7 +1113,7 @@
 						</span>
 					{/each}
 				</div>
-				{#each titleAiChecks as validation (validation.id)}
+				{#each activeTitleAiChecks() as validation (validation.id)}
 					{#if validation.details?.length}
 						<p class="mt-2 text-xs text-gray-500">{validation.details.join(' ')}</p>
 					{/if}
@@ -1051,7 +1122,7 @@
 					{/if}
 				{/each}
 			{:else}
-				<p class="text-sm text-gray-500">No AI title checks have returned yet.</p>
+				<p class="text-sm text-gray-500">No active AI title checks have returned yet.</p>
 			{/if}
 		</div>
 	</section>

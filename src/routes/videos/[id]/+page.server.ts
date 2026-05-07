@@ -5,6 +5,7 @@ import {
 	isVideoType,
 	type VideoTitleFormatRecord
 } from '$lib/title-format';
+import { isTitleCheckId, titleCheckIds } from '$lib/title-checks';
 import {
 	getConnectedYouTubeAccessToken,
 	YouTubeConnectionError,
@@ -156,7 +157,8 @@ export const load: PageServerLoad = async (event) => {
 				row.assignment._id,
 				validateVideoBaseline(videoView.video.title, row.event, {
 					speakers,
-					video: selectedTitleFormat
+					video: selectedTitleFormat,
+					disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 				})
 			])
 		)
@@ -304,6 +306,30 @@ export const actions: Actions = {
 
 			throw caught;
 		}
+	},
+
+	setValidationPreferences: async (event) => {
+		const data = await event.request.formData();
+		const enabledTitleValidationIds = new Set(
+			data
+				.getAll('enabledTitleValidationIds')
+				.filter((value): value is string => typeof value === 'string')
+				.filter(isTitleCheckId)
+		);
+		const disabledTitleValidationIds = titleCheckIds.filter(
+			(checkId) => !enabledTitleValidationIds.has(checkId)
+		);
+		const client = getConvexClient();
+		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+
+		await client.mutation(api.videoCommands.setDisabledTitleValidations, {
+			videoId: videoView.video._id,
+			disabledTitleValidationIds
+		});
+
+		return {
+			validationPreferencesMessage: 'Saved validation checks.'
+		};
 	},
 
 	addSpeaker: async ({ request, params }) => {

@@ -242,6 +242,10 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		videoTitleFormat: '{title} — {speaker}, {company}',
 		videoType: 'panelDiscussion'
 	});
+	await t.mutation(api.videoCommands.setDisabledTitleValidations, {
+		videoId: originalVideoDoc!._id,
+		disabledTitleValidationIds: ['profile', 'mechanics']
+	});
 	await t.mutation(api.videoCommands.assignSpeaker, {
 		videoId: originalVideoDoc!._id,
 		name: 'Chan',
@@ -270,7 +274,8 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		title: 'Updated title',
 		titleOverride: 'A Fully Custom Video Title',
 		videoTitleFormat: '{title} — {speaker}, {company}',
-		videoType: 'panelDiscussion'
+		videoType: 'panelDiscussion',
+		disabledTitleValidationIds: ['profile', 'mechanics']
 	});
 	expect(videoView?.speakers).toHaveLength(1);
 	expect(videoView?.speakers[0].speaker).toMatchObject({
@@ -312,6 +317,40 @@ test('video title override can be cleared', async () => {
 	});
 
 	expect(updatedVideoDoc?.titleOverride).toBeUndefined();
+});
+
+test('disabled title validations can be cleared', async () => {
+	const t = convexTest(schema, modules);
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
+
+	await t.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
+		}
+	});
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	await t.mutation(api.videoCommands.setDisabledTitleValidations, {
+		videoId: videoDoc!._id,
+		disabledTitleValidationIds: ['event', 'format', 'event']
+	});
+	await t.mutation(api.videoCommands.setDisabledTitleValidations, {
+		videoId: videoDoc!._id,
+		disabledTitleValidationIds: []
+	});
+
+	const updatedVideoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'video-1'
+	});
+
+	expect(updatedVideoDoc?.disabledTitleValidationIds).toBeUndefined();
 });
 
 test('existing speakers can be assigned to another video', async () => {

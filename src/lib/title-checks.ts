@@ -36,6 +36,7 @@ export type TitleCheckId = TitleCheckDefinition['id'];
 export type TitleAiCheckId = Extract<TitleCheckDefinition, { kind: 'ai' }>['id'];
 
 export const titleCheckOrder = titleCheckDefinitions.map((check) => check.id);
+export const titleCheckIds = titleCheckDefinitions.map((check) => check.id);
 export const titleAiCheckIds = titleCheckDefinitions
 	.filter((check): check is Extract<TitleCheckDefinition, { kind: 'ai' }> => check.kind === 'ai')
 	.map((check) => check.id);
@@ -50,4 +51,8 @@ export function titleCheckLabel(checkId: string) {
 
 export function isTitleAiCheckId(checkId: string): checkId is TitleAiCheckId {
 	return titleAiCheckIds.includes(checkId as TitleAiCheckId);
+}
+
+export function isTitleCheckId(checkId: string): checkId is TitleCheckId {
+	return titleCheckIds.includes(checkId as TitleCheckId);
 }

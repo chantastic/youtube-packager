@@ -48,7 +48,8 @@ export const POST: RequestHandler = async ({ params }) => {
 		title: videoView.video.title,
 		...(assignment ? { event: assignment.event } : {}),
 		speakers,
-		video: videoRecord
+		video: videoRecord,
+		disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 	});
 	const result = await client.action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs

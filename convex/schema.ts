@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 import { aiJobStatusValidator, aiJobTaskValidator } from './aiJobTypes';
 import { generatedDescriptionValidator } from './descriptionGenerationTypes';
+import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { videoValidationValidator, validationStatValidator } from './videoValidationTypes';
 
 export default defineSchema({
@@ -18,6 +19,7 @@ export default defineSchema({
 		title: v.string(),
 		description: v.optional(v.string()),
 		titleOverride: v.optional(v.string()),
+		disabledTitleValidationIds: v.optional(v.array(titleValidationCheckIdValidator)),
 		videoTitleFormat: v.optional(v.string()),
 		videoType: v.optional(
 			v.union(
