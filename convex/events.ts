@@ -8,20 +8,12 @@ export const collect = query({
 	args: {},
 	handler: async (ctx) => {
 		const organizationId = await requireOrganizationId(ctx);
-		const [organizationEvents, legacyEvents] = await Promise.all([
-			ctx.db
-				.query('events')
-				.withIndex('by_organizationId', (q) => q.eq('organizationId', organizationId))
-				.order('asc')
-				.take(100),
-			ctx.db
-				.query('events')
-				.withIndex('by_organizationId', (q) => q.eq('organizationId', undefined))
-				.order('asc')
-				.take(100)
-		]);
 
-		return [...legacyEvents, ...organizationEvents].slice(0, 100);
+		return await ctx.db
+			.query('events')
+			.withIndex('by_organizationId', (q) => q.eq('organizationId', organizationId))
+			.order('asc')
+			.take(100);
 	}
 });
 

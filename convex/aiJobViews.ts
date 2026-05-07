@@ -73,7 +73,7 @@ async function collectDescriptionGenerationJobs(
 	limit: number,
 	organizationId: string
 ) {
-	const scopedJobs = await ctx.db
+	return await ctx.db
 		.query('aiJobs')
 		.withIndex('by_organizationId_and_task_and_videoId_and_queuedAt', (q) =>
 			q
@@ -83,18 +83,6 @@ async function collectDescriptionGenerationJobs(
 		)
 		.order('desc')
 		.take(limit);
-	const legacyJobs = await ctx.db
-		.query('aiJobs')
-		.withIndex('by_task_and_videoId_and_queuedAt', (q) =>
-			q.eq('task', descriptionGenerationTask).eq('videoId', videoId)
-		)
-		.order('desc')
-		.take(limit);
-
-	return [
-		...legacyJobs.filter((job) => documentBelongsToOrganization(job, organizationId)),
-		...scopedJobs
-	].slice(0, limit);
 }
 
 async function buildDescriptionGenerationInput(

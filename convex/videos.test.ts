@@ -135,7 +135,7 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 	});
 });
 
-test('video view resolves both canonical ids and legacy YouTube video ids', async () => {
+test('video view resolves both canonical ids and YouTube video ids', async () => {
 	const t = convexTest(schema, modules).withIdentity({
 		subject: 'user_test',
 		tokenIdentifier: 'user_test',
@@ -151,24 +151,24 @@ test('video view resolves both canonical ids and legacy YouTube video ids', asyn
 			playlistId: 'PL123',
 			validationContextKey: 'testconf-2026',
 			validationStats: [],
-			videos: [video({ youtubeVideoId: 'legacy-youtube-id' })]
+			videos: [video({ youtubeVideoId: 'youtube-video-id' })]
 		}
 	});
 
 	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
-		youtubeVideoId: 'legacy-youtube-id'
+		youtubeVideoId: 'youtube-video-id'
 	});
 	const canonicalRoute = await t.query(api.videoViews.getByRouteParam, {
 		routeParam: videoDoc!._id
 	});
-	const legacyRoute = await t.query(api.videoViews.getByRouteParam, {
-		routeParam: 'legacy-youtube-id'
+	const youtubeRoute = await t.query(api.videoViews.getByRouteParam, {
+		routeParam: 'youtube-video-id'
 	});
 
 	expect(canonicalRoute?.kind).toBe('id');
 	expect(canonicalRoute?.videoView.video._id).toBe(videoDoc!._id);
-	expect(legacyRoute?.kind).toBe('youtubeVideoId');
-	expect(legacyRoute?.videoView.video._id).toBe(videoDoc!._id);
+	expect(youtubeRoute?.kind).toBe('youtubeVideoId');
+	expect(youtubeRoute?.videoView.video._id).toBe(videoDoc!._id);
 });
 
 test('event type sets the default video type for ingested videos', async () => {

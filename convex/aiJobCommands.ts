@@ -1,11 +1,7 @@
 import { v } from 'convex/values';
 import { internalMutation, mutation } from './_generated/server';
 import { internal } from './_generated/api';
-import {
-	documentBelongsToOrganization,
-	requireDocumentInOrganization,
-	requireOrganizationId
-} from './authz';
+import { requireDocumentInOrganization, requireOrganizationId } from './authz';
 import { descriptionGenerationTask } from './aiJobTypes';
 import { generatedDescriptionValidator } from './descriptionGenerationTypes';
 import type { Doc, Id } from './_generated/dataModel';
@@ -129,7 +125,7 @@ async function findInFlightDescriptionJob(
 	videoId: Id<'videos'>,
 	organizationId: string
 ) {
-	const scopedJobs = await ctx.db
+	const jobs = await ctx.db
 		.query('aiJobs')
 		.withIndex('by_organizationId_and_task_and_videoId_and_queuedAt', (q) =>
 			q
@@ -139,36 +135,17 @@ async function findInFlightDescriptionJob(
 		)
 		.order('desc')
 		.take(10);
-	const legacyJobs = await ctx.db
-		.query('aiJobs')
-		.withIndex('by_task_and_videoId_and_queuedAt', (q) =>
-			q.eq('task', descriptionGenerationTask).eq('videoId', videoId)
-		)
-		.order('desc')
-		.take(10);
-	const jobs = [
-		...legacyJobs.filter((job) => documentBelongsToOrganization(job, organizationId)),
-		...scopedJobs
-	];
 
 	return jobs.find((job) => job.status === 'queued' || job.status === 'running') ?? null;
 }
 
 async function findLatestCaption(ctx: MutationCtx, videoId: Id<'videos'>, organizationId: string) {
-	const scopedCaptions = await ctx.db
+	const captions = await ctx.db
 		.query('videoCaptions')
 		.withIndex('by_organizationId_and_videoId', (q) =>
 			q.eq('organizationId', organizationId).eq('videoId', videoId)
 		)
 		.take(50);
-	const legacyCaptions = await ctx.db
-		.query('videoCaptions')
-		.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
-		.take(50);
-	const captions = [
-		...legacyCaptions.filter((caption) => documentBelongsToOrganization(caption, organizationId)),
-		...scopedCaptions
-	];
 
 	return captions.sort((a, b) => b.fetchedAt - a.fetchedAt)[0] ?? null;
 }

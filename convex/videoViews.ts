@@ -62,51 +62,26 @@ async function findVideoByYoutubeVideoId(
 		)
 		.unique();
 
-	if (scopedVideo) {
-		return scopedVideo;
-	}
-
-	const legacyVideos = await ctx.db
-		.query('videos')
-		.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-		.take(10);
-
-	return legacyVideos.find((video) => video.organizationId === undefined) ?? null;
+	return scopedVideo;
 }
 
 async function buildVideoView(ctx: QueryCtx, video: Doc<'videos'>, organizationId: string) {
-	const scopedAssignments = await ctx.db
+	const assignments = await ctx.db
 		.query('playlistAssignments')
 		.withIndex('by_organizationId_and_videoId', (q) =>
 			q.eq('organizationId', organizationId).eq('videoId', video._id)
 		)
 		.take(100);
-	const legacyAssignments = await ctx.db
-		.query('playlistAssignments')
-		.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-		.take(100);
-	const assignments = [
-		...legacyAssignments.filter((assignment) => assignment.organizationId === undefined),
-		...scopedAssignments
-	];
 	const assignmentsWithEvents: Array<{
 		assignment: Doc<'playlistAssignments'>;
 		event: Doc<'events'>;
 	}> = [];
-	const scopedSpeakerAssignments = await ctx.db
+	const speakerAssignments = await ctx.db
 		.query('videoSpeakers')
 		.withIndex('by_organizationId_and_videoId', (q) =>
 			q.eq('organizationId', organizationId).eq('videoId', video._id)
 		)
 		.take(100);
-	const legacySpeakerAssignments = await ctx.db
-		.query('videoSpeakers')
-		.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-		.take(100);
-	const speakerAssignments = [
-		...legacySpeakerAssignments.filter((assignment) => assignment.organizationId === undefined),
-		...scopedSpeakerAssignments
-	];
 	const speakers: Array<{
 		assignment: Doc<'videoSpeakers'>;
 		speaker: Doc<'speakers'>;

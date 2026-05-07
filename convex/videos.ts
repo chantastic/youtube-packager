@@ -20,22 +20,12 @@ export const findByYoutubeVideoId = query({
 	},
 	handler: async (ctx, { youtubeVideoId }) => {
 		const organizationId = await requireOrganizationId(ctx);
-		const scopedVideo = await ctx.db
+
+		return await ctx.db
 			.query('videos')
 			.withIndex('by_organizationId_and_youtubeVideoId', (q) =>
 				q.eq('organizationId', organizationId).eq('youtubeVideoId', youtubeVideoId)
 			)
 			.unique();
-
-		if (scopedVideo) {
-			return scopedVideo;
-		}
-
-		const legacyVideos = await ctx.db
-			.query('videos')
-			.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', youtubeVideoId))
-			.take(10);
-
-		return legacyVideos.find((video) => video.organizationId === undefined) ?? null;
 	}
 });

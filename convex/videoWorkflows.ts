@@ -125,7 +125,7 @@ function titleAiValidationInputKey(input: TitleAiValidationInput) {
 
 function cacheKeyString(key: AiValidationCacheKey) {
 	return [
-		key.organizationId ?? 'legacy',
+		key.organizationId ?? 'missing-org',
 		key.videoId,
 		key.field,
 		key.checkId,

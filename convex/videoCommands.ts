@@ -1,10 +1,6 @@
 import { v } from 'convex/values';
 import { mutation } from './_generated/server';
-import {
-	documentBelongsToOrganization,
-	requireDocumentInOrganization,
-	requireOrganizationId
-} from './authz';
+import { requireDocumentInOrganization, requireOrganizationId } from './authz';
 import { upsertYoutubeChannel } from './youtubeChannelCommands';
 import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { validationStatValidator } from './videoValidationTypes';
@@ -151,20 +147,15 @@ export const assignSpeaker = mutation({
 			throw new Error('Speaker name is required.');
 		}
 
-		const scopedSpeakers = await ctx.db
+		const existingSpeakers = await ctx.db
 			.query('speakers')
 			.withIndex('by_organizationId_and_name_and_company', (q) =>
 				q.eq('organizationId', organizationId).eq('name', name)
 			)
 			.take(50);
-		const legacySpeakers = await ctx.db
-			.query('speakers')
-			.withIndex('by_name_and_company', (q) => q.eq('name', name))
-			.take(50);
-		const existingSpeaker = [
-			...legacySpeakers.filter((speaker) => !speaker.organizationId),
-			...scopedSpeakers
-		].find((speaker) => speaker.company === company && speaker.position === position);
+		const existingSpeaker = existingSpeakers.find(
+			(speaker) => speaker.company === company && speaker.position === position
+		);
 		const resolvedSpeakerId = existingSpeaker
 			? existingSpeaker._id
 			: await ctx.db.insert('speakers', {
@@ -186,21 +177,14 @@ export const removeSpeaker = mutation({
 	handler: async (ctx, { videoId, speakerId }) => {
 		const organizationId = await requireOrganizationId(ctx);
 		const video = await getVideoOrThrow(ctx, videoId, organizationId);
-		const assignment =
-			(await ctx.db
-				.query('videoSpeakers')
-				.withIndex('by_organizationId_and_videoId_and_speakerId', (q) =>
-					q.eq('organizationId', organizationId).eq('videoId', video._id).eq('speakerId', speakerId)
-				)
-				.unique()) ??
-			(await ctx.db
-				.query('videoSpeakers')
-				.withIndex('by_videoId_and_speakerId', (q) =>
-					q.eq('videoId', video._id).eq('speakerId', speakerId)
-				)
-				.unique());
+		const assignment = await ctx.db
+			.query('videoSpeakers')
+			.withIndex('by_organizationId_and_videoId_and_speakerId', (q) =>
+				q.eq('organizationId', organizationId).eq('videoId', video._id).eq('speakerId', speakerId)
+			)
+			.unique();
 
-		if (assignment && documentBelongsToOrganization(assignment, organizationId)) {
+		if (assignment) {
 			await ctx.db.delete(assignment._id);
 			return assignment;
 		}
@@ -244,17 +228,12 @@ export const recordPlaylistSnapshotByEventId = mutation({
 				youtubeChannelId: playlist.youtubeChannelId
 			});
 		}
-		const existingStats =
-			(await ctx.db
-				.query('eventPlaylistStats')
-				.withIndex('by_organizationId_and_eventId', (q) =>
-					q.eq('organizationId', organizationId).eq('eventId', eventId)
-				)
-				.unique()) ??
-			(await ctx.db
-				.query('eventPlaylistStats')
-				.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-				.unique());
+		const existingStats = await ctx.db
+			.query('eventPlaylistStats')
+			.withIndex('by_organizationId_and_eventId', (q) =>
+				q.eq('organizationId', organizationId).eq('eventId', eventId)
+			)
+			.unique();
 		const stats = {
 			organizationId,
 			...(playlist.youtubeChannelId !== undefined
@@ -280,20 +259,12 @@ export const recordPlaylistSnapshotByEventId = mutation({
 		}
 
 		const currentPlaylistItemIds = new Set(videos.map((video) => video.playlistItemId));
-		const scopedAssignments = await ctx.db
+		const existingAssignments = await ctx.db
 			.query('playlistAssignments')
 			.withIndex('by_organizationId_and_eventId', (q) =>
 				q.eq('organizationId', organizationId).eq('eventId', eventId)
 			)
 			.take(500);
-		const legacyAssignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-			.take(500);
-		const existingAssignments = [
-			...legacyAssignments.filter((assignment) => assignment.organizationId === undefined),
-			...scopedAssignments
-		];
 
 		for (const assignment of existingAssignments) {
 			if (
@@ -312,26 +283,16 @@ export const recordPlaylistSnapshotByEventId = mutation({
 				defaultVideoType,
 				organizationId
 			);
-			const existingAssignment =
-				(await ctx.db
-					.query('playlistAssignments')
-					.withIndex('by_organizationId_and_eventId_and_playlistId_and_playlistItemId', (q) =>
-						q
-							.eq('organizationId', organizationId)
-							.eq('eventId', eventId)
-							.eq('playlistId', playlist.playlistId)
-							.eq('playlistItemId', video.playlistItemId)
-					)
-					.unique()) ??
-				(await ctx.db
-					.query('playlistAssignments')
-					.withIndex('by_eventId_and_playlistId_and_playlistItemId', (q) =>
-						q
-							.eq('eventId', eventId)
-							.eq('playlistId', playlist.playlistId)
-							.eq('playlistItemId', video.playlistItemId)
-					)
-					.unique());
+			const existingAssignment = await ctx.db
+				.query('playlistAssignments')
+				.withIndex('by_organizationId_and_eventId_and_playlistId_and_playlistItemId', (q) =>
+					q
+						.eq('organizationId', organizationId)
+						.eq('eventId', eventId)
+						.eq('playlistId', playlist.playlistId)
+						.eq('playlistItemId', video.playlistItemId)
+				)
+				.unique();
 			const assignment = {
 				organizationId,
 				eventId,
@@ -370,38 +331,23 @@ async function assignSpeakerToVideo(
 	speakerId: Id<'speakers'>,
 	organizationId: string
 ) {
-	const existingAssignment =
-		(await ctx.db
-			.query('videoSpeakers')
-			.withIndex('by_organizationId_and_videoId_and_speakerId', (q) =>
-				q.eq('organizationId', organizationId).eq('videoId', videoId).eq('speakerId', speakerId)
-			)
-			.unique()) ??
-		(await ctx.db
-			.query('videoSpeakers')
-			.withIndex('by_videoId_and_speakerId', (q) =>
-				q.eq('videoId', videoId).eq('speakerId', speakerId)
-			)
-			.unique());
+	const existingAssignment = await ctx.db
+		.query('videoSpeakers')
+		.withIndex('by_organizationId_and_videoId_and_speakerId', (q) =>
+			q.eq('organizationId', organizationId).eq('videoId', videoId).eq('speakerId', speakerId)
+		)
+		.unique();
 
-	if (existingAssignment && documentBelongsToOrganization(existingAssignment, organizationId)) {
+	if (existingAssignment) {
 		return existingAssignment;
 	}
 
-	const scopedSpeakerAssignments = await ctx.db
+	const speakerAssignments = await ctx.db
 		.query('videoSpeakers')
 		.withIndex('by_organizationId_and_videoId', (q) =>
 			q.eq('organizationId', organizationId).eq('videoId', videoId)
 		)
 		.take(100);
-	const legacySpeakerAssignments = await ctx.db
-		.query('videoSpeakers')
-		.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
-		.take(100);
-	const speakerAssignments = [
-		...legacySpeakerAssignments.filter((assignment) => assignment.organizationId === undefined),
-		...scopedSpeakerAssignments
-	];
 	const assignmentPosition =
 		speakerAssignments.reduce((max, assignment) => Math.max(max, assignment.position), -1) + 1;
 
@@ -433,20 +379,12 @@ async function recordVideoSnapshot(
 	defaultVideoType: 'talk' | 'interview',
 	organizationId: string
 ) {
-	const scopedVideo = await ctx.db
+	const existingVideo = await ctx.db
 		.query('videos')
 		.withIndex('by_organizationId_and_youtubeVideoId', (q) =>
 			q.eq('organizationId', organizationId).eq('youtubeVideoId', video.youtubeVideoId)
 		)
 		.unique();
-	const legacyVideos = scopedVideo
-		? []
-		: await ctx.db
-				.query('videos')
-				.withIndex('by_youtubeVideoId', (q) => q.eq('youtubeVideoId', video.youtubeVideoId))
-				.take(10);
-	const existingVideo =
-		scopedVideo ?? legacyVideos.find((candidate) => candidate.organizationId === undefined);
 	const snapshot = {
 		organizationId,
 		...(video.youtubeChannelId !== undefined ? { youtubeChannelId: video.youtubeChannelId } : {}),

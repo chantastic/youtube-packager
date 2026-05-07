@@ -22,7 +22,6 @@ import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as llmProvider from "../llmProvider.js";
-import type * as organizationCommands from "../organizationCommands.js";
 import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
 import type * as secrets from "../secrets.js";
@@ -58,7 +57,6 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   http: typeof http;
   llmProvider: typeof llmProvider;
-  organizationCommands: typeof organizationCommands;
   playlistAssignmentViews: typeof playlistAssignmentViews;
   playlistAssignments: typeof playlistAssignments;
   secrets: typeof secrets;

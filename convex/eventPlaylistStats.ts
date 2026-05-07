@@ -11,21 +11,14 @@ export const collectByEventId = query({
 		const stats = [];
 
 		for (const eventId of eventIds.slice(0, 100)) {
-			const eventStats =
-				(await ctx.db
-					.query('eventPlaylistStats')
-					.withIndex('by_organizationId_and_eventId', (q) =>
-						q.eq('organizationId', organizationId).eq('eventId', eventId)
-					)
-					.unique()) ??
-				(await ctx.db
-					.query('eventPlaylistStats')
-					.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-					.unique());
+			const eventStats = await ctx.db
+				.query('eventPlaylistStats')
+				.withIndex('by_organizationId_and_eventId', (q) =>
+					q.eq('organizationId', organizationId).eq('eventId', eventId)
+				)
+				.unique();
 
-			if (eventStats && eventStats.organizationId === undefined) {
-				stats.push(eventStats);
-			} else if (eventStats?.organizationId === organizationId) {
+			if (eventStats) {
 				stats.push(eventStats);
 			}
 		}

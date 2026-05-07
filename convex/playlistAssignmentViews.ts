@@ -15,20 +15,12 @@ export const getForEvent = query({
 			return [];
 		}
 
-		const scopedAssignments = await ctx.db
+		const assignments = await ctx.db
 			.query('playlistAssignments')
 			.withIndex('by_organizationId_and_eventId', (q) =>
 				q.eq('organizationId', organizationId).eq('eventId', eventId)
 			)
 			.take(500);
-		const legacyAssignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_eventId', (q) => q.eq('eventId', eventId))
-			.take(500);
-		const assignments = [
-			...legacyAssignments.filter((assignment) => assignment.organizationId === undefined),
-			...scopedAssignments
-		];
 		const rows: Array<{
 			assignment: Doc<'playlistAssignments'>;
 			video: Doc<'videos'>;
@@ -42,22 +34,12 @@ export const getForEvent = query({
 			const video = await ctx.db.get(assignment.videoId);
 
 			if (documentBelongsToOrganization(video, organizationId)) {
-				const scopedSpeakerAssignments = await ctx.db
+				const speakerAssignments = await ctx.db
 					.query('videoSpeakers')
 					.withIndex('by_organizationId_and_videoId', (q) =>
 						q.eq('organizationId', organizationId).eq('videoId', video._id)
 					)
 					.take(100);
-				const legacySpeakerAssignments = await ctx.db
-					.query('videoSpeakers')
-					.withIndex('by_videoId', (q) => q.eq('videoId', video._id))
-					.take(100);
-				const speakerAssignments = [
-					...legacySpeakerAssignments.filter(
-						(speakerAssignment) => speakerAssignment.organizationId === undefined
-					),
-					...scopedSpeakerAssignments
-				];
 				const speakers = [];
 
 				for (const speakerAssignment of speakerAssignments.sort(

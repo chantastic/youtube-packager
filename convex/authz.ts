@@ -57,10 +57,7 @@ export function documentBelongsToOrganization<T extends { organizationId?: strin
 	document: T | null,
 	organizationId: string
 ) {
-	return Boolean(
-		document &&
-		(document.organizationId === organizationId || document.organizationId === undefined)
-	);
+	return Boolean(document && document.organizationId === organizationId);
 }
 
 export function requireDocumentInOrganization<T extends { organizationId?: string }>(
