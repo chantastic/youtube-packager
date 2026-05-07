@@ -1,7 +1,20 @@
-# YouTube Playlist Helper
+# YouTube Packager
 
-A SvelteKit app for linking events to YouTube playlists, previewing formatted video titles,
-and jumping into YouTube Studio for manual edits.
+A SvelteKit and Convex app for linking events to YouTube playlists, validating and generating
+formatted video metadata, storing captions, and pushing approved updates back to YouTube.
+
+## Architecture
+
+This project treats Convex as the durable application core for data, authorization, workflows,
+and sync. SvelteKit should stay thin: routing, forms, rendering, and light presentation
+orchestration.
+
+The core operating principle is:
+
+> Always choose strong architecture over ceremony avoidance.
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system shape, Convex function categories,
+workflow pattern, and future WorkOS Vault/SaaS secret strategy.
 
 ## Environment
 
@@ -15,6 +28,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5173/integrations/youtube/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=base64_32_byte_secret
 ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_DESCRIPTION_MODEL=claude-opus-4-7
 ANTHROPIC_DESCRIPTION_EFFORT=high
 ```
