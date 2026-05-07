@@ -1,37 +1,16 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import {
+	aiValidationCacheKeyValidator,
+	aiValidationCheckWriteValidator,
+	type AiValidationCacheKey,
+	type AiValidationCheckWrite
+} from './aiValidationCheckTypes';
 import type { MutationCtx, QueryCtx } from './_generated/server';
-
-const validationStatusValidator = v.union(
-	v.literal('pass'),
-	v.literal('fail'),
-	v.literal('info'),
-	v.literal('pending')
-);
-
-const validationValidator = v.object({
-	id: v.string(),
-	label: v.string(),
-	status: validationStatusValidator,
-	message: v.string(),
-	expected: v.optional(v.string()),
-	details: v.optional(v.array(v.string())),
-	suggested: v.optional(v.string())
-});
-
-const cacheKeyValidator = v.object({
-	videoId: v.string(),
-	field: v.string(),
-	checkId: v.string(),
-	inputHash: v.string(),
-	model: v.string(),
-	promptVersion: v.string(),
-	modelConfigHash: v.string()
-});
 
 export const collectByCacheKey = query({
 	args: {
-		keys: v.array(cacheKeyValidator)
+		keys: v.array(aiValidationCacheKeyValidator)
 	},
 	handler: async (ctx, { keys }) => {
 		return await collectByCacheKeyHandler(ctx, keys);
@@ -40,7 +19,7 @@ export const collectByCacheKey = query({
 
 export const collectByCacheKeyInternal = internalQuery({
 	args: {
-		keys: v.array(cacheKeyValidator)
+		keys: v.array(aiValidationCacheKeyValidator)
 	},
 	handler: async (ctx, { keys }) => {
 		return await collectByCacheKeyHandler(ctx, keys);
@@ -49,20 +28,7 @@ export const collectByCacheKeyInternal = internalQuery({
 
 export const upsertMany = mutation({
 	args: {
-		checks: v.array(
-			v.object({
-				videoId: v.string(),
-				field: v.string(),
-				checkId: v.string(),
-				inputHash: v.string(),
-				inputSnapshot: v.string(),
-				model: v.string(),
-				promptVersion: v.string(),
-				modelConfigHash: v.string(),
-				validation: validationValidator,
-				checkedAt: v.number()
-			})
-		)
+		checks: v.array(aiValidationCheckWriteValidator)
 	},
 	handler: async (ctx, { checks }) => {
 		return await upsertManyHandler(ctx, checks);
@@ -71,38 +37,14 @@ export const upsertMany = mutation({
 
 export const upsertManyInternal = internalMutation({
 	args: {
-		checks: v.array(
-			v.object({
-				videoId: v.string(),
-				field: v.string(),
-				checkId: v.string(),
-				inputHash: v.string(),
-				inputSnapshot: v.string(),
-				model: v.string(),
-				promptVersion: v.string(),
-				modelConfigHash: v.string(),
-				validation: validationValidator,
-				checkedAt: v.number()
-			})
-		)
+		checks: v.array(aiValidationCheckWriteValidator)
 	},
 	handler: async (ctx, { checks }) => {
 		return await upsertManyHandler(ctx, checks);
 	}
 });
 
-async function collectByCacheKeyHandler(
-	ctx: QueryCtx,
-	keys: Array<{
-		videoId: string;
-		field: string;
-		checkId: string;
-		inputHash: string;
-		model: string;
-		promptVersion: string;
-		modelConfigHash: string;
-	}>
-) {
+async function collectByCacheKeyHandler(ctx: QueryCtx, keys: AiValidationCacheKey[]) {
 	const checks = [];
 
 	for (const key of keys.slice(0, 500)) {
@@ -128,29 +70,7 @@ async function collectByCacheKeyHandler(
 	return checks;
 }
 
-async function upsertManyHandler(
-	ctx: MutationCtx,
-	checks: Array<{
-		videoId: string;
-		field: string;
-		checkId: string;
-		inputHash: string;
-		inputSnapshot: string;
-		model: string;
-		promptVersion: string;
-		modelConfigHash: string;
-		validation: {
-			id: string;
-			label: string;
-			status: 'pass' | 'fail' | 'info' | 'pending';
-			message: string;
-			expected?: string;
-			details?: string[];
-			suggested?: string;
-		};
-		checkedAt: number;
-	}>
-) {
+async function upsertManyHandler(ctx: MutationCtx, checks: AiValidationCheckWrite[]) {
 	const writtenChecks = [];
 
 	for (const check of checks.slice(0, 500)) {

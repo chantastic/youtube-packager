@@ -1,16 +1,8 @@
 import { v } from 'convex/values';
 import { mutation } from './_generated/server';
+import { validationStatValidator } from './videoValidationTypes';
 import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
-
-const validationStatValidator = v.object({
-	id: v.string(),
-	label: v.string(),
-	passCount: v.number(),
-	failCount: v.number(),
-	infoCount: v.number(),
-	pendingCount: v.optional(v.number())
-});
 
 const playlistVideoSnapshotValidator = v.object({
 	playlistItemId: v.string(),

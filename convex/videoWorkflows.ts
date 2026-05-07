@@ -3,6 +3,19 @@ import { action } from './_generated/server';
 import { internal } from './_generated/api';
 import { anthropicLlmProvider } from './anthropicLlmProvider';
 import type { LlmProvider } from './llmProvider';
+import {
+	titleAiPromptVersions,
+	titleAiValidationCacheInputValidator,
+	titleAiValidationInputValidator,
+	type AiValidationCacheEntry,
+	type TitleAiValidationCheckId,
+	type TitleAiValidationInput,
+	type TitleAiValidationItem,
+	type TitleAiValidationRequest,
+	type TitleAiValidationResult
+} from './titleAiValidationTypes';
+import type { AiValidationCacheKey } from './aiValidationCheckTypes';
+import type { VideoValidation } from './videoValidationTypes';
 import type { ActionCtx } from './_generated/server';
 import {
 	buildTitleAlternativesPrompt,
@@ -22,87 +35,6 @@ const titleAiValidationBatchSize = 20;
 const titleAiValidationMaxTokens = 4096;
 const titleAlternativesMaxTokens = 2048;
 const descriptionMaxTokens = 8192;
-
-const titleAiValidationCheckIdValidator = v.union(v.literal('hook'), v.literal('mechanics'));
-const titleAiPromptVersions = {
-	hook: 'title-hook-v1',
-	mechanics: 'title-mechanics-v1'
-} as const satisfies Record<TitleAiValidationCheckId, string>;
-
-const titleAiValidationCacheInputValidator = v.object({
-	videoId: v.string(),
-	field: v.string(),
-	checkId: titleAiValidationCheckIdValidator,
-	label: v.string(),
-	input: v.any()
-});
-
-const titleAiValidationInputValidator = v.object({
-	requestId: v.string(),
-	videoId: v.string(),
-	field: v.string(),
-	checkId: titleAiValidationCheckIdValidator,
-	label: v.string(),
-	input: v.any()
-});
-
-type TitleAiValidationCheckId = 'hook' | 'mechanics';
-
-type TitleAiValidationInput = {
-	videoId: string;
-	field: string;
-	checkId: TitleAiValidationCheckId;
-	label: string;
-	input: unknown;
-};
-
-type TitleAiValidationRequest = {
-	requestId: string;
-	videoId: string;
-	checkId: TitleAiValidationCheckId;
-	label: string;
-	input: unknown;
-};
-
-type AiValidationCacheKey = {
-	videoId: string;
-	field: string;
-	checkId: string;
-	inputHash: string;
-	model: string;
-	promptVersion: string;
-	modelConfigHash: string;
-};
-
-type AiValidationCacheEntry = TitleAiValidationInput & {
-	cacheKey: AiValidationCacheKey;
-	cacheKeyString: string;
-	inputKey: string;
-	inputSnapshot: string;
-};
-
-type TitleAiValidationItem = {
-	requestId?: string;
-	status?: 'pass' | 'fail' | 'info';
-	message?: string;
-	details?: string[];
-	suggested?: string;
-};
-
-type VideoValidation = {
-	id: string;
-	label: string;
-	status: 'pass' | 'fail' | 'info' | 'pending';
-	message: string;
-	expected?: string;
-	details?: string[];
-	suggested?: string;
-};
-
-type TitleAiValidationResult = {
-	validationsByRequestId: Record<string, VideoValidation>;
-	error: string | null;
-};
 
 function titleAiValidationModel(provider: LlmProvider) {
 	return provider.cacheConfigFor({

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiValidationCheckTypes from "../aiValidationCheckTypes.js";
 import type * as aiValidationChecks from "../aiValidationChecks.js";
 import type * as anthropicLlmProvider from "../anthropicLlmProvider.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
@@ -17,8 +18,10 @@ import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
 import type * as secrets from "../secrets.js";
 import type * as speakers from "../speakers.js";
+import type * as titleAiValidationTypes from "../titleAiValidationTypes.js";
 import type * as videoCaptions from "../videoCaptions.js";
 import type * as videoCommands from "../videoCommands.js";
+import type * as videoValidationTypes from "../videoValidationTypes.js";
 import type * as videoViews from "../videoViews.js";
 import type * as videoWorkflows from "../videoWorkflows.js";
 import type * as videos from "../videos.js";
@@ -31,6 +34,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiValidationCheckTypes: typeof aiValidationCheckTypes;
   aiValidationChecks: typeof aiValidationChecks;
   anthropicLlmProvider: typeof anthropicLlmProvider;
   eventPlaylistStats: typeof eventPlaylistStats;
@@ -40,8 +44,10 @@ declare const fullApi: ApiFromModules<{
   playlistAssignments: typeof playlistAssignments;
   secrets: typeof secrets;
   speakers: typeof speakers;
+  titleAiValidationTypes: typeof titleAiValidationTypes;
   videoCaptions: typeof videoCaptions;
   videoCommands: typeof videoCommands;
+  videoValidationTypes: typeof videoValidationTypes;
   videoViews: typeof videoViews;
   videoWorkflows: typeof videoWorkflows;
   videos: typeof videos;

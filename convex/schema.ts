@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { videoValidationValidator, validationStatValidator } from './videoValidationTypes';
 
 export default defineSchema({
 	events: defineTable({
@@ -91,16 +92,7 @@ export default defineSchema({
 		playlistItemCount: v.optional(v.number()),
 		validationContextKey: v.optional(v.string()),
 		videoCount: v.number(),
-		validationStats: v.array(
-			v.object({
-				id: v.string(),
-				label: v.string(),
-				passCount: v.number(),
-				failCount: v.number(),
-				infoCount: v.number(),
-				pendingCount: v.optional(v.number())
-			})
-		),
+		validationStats: v.array(validationStatValidator),
 		lastFetchedAt: v.number()
 	}).index('by_eventId', ['eventId']),
 	youtubeConnections: defineTable({
@@ -125,20 +117,7 @@ export default defineSchema({
 		model: v.string(),
 		promptVersion: v.string(),
 		modelConfigHash: v.string(),
-		validation: v.object({
-			id: v.string(),
-			label: v.string(),
-			status: v.union(
-				v.literal('pass'),
-				v.literal('fail'),
-				v.literal('info'),
-				v.literal('pending')
-			),
-			message: v.string(),
-			expected: v.optional(v.string()),
-			details: v.optional(v.array(v.string())),
-			suggested: v.optional(v.string())
-		}),
+		validation: videoValidationValidator,
 		checkedAt: v.number()
 	}).index('by_cache_key', [
 		'videoId',
