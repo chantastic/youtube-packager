@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-	chunkTitleQualityInputs,
+	chunkTitleAiValidationRequests,
 	parseTitleAiValidationResponse,
-	parseTitleQualityResponse,
 	validateTitleAiChecksWithAnthropic
 } from './anthropic-title-validation';
 
@@ -23,90 +22,22 @@ describe('Anthropic title validation parsing', () => {
 		vi.restoreAllMocks();
 	});
 
-	test('maps JSON results to validation objects', () => {
-		expect(
-			parseTitleQualityResponse(
-				JSON.stringify({
-					results: [
-						{
-							videoId: 'abc123',
-							status: 'fail',
-							message: 'Possible grammar issue',
-							details: ['Use sentence case for readability.'],
-							suggested: 'A clearer title'
-						}
-					]
-				})
-			)
-		).toEqual({
-			abc123: [
-				{
-					id: 'mechanics',
-					label: 'Mechanics',
-					status: 'fail',
-					message: 'Possible grammar issue',
-					details: ['Use sentence case for readability.'],
-					suggested: 'A clearer title'
-				}
-			]
-		});
-	});
-
-	test('accepts fenced JSON', () => {
-		expect(
-			parseTitleQualityResponse(
-				'```json\n{"results":[{"videoId":"abc123","status":"pass","message":"Looks clean"}]}\n```'
-			)
-		).toEqual({
-			abc123: [
-				{
-					id: 'mechanics',
-					label: 'Mechanics',
-					status: 'pass',
-					message: 'Looks clean'
-				}
-			]
-		});
-	});
-
-	test('omits null optional fields from Anthropic responses', () => {
-		expect(
-			parseTitleQualityResponse(
-				JSON.stringify({
-					results: [
-						{
-							videoId: 'abc123',
-							status: 'pass',
-							message: 'Looks clean',
-							details: [],
-							suggested: null
-						}
-					]
-				})
-			)
-		).toEqual({
-			abc123: [
-				{
-					id: 'mechanics',
-					label: 'Mechanics',
-					status: 'pass',
-					message: 'Looks clean'
-				}
-			]
-		});
-	});
-
-	test('chunks title inputs before sending them to Anthropic', () => {
-		const titles = Array.from({ length: 45 }, (_, index) => ({
+	test('chunks AI validation requests before sending them to Anthropic', () => {
+		const requests = Array.from({ length: 45 }, (_, index) => ({
+			requestId: `video-${index + 1}:title:mechanics`,
 			videoId: `video-${index + 1}`,
-			title: `Video ${index + 1}`
+			checkId: 'mechanics' as const,
+			label: 'Mechanics',
+			input: {
+				title: `Video ${index + 1}`
+			}
 		}));
 
-		const batches = chunkTitleQualityInputs(titles);
+		const batches = chunkTitleAiValidationRequests(requests);
 
 		expect(batches.map((batch) => batch.length)).toEqual([20, 20, 5]);
-		expect(batches[0][0]).toEqual({ videoId: 'video-1', title: 'Video 1' });
-		expect(batches[2][4]).toEqual({ videoId: 'video-45', title: 'Video 45' });
+		expect(batches[0][0].requestId).toBe('video-1:title:mechanics');
+		expect(batches[2][4].requestId).toBe('video-45:title:mechanics');
 	});
 
 	test('maps mixed AI validation responses by request id', () => {

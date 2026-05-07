@@ -16,7 +16,6 @@ import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
 import type * as secrets from "../secrets.js";
 import type * as speakers from "../speakers.js";
-import type * as titleQualityChecks from "../titleQualityChecks.js";
 import type * as videoCaptions from "../videoCaptions.js";
 import type * as videoCommands from "../videoCommands.js";
 import type * as videoViews from "../videoViews.js";
@@ -38,7 +37,6 @@ declare const fullApi: ApiFromModules<{
   playlistAssignments: typeof playlistAssignments;
   secrets: typeof secrets;
   speakers: typeof speakers;
-  titleQualityChecks: typeof titleQualityChecks;
   videoCaptions: typeof videoCaptions;
   videoCommands: typeof videoCommands;
   videoViews: typeof videoViews;

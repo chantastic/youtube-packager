@@ -7,17 +7,12 @@ const anthropicVersion = '2023-06-01';
 const defaultModel = 'claude-haiku-4-5-20251001';
 const titleAiValidationBatchSize = 20;
 const titleAiValidationMaxTokens = 4096;
-export const titleQualityValidationVersion = 'title-mechanics-v1';
+const titleMechanicsPromptVersion = 'title-mechanics-v1';
 
 const titleAiPromptVersions = {
 	hook: 'title-hook-v1',
-	mechanics: titleQualityValidationVersion
+	mechanics: titleMechanicsPromptVersion
 } as const satisfies Record<TitleAiValidationCheckId, string>;
-
-type TitleInput = {
-	videoId: string;
-	title: string;
-};
 
 type AnthropicMessageResponse = {
 	content?: Array<{
@@ -49,11 +44,6 @@ type TitleAiValidationResponse = {
 
 export type TitleAiValidationResult = {
 	validationsByRequestId: Record<string, VideoValidation>;
-	error: string | null;
-};
-
-export type TitleQualityValidationResult = {
-	validationsByVideoId: Record<string, VideoValidation[]>;
 	error: string | null;
 };
 
@@ -111,40 +101,6 @@ function stripJsonFence(value: string) {
 		.trim();
 }
 
-export function parseTitleQualityResponse(value: string): Record<string, VideoValidation[]> {
-	const parsed = JSON.parse(stripJsonFence(value)) as {
-		results?: Array<TitleAiValidationItem & { videoId?: string }>;
-	};
-	const validationsByVideoId: Record<string, VideoValidation[]> = {};
-
-	for (const result of parsed.results ?? []) {
-		if (!result.videoId || !result.status || !result.message) {
-			continue;
-		}
-
-		validationsByVideoId[result.videoId] = [
-			{
-				id: 'mechanics',
-				label: 'Mechanics',
-				status: result.status,
-				message: result.message,
-				...(Array.isArray(result.details) && result.details.length
-					? {
-							details: result.details.filter(
-								(detail): detail is string => typeof detail === 'string'
-							)
-						}
-					: {}),
-				...(typeof result.suggested === 'string' && result.suggested.length
-					? { suggested: result.suggested }
-					: {})
-			}
-		];
-	}
-
-	return validationsByVideoId;
-}
-
 export function parseTitleAiValidationResponse(
 	value: string,
 	requests: TitleAiValidationRequest[]
@@ -187,16 +143,6 @@ function countValidationsByRequestId(validationsByRequestId: Record<string, Vide
 	return Object.keys(validationsByRequestId).length;
 }
 
-export function chunkTitleQualityInputs(titles: TitleInput[]) {
-	const batches: TitleInput[][] = [];
-
-	for (let index = 0; index < titles.length; index += titleAiValidationBatchSize) {
-		batches.push(titles.slice(index, index + titleAiValidationBatchSize));
-	}
-
-	return batches;
-}
-
 export function chunkTitleAiValidationRequests(requests: TitleAiValidationRequest[]) {
 	const batches: TitleAiValidationRequest[][] = [];
 
@@ -209,10 +155,6 @@ export function chunkTitleAiValidationRequests(requests: TitleAiValidationReques
 
 export function titleAiValidationModel() {
 	return env.ANTHROPIC_MODEL ?? defaultModel;
-}
-
-export function titleQualityValidationModel() {
-	return titleAiValidationModel();
 }
 
 export function titleAiValidationPromptVersion(checkId: TitleAiValidationCheckId) {
@@ -352,35 +294,5 @@ export async function validateTitleAiChecksWithAnthropic(
 	return {
 		validationsByRequestId,
 		error: errors[0] ?? null
-	};
-}
-
-export async function validateTitleQualityWithAnthropic(
-	titles: TitleInput[]
-): Promise<TitleQualityValidationResult> {
-	const inputs = titles.map((title) => ({
-		requestId: title.videoId,
-		videoId: title.videoId,
-		field: 'title' as const,
-		checkId: 'mechanics' as const,
-		label: 'Mechanics',
-		input: {
-			title: title.title
-		}
-	}));
-	const result = await validateTitleAiChecksWithAnthropic(inputs);
-	const validationsByVideoId: Record<string, VideoValidation[]> = {};
-
-	for (const title of titles) {
-		const validation = result.validationsByRequestId[title.videoId];
-
-		if (validation) {
-			validationsByVideoId[title.videoId] = [validation];
-		}
-	}
-
-	return {
-		validationsByVideoId,
-		error: result.error
 	};
 }
