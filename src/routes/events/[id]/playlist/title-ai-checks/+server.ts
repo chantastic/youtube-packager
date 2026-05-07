@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { getConvexClient } from '$lib/server/convex';
+import { getConvexClientForEvent } from '$lib/server/convex';
 import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,
@@ -67,13 +67,14 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 	return [...inputsByKey.values()];
 }
 
-export const POST: RequestHandler = async ({ params }) => {
-	const client = getConvexClient();
-	const event = await client.query(api.events.find, {
+export const POST: RequestHandler = async (event) => {
+	const { params } = event;
+	const client = getConvexClientForEvent(event);
+	const youtubeEvent = await client.query(api.events.find, {
 		id: params.id as Id<'events'>
 	});
 
-	if (!event) {
+	if (!youtubeEvent) {
 		return json(
 			{
 				validationsByVideoId: {},
@@ -84,12 +85,12 @@ export const POST: RequestHandler = async ({ params }) => {
 	}
 
 	const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
-		eventId: event._id
+		eventId: youtubeEvent._id
 	});
 	const youtubeVideoIdByVideoId = new Map<string, string>(
 		assignments.map((row) => [row.video._id, row.video.youtubeVideoId])
 	);
-	const inputs = titleAiInputsForAssignments(assignments, event);
+	const inputs = titleAiInputsForAssignments(assignments, youtubeEvent);
 
 	if (inputs.length === 0) {
 		return json(

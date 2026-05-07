@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { getConvexClient } from '$lib/server/convex';
+import { getConvexClientForEvent } from '$lib/server/convex';
 import {
 	getConnectedYouTubeAccessToken,
 	YouTubeConnectionError,
@@ -100,19 +100,20 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 	return [...inputsByKey.values()];
 }
 
-async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event: EventRow) {
+async function cachedTitleAiChecksByVideoId(
+	client: ReturnType<typeof getConvexClientForEvent>,
+	assignments: AssignmentRow[],
+	event: EventRow
+) {
 	const inputs = titleAiInputsForAssignments(assignments, event);
 
 	if (!inputs.length) {
 		return {};
 	}
 
-	const cachedTitleAiChecks = await getConvexClient().action(
-		api.videoWorkflows.collectCachedTitleAiChecks,
-		{
-			inputs
-		}
-	);
+	const cachedTitleAiChecks = await client.action(api.videoWorkflows.collectCachedTitleAiChecks, {
+		inputs
+	});
 	const validationsByVideoId: Record<string, VideoValidation[]> = {};
 
 	for (const row of assignments) {
@@ -136,9 +137,10 @@ async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event:
 	return validationsByVideoId;
 }
 
-export const load: PageServerLoad = async ({ params, locals, url }) => {
+export const load: PageServerLoad = async (requestEvent) => {
+	const { params, locals, url } = requestEvent;
 	const auth = youtubeAuthContext({ locals });
-	const client = getConvexClient();
+	const client = getConvexClientForEvent(requestEvent);
 	const validationFilter = validationFilterFromUrl(url);
 	const event = await client.query(api.events.find, {
 		id: params.id as Id<'events'>
@@ -171,6 +173,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			eventId: event._id,
 			playlist: {
 				playlistId: playlist.playlistId,
+				...(playlist.channelId !== undefined ? { youtubeChannelId: playlist.channelId } : {}),
 				...(playlist.title !== undefined ? { title: playlist.title } : {}),
 				...(playlist.channelTitle !== undefined ? { channelTitle: playlist.channelTitle } : {}),
 				...(playlist.itemCount !== undefined ? { itemCount: playlist.itemCount } : {}),
@@ -179,6 +182,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				videos: playlist.videos.map((video) => ({
 					playlistItemId: video.playlistItemId,
 					youtubeVideoId: video.videoId,
+					...(video.channelId !== undefined ? { youtubeChannelId: video.channelId } : {}),
 					title: video.title,
 					position: video.position,
 					videoUrl: video.videoUrl,
@@ -197,7 +201,11 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		const playlistAssignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 			eventId: event._id
 		});
-		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(playlistAssignments, event);
+		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
+			client,
+			playlistAssignments,
+			event
+		);
 
 		return {
 			event,
@@ -229,7 +237,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 };
 
 export const actions: Actions = {
-	updateVideoType: async ({ request }) => {
+	updateVideoType: async (event) => {
+		const { request } = event;
+		const client = getConvexClientForEvent(event);
 		const data = await request.formData();
 		const videoId = optionalString(data, 'videoId');
 		const videoType = optionalString(data, 'videoType');
@@ -240,7 +250,7 @@ export const actions: Actions = {
 			});
 		}
 
-		await getConvexClient().mutation(api.videoCommands.setMetadata, {
+		await client.mutation(api.videoCommands.setMetadata, {
 			videoId: videoId as Id<'videos'>,
 			videoType: normalizeVideoType(videoType)
 		});

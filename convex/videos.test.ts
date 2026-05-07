@@ -9,6 +9,7 @@ const modules = import.meta.glob('./**/*.ts');
 type VideoSnapshot = {
 	playlistItemId: string;
 	youtubeVideoId: string;
+	youtubeChannelId?: string;
 	title: string;
 	position: number;
 	videoUrl: string;
@@ -32,7 +33,12 @@ function video(overrides: Partial<VideoSnapshot> = {}) {
 }
 
 test('syncPlaylistForEvent stores top-level videos, assignments, and event stats', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -40,6 +46,7 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
+			youtubeChannelId: 'UC123',
 			title: 'TestConf videos',
 			channelTitle: 'Test Channel',
 			itemCount: 2,
@@ -57,10 +64,11 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 				video({
 					playlistItemId: 'playlist-item-2',
 					youtubeVideoId: 'video-2',
+					youtubeChannelId: 'UC123',
 					title: 'Second video',
 					position: 1
 				}),
-				video()
+				video({ youtubeChannelId: 'UC123' })
 			]
 		}
 	});
@@ -75,6 +83,7 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 
 	expect(assignments.map((item) => item.video.youtubeVideoId)).toEqual(['video-1', 'video-2']);
 	expect(assignments[0].assignment).toMatchObject({
+		organizationId: 'org_test',
 		eventId,
 		playlistId: 'PL123',
 		playlistItemId: 'playlist-item-1',
@@ -82,12 +91,32 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 		position: 0
 	});
 	expect(videoDoc).toMatchObject({
+		organizationId: 'org_test',
+		youtubeChannelId: 'UC123',
 		youtubeVideoId: 'video-1',
 		title: 'A playlist video',
 		videoType: 'talk'
 	});
+	const updatedEvent = await t.query(api.events.find, { id: eventId });
+	const youtubeChannel = await t.run(async (ctx) => {
+		return await ctx.db
+			.query('youtubeChannels')
+			.withIndex('by_organizationId_and_youtubeChannelId', (q) =>
+				q.eq('organizationId', 'org_test').eq('youtubeChannelId', 'UC123')
+			)
+			.unique();
+	});
+
+	expect(updatedEvent).toMatchObject({ youtubeChannelId: 'UC123' });
+	expect(youtubeChannel).toMatchObject({
+		organizationId: 'org_test',
+		youtubeChannelId: 'UC123',
+		title: 'Test Channel'
+	});
 	expect(stats).toHaveLength(1);
 	expect(stats[0]).toMatchObject({
+		organizationId: 'org_test',
+		youtubeChannelId: 'UC123',
 		eventId,
 		playlistId: 'PL123',
 		playlistTitle: 'TestConf videos',
@@ -107,7 +136,12 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 });
 
 test('video view resolves both canonical ids and legacy YouTube video ids', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -138,7 +172,12 @@ test('video view resolves both canonical ids and legacy YouTube video ids', asyn
 });
 
 test('event type sets the default video type for ingested videos', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, {
 		name: 'Customer Chats',
 		eventType: 'interviews',
@@ -167,7 +206,12 @@ test('event type sets the default video type for ingested videos', async () => {
 });
 
 test('syncPlaylistForEvent replaces stale assignments without duplicating videos', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -219,7 +263,12 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 });
 
 test('speaker assignments and video title format survive playlist syncs', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -286,7 +335,12 @@ test('speaker assignments and video title format survive playlist syncs', async 
 });
 
 test('video title override can be cleared', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -320,7 +374,12 @@ test('video title override can be cleared', async () => {
 });
 
 test('disabled title validations can be cleared', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -354,7 +413,12 @@ test('disabled title validations can be cleared', async () => {
 });
 
 test('existing speakers can be assigned to another video', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -405,7 +469,12 @@ test('existing speakers can be assigned to another video', async () => {
 });
 
 test('video title can be updated after a YouTube metadata write', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -435,7 +504,12 @@ test('video title can be updated after a YouTube metadata write', async () => {
 });
 
 test('video can be refreshed from YouTube without clearing app metadata', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -485,7 +559,12 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 });
 
 test('video refresh rejects snapshots for a different YouTube video', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 	const eventId = event!._id;
 
@@ -514,7 +593,12 @@ test('video refresh rejects snapshots for a different YouTube video', async () =
 });
 
 test('a video can have assignments in multiple playlists', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const firstEvent = await t.mutation(api.events.upsert, { name: 'FirstConf', year: 2026 });
 	const firstEventId = firstEvent!._id;
 	const secondEvent = await t.mutation(api.events.upsert, { name: 'SecondConf', year: 2026 });

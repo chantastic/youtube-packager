@@ -6,15 +6,38 @@ import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { videoValidationValidator, validationStatValidator } from './videoValidationTypes';
 
 export default defineSchema({
+	organizations: defineTable({
+		workosOrganizationId: v.string(),
+		name: v.optional(v.string()),
+		slug: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	}).index('by_workosOrganizationId', ['workosOrganizationId']),
+	youtubeChannels: defineTable({
+		organizationId: v.string(),
+		youtubeChannelId: v.string(),
+		title: v.string(),
+		handle: v.optional(v.string()),
+		thumbnailUrl: v.optional(v.string()),
+		uploadsPlaylistId: v.optional(v.string()),
+		connectedAt: v.number(),
+		lastSeenAt: v.number()
+	})
+		.index('by_organizationId', ['organizationId'])
+		.index('by_organizationId_and_youtubeChannelId', ['organizationId', 'youtubeChannelId']),
 	events: defineTable({
+		organizationId: v.optional(v.string()),
+		youtubeChannelId: v.optional(v.string()),
 		name: v.string(),
 		editionTitle: v.optional(v.string()),
 		eventType: v.optional(v.union(v.literal('conference'), v.literal('interviews'))),
 		year: v.optional(v.number()),
 		titleFormat: v.optional(v.string()),
 		youtubePlaylistId: v.optional(v.string())
-	}),
+	}).index('by_organizationId', ['organizationId']),
 	videos: defineTable({
+		organizationId: v.optional(v.string()),
+		youtubeChannelId: v.optional(v.string()),
 		youtubeVideoId: v.string(),
 		title: v.string(),
 		description: v.optional(v.string()),
@@ -37,21 +60,34 @@ export default defineSchema({
 		publishedAt: v.optional(v.string()),
 		videoPublishedAt: v.optional(v.string()),
 		lastFetchedAt: v.number()
-	}).index('by_youtubeVideoId', ['youtubeVideoId']),
+	})
+		.index('by_youtubeVideoId', ['youtubeVideoId'])
+		.index('by_organizationId_and_youtubeVideoId', ['organizationId', 'youtubeVideoId']),
 	speakers: defineTable({
+		organizationId: v.optional(v.string()),
 		name: v.string(),
 		company: v.optional(v.string()),
 		position: v.optional(v.string())
-	}).index('by_name_and_company', ['name', 'company']),
+	})
+		.index('by_name_and_company', ['name', 'company'])
+		.index('by_organizationId_and_name_and_company', ['organizationId', 'name', 'company']),
 	videoSpeakers: defineTable({
+		organizationId: v.optional(v.string()),
 		videoId: v.id('videos'),
 		speakerId: v.id('speakers'),
 		position: v.number()
 	})
 		.index('by_videoId', ['videoId'])
 		.index('by_videoId_and_speakerId', ['videoId', 'speakerId'])
-		.index('by_speakerId', ['speakerId']),
+		.index('by_speakerId', ['speakerId'])
+		.index('by_organizationId_and_videoId', ['organizationId', 'videoId'])
+		.index('by_organizationId_and_videoId_and_speakerId', [
+			'organizationId',
+			'videoId',
+			'speakerId'
+		]),
 	videoCaptions: defineTable({
+		organizationId: v.optional(v.string()),
 		videoId: v.id('videos'),
 		youtubeVideoId: v.string(),
 		captionTrackId: v.string(),
@@ -67,8 +103,15 @@ export default defineSchema({
 		.index('by_videoId', ['videoId'])
 		.index('by_videoId_and_captionTrackId', ['videoId', 'captionTrackId'])
 		.index('by_youtubeVideoId', ['youtubeVideoId'])
-		.index('by_youtubeVideoId_and_captionTrackId', ['youtubeVideoId', 'captionTrackId']),
+		.index('by_youtubeVideoId_and_captionTrackId', ['youtubeVideoId', 'captionTrackId'])
+		.index('by_organizationId_and_videoId', ['organizationId', 'videoId'])
+		.index('by_organizationId_and_videoId_and_captionTrackId', [
+			'organizationId',
+			'videoId',
+			'captionTrackId'
+		]),
 	playlistAssignments: defineTable({
+		organizationId: v.optional(v.string()),
 		eventId: v.id('events'),
 		playlistId: v.string(),
 		playlistItemId: v.string(),
@@ -87,8 +130,18 @@ export default defineSchema({
 		])
 		.index('by_videoId', ['videoId'])
 		.index('by_playlistId', ['playlistId'])
-		.index('by_playlistId_and_playlistItemId', ['playlistId', 'playlistItemId']),
+		.index('by_playlistId_and_playlistItemId', ['playlistId', 'playlistItemId'])
+		.index('by_organizationId_and_eventId', ['organizationId', 'eventId'])
+		.index('by_organizationId_and_videoId', ['organizationId', 'videoId'])
+		.index('by_organizationId_and_eventId_and_playlistId_and_playlistItemId', [
+			'organizationId',
+			'eventId',
+			'playlistId',
+			'playlistItemId'
+		]),
 	eventPlaylistStats: defineTable({
+		organizationId: v.optional(v.string()),
+		youtubeChannelId: v.optional(v.string()),
 		eventId: v.id('events'),
 		playlistId: v.string(),
 		playlistTitle: v.optional(v.string()),
@@ -98,8 +151,11 @@ export default defineSchema({
 		videoCount: v.number(),
 		validationStats: v.array(validationStatValidator),
 		lastFetchedAt: v.number()
-	}).index('by_eventId', ['eventId']),
+	})
+		.index('by_eventId', ['eventId'])
+		.index('by_organizationId_and_eventId', ['organizationId', 'eventId']),
 	aiValidationChecks: defineTable({
+		organizationId: v.optional(v.string()),
 		videoId: v.string(),
 		field: v.string(),
 		checkId: v.string(),
@@ -110,16 +166,28 @@ export default defineSchema({
 		modelConfigHash: v.string(),
 		validation: videoValidationValidator,
 		checkedAt: v.number()
-	}).index('by_cache_key', [
-		'videoId',
-		'field',
-		'checkId',
-		'inputHash',
-		'model',
-		'promptVersion',
-		'modelConfigHash'
-	]),
+	})
+		.index('by_cache_key', [
+			'videoId',
+			'field',
+			'checkId',
+			'inputHash',
+			'model',
+			'promptVersion',
+			'modelConfigHash'
+		])
+		.index('by_organizationId_and_cache_key', [
+			'organizationId',
+			'videoId',
+			'field',
+			'checkId',
+			'inputHash',
+			'model',
+			'promptVersion',
+			'modelConfigHash'
+		]),
 	aiJobs: defineTable({
+		organizationId: v.optional(v.string()),
 		task: aiJobTaskValidator,
 		status: aiJobStatusValidator,
 		videoId: v.id('videos'),
@@ -130,5 +198,12 @@ export default defineSchema({
 		startedAt: v.optional(v.number()),
 		completedAt: v.optional(v.number()),
 		updatedAt: v.number()
-	}).index('by_task_and_videoId_and_queuedAt', ['task', 'videoId', 'queuedAt'])
+	})
+		.index('by_task_and_videoId_and_queuedAt', ['task', 'videoId', 'queuedAt'])
+		.index('by_organizationId_and_task_and_videoId_and_queuedAt', [
+			'organizationId',
+			'task',
+			'videoId',
+			'queuedAt'
+		])
 });

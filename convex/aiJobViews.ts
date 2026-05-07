@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { internalQuery, query } from './_generated/server';
+import { documentBelongsToOrganization, requireOrganizationId } from './authz';
 import { descriptionGenerationTask } from './aiJobTypes';
 import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
@@ -10,7 +11,14 @@ export const getLatestDescriptionGenerationForVideo = query({
 		videoId: v.id('videos')
 	},
 	handler: async (ctx, { videoId }) => {
-		const jobs = await collectDescriptionGenerationJobs(ctx, videoId, 1);
+		const organizationId = await requireOrganizationId(ctx);
+		const video = await ctx.db.get(videoId);
+
+		if (!documentBelongsToOrganization(video, organizationId)) {
+			return null;
+		}
+
+		const jobs = await collectDescriptionGenerationJobs(ctx, videoId, 1, organizationId);
 
 		return jobs[0] ?? null;
 	}
@@ -62,15 +70,31 @@ export const getDescriptionGenerationContextInternal = internalQuery({
 async function collectDescriptionGenerationJobs(
 	ctx: QueryCtx,
 	videoId: Id<'videos'>,
-	limit: number
+	limit: number,
+	organizationId: string
 ) {
-	return await ctx.db
+	const scopedJobs = await ctx.db
+		.query('aiJobs')
+		.withIndex('by_organizationId_and_task_and_videoId_and_queuedAt', (q) =>
+			q
+				.eq('organizationId', organizationId)
+				.eq('task', descriptionGenerationTask)
+				.eq('videoId', videoId)
+		)
+		.order('desc')
+		.take(limit);
+	const legacyJobs = await ctx.db
 		.query('aiJobs')
 		.withIndex('by_task_and_videoId_and_queuedAt', (q) =>
 			q.eq('task', descriptionGenerationTask).eq('videoId', videoId)
 		)
 		.order('desc')
 		.take(limit);
+
+	return [
+		...legacyJobs.filter((job) => documentBelongsToOrganization(job, organizationId)),
+		...scopedJobs
+	].slice(0, limit);
 }
 
 async function buildDescriptionGenerationInput(

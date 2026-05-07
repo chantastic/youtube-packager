@@ -17,10 +17,28 @@ export const collectByVideoIdInternal = internalQuery({
 		videoId: v.id('videos')
 	},
 	handler: async (ctx, { videoId }) => {
-		const captions = await ctx.db
+		const video = await ctx.db.get(videoId);
+
+		if (!video) {
+			return [];
+		}
+
+		const scopedCaptions = video.organizationId
+			? await ctx.db
+					.query('videoCaptions')
+					.withIndex('by_organizationId_and_videoId', (q) =>
+						q.eq('organizationId', video.organizationId).eq('videoId', videoId)
+					)
+					.take(50)
+			: [];
+		const legacyCaptions = await ctx.db
 			.query('videoCaptions')
 			.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
 			.take(50);
+		const captions = [
+			...legacyCaptions.filter((caption) => caption.organizationId === undefined),
+			...scopedCaptions
+		];
 
 		return captions.sort((a, b) => b.fetchedAt - a.fetchedAt);
 	}
@@ -38,13 +56,26 @@ export const upsertByVideoIdAndCaptionTrackIdInternal = internalMutation({
 			throw new Error('Video not found.');
 		}
 
-		const existing = await ctx.db
-			.query('videoCaptions')
-			.withIndex('by_videoId_and_captionTrackId', (q) =>
-				q.eq('videoId', video._id).eq('captionTrackId', caption.captionTrackId)
-			)
-			.unique();
+		const existing =
+			(video.organizationId
+				? await ctx.db
+						.query('videoCaptions')
+						.withIndex('by_organizationId_and_videoId_and_captionTrackId', (q) =>
+							q
+								.eq('organizationId', video.organizationId)
+								.eq('videoId', video._id)
+								.eq('captionTrackId', caption.captionTrackId)
+						)
+						.unique()
+				: null) ??
+			(await ctx.db
+				.query('videoCaptions')
+				.withIndex('by_videoId_and_captionTrackId', (q) =>
+					q.eq('videoId', video._id).eq('captionTrackId', caption.captionTrackId)
+				)
+				.unique());
 		const document = {
+			...(video.organizationId !== undefined ? { organizationId: video.organizationId } : {}),
 			videoId: video._id,
 			youtubeVideoId: video.youtubeVideoId,
 			captionTrackId: caption.captionTrackId,

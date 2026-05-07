@@ -11,6 +11,8 @@ import {
 	workosPipesConfigError,
 	workosPipesProvider
 } from '$lib/server/workos-pipes';
+import { getConvexClientForEvent } from '$lib/server/convex';
+import { api } from '../../../convex/_generated/api';
 import type { Actions, PageServerLoad } from './$types';
 
 export const csr = false;
@@ -87,6 +89,19 @@ export const actions: Actions = {
 		try {
 			const accessToken = await getConnectedYouTubePipesAccessToken(auth);
 			const channels = await listAuthorizedYouTubeChannels(accessToken);
+			const client = getConvexClientForEvent(event);
+
+			await client.mutation(api.youtubeChannelCommands.recordAuthorizedChannels, {
+				channels: channels.map((channel) => ({
+					youtubeChannelId: channel.id,
+					title: channel.title,
+					...(channel.customUrl !== undefined ? { handle: channel.customUrl } : {}),
+					...(channel.thumbnailUrl !== undefined ? { thumbnailUrl: channel.thumbnailUrl } : {}),
+					...(channel.uploadsPlaylistId !== undefined
+						? { uploadsPlaylistId: channel.uploadsPlaylistId }
+						: {})
+				}))
+			});
 
 			return {
 				testResult: {

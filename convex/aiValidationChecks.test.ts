@@ -29,7 +29,12 @@ const check = {
 };
 
 test('upsertMany stores and getMany retrieves AI validation checks', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await t.mutation(api.aiValidationChecks.upsertMany, {
 		checks: [check]
@@ -44,7 +49,12 @@ test('upsertMany stores and getMany retrieves AI validation checks', async () =>
 });
 
 test('upsertMany replaces existing AI validation checks', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await t.mutation(api.aiValidationChecks.upsertMany, {
 		checks: [check]

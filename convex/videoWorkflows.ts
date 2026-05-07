@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import { action, internalAction } from './_generated/server';
 import { internal } from './_generated/api';
 import { anthropicLlmProvider } from './anthropicLlmProvider';
+import { requireOrganizationId } from './authz';
 import type { LlmProvider } from './llmProvider';
 import {
 	titleAiPromptVersions,
@@ -124,6 +125,7 @@ function titleAiValidationInputKey(input: TitleAiValidationInput) {
 
 function cacheKeyString(key: AiValidationCacheKey) {
 	return [
+		key.organizationId ?? 'legacy',
 		key.videoId,
 		key.field,
 		key.checkId,
@@ -136,11 +138,13 @@ function cacheKeyString(key: AiValidationCacheKey) {
 
 async function aiValidationCacheKey(
 	input: TitleAiValidationInput,
-	provider: LlmProvider
+	provider: LlmProvider,
+	organizationId: string
 ): Promise<AiValidationCacheKey> {
 	const inputSnapshot = JSON.stringify(input.input);
 
 	return {
+		organizationId,
 		videoId: input.videoId,
 		field: input.field,
 		checkId: input.checkId,
@@ -154,11 +158,12 @@ async function aiValidationCacheKey(
 async function planTitleAiValidationCache(
 	ctx: ActionCtx,
 	inputs: TitleAiValidationInput[],
-	provider: LlmProvider
+	provider: LlmProvider,
+	organizationId: string
 ) {
 	const entries = await Promise.all(
 		inputs.map(async (input) => {
-			const cacheKey = await aiValidationCacheKey(input, provider);
+			const cacheKey = await aiValidationCacheKey(input, provider, organizationId);
 
 			return {
 				...input,
@@ -437,7 +442,9 @@ export const validateTitleAiChecks = action({
 	args: {
 		inputs: v.array(titleAiValidationInputValidator)
 	},
-	handler: async (_ctx, { inputs }): Promise<TitleAiValidationResult> => {
+	handler: async (ctx, { inputs }): Promise<TitleAiValidationResult> => {
+		await requireOrganizationId(ctx);
+
 		return await validateTitleAiInputs(inputs, anthropicLlmProvider);
 	}
 });
@@ -447,7 +454,13 @@ export const collectCachedTitleAiChecks = action({
 		inputs: v.array(titleAiValidationCacheInputValidator)
 	},
 	handler: async (ctx, { inputs }) => {
-		const cachePlan = await planTitleAiValidationCache(ctx, inputs, anthropicLlmProvider);
+		const organizationId = await requireOrganizationId(ctx);
+		const cachePlan = await planTitleAiValidationCache(
+			ctx,
+			inputs,
+			anthropicLlmProvider,
+			organizationId
+		);
 
 		return {
 			...titleAiChecksResult(cachePlan.entries, cachePlan.cachedValidationsByCacheKey, {}),
@@ -466,7 +479,13 @@ export const buildTitleAiChecks = action({
 		inputs: v.array(titleAiValidationCacheInputValidator)
 	},
 	handler: async (ctx, { inputs }) => {
-		const cachePlan = await planTitleAiValidationCache(ctx, inputs, anthropicLlmProvider);
+		const organizationId = await requireOrganizationId(ctx);
+		const cachePlan = await planTitleAiValidationCache(
+			ctx,
+			inputs,
+			anthropicLlmProvider,
+			organizationId
+		);
 		const freshResult = await validateTitleAiInputs(
 			cachePlan.misses.map((entry) => ({
 				requestId: entry.cacheKeyString,
@@ -521,7 +540,9 @@ export const generateTitleAlternatives = action({
 	args: {
 		input: v.any()
 	},
-	handler: async (_ctx, { input }): Promise<TitleAlternativesResult> => {
+	handler: async (ctx, { input }): Promise<TitleAlternativesResult> => {
+		await requireOrganizationId(ctx);
+
 		return await generateTitleAlternativesWithProvider(
 			input as TitleAlternativesInput,
 			anthropicLlmProvider
@@ -533,7 +554,9 @@ export const generateDescription = action({
 	args: {
 		input: v.any()
 	},
-	handler: async (_ctx, { input }): Promise<DescriptionGenerationResult> => {
+	handler: async (ctx, { input }): Promise<DescriptionGenerationResult> => {
+		await requireOrganizationId(ctx);
+
 		return await generateDescriptionWithProvider(
 			input as DescriptionGenerationInput,
 			anthropicLlmProvider

@@ -23,7 +23,12 @@ afterEach(() => {
 test('validateTitleAiChecks reports missing Anthropic API key without calling fetch', async () => {
 	vi.stubEnv('ANTHROPIC_API_KEY', '');
 	const fetchMock = vi.spyOn(globalThis, 'fetch');
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await expect(
 		t.action(api.videoWorkflows.validateTitleAiChecks, {
@@ -65,7 +70,12 @@ test('validateTitleAiChecks maps Anthropic responses by request id', async () =>
 			]
 		})
 	);
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await expect(
 		t.action(api.videoWorkflows.validateTitleAiChecks, {
@@ -116,7 +126,12 @@ test('buildTitleAiChecks writes and reuses cached AI title checks', async () => 
 			]
 		});
 	});
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const input = {
 		videoId: 'video-1',
 		field: 'title',
@@ -167,7 +182,12 @@ test('generateTitleAlternatives formats Anthropic base titles by playlist rules'
 			]
 		})
 	);
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await expect(
 		t.action(api.videoWorkflows.generateTitleAlternatives, {
@@ -205,7 +225,12 @@ test('generateTitleAlternatives formats Anthropic base titles by playlist rules'
 test('generateTitleAlternatives reports missing Anthropic API key without calling fetch', async () => {
 	vi.stubEnv('ANTHROPIC_API_KEY', '');
 	const fetchMock = vi.spyOn(globalThis, 'fetch');
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 
 	await expect(
 		t.action(api.videoWorkflows.generateTitleAlternatives, {
@@ -267,7 +292,12 @@ test('generateDescription sends transcript context and normalizes chapters', asy
 			]
 		})
 	);
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const result = await t.action(api.videoWorkflows.generateDescription, {
 		input: {
 			video: {

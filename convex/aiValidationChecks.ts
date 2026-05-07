@@ -6,6 +6,7 @@ import {
 	type AiValidationCacheKey,
 	type AiValidationCheckWrite
 } from './aiValidationCheckTypes';
+import { requireOrganizationId } from './authz';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 
 export const collectByCacheKey = query({
@@ -13,7 +14,12 @@ export const collectByCacheKey = query({
 		keys: v.array(aiValidationCacheKeyValidator)
 	},
 	handler: async (ctx, { keys }) => {
-		return await collectByCacheKeyHandler(ctx, keys);
+		const organizationId = await requireOrganizationId(ctx);
+
+		return await collectByCacheKeyHandler(
+			ctx,
+			keys.map((key) => ({ ...key, organizationId }))
+		);
 	}
 });
 
@@ -31,7 +37,12 @@ export const upsertMany = mutation({
 		checks: v.array(aiValidationCheckWriteValidator)
 	},
 	handler: async (ctx, { checks }) => {
-		return await upsertManyHandler(ctx, checks);
+		const organizationId = await requireOrganizationId(ctx);
+
+		return await upsertManyHandler(
+			ctx,
+			checks.map((check) => ({ ...check, organizationId }))
+		);
 	}
 });
 
@@ -48,21 +59,44 @@ async function collectByCacheKeyHandler(ctx: QueryCtx, keys: AiValidationCacheKe
 	const checks = [];
 
 	for (const key of keys.slice(0, 500)) {
-		const check = await ctx.db
-			.query('aiValidationChecks')
-			.withIndex('by_cache_key', (q) =>
-				q
-					.eq('videoId', key.videoId)
-					.eq('field', key.field)
-					.eq('checkId', key.checkId)
-					.eq('inputHash', key.inputHash)
-					.eq('model', key.model)
-					.eq('promptVersion', key.promptVersion)
-					.eq('modelConfigHash', key.modelConfigHash)
-			)
-			.unique();
+		const scopedCheck = key.organizationId
+			? await ctx.db
+					.query('aiValidationChecks')
+					.withIndex('by_organizationId_and_cache_key', (q) =>
+						q
+							.eq('organizationId', key.organizationId)
+							.eq('videoId', key.videoId)
+							.eq('field', key.field)
+							.eq('checkId', key.checkId)
+							.eq('inputHash', key.inputHash)
+							.eq('model', key.model)
+							.eq('promptVersion', key.promptVersion)
+							.eq('modelConfigHash', key.modelConfigHash)
+					)
+					.unique()
+			: null;
+		const legacyChecks = scopedCheck
+			? []
+			: await ctx.db
+					.query('aiValidationChecks')
+					.withIndex('by_cache_key', (q) =>
+						q
+							.eq('videoId', key.videoId)
+							.eq('field', key.field)
+							.eq('checkId', key.checkId)
+							.eq('inputHash', key.inputHash)
+							.eq('model', key.model)
+							.eq('promptVersion', key.promptVersion)
+							.eq('modelConfigHash', key.modelConfigHash)
+					)
+					.take(10);
+		const check =
+			scopedCheck ?? legacyChecks.find((candidate) => candidate.organizationId === undefined);
 
-		if (check) {
+		if (
+			check &&
+			(check.organizationId === key.organizationId || check.organizationId === undefined)
+		) {
 			checks.push(check);
 		}
 	}
@@ -74,21 +108,45 @@ async function upsertManyHandler(ctx: MutationCtx, checks: AiValidationCheckWrit
 	const writtenChecks = [];
 
 	for (const check of checks.slice(0, 500)) {
-		const existing = await ctx.db
-			.query('aiValidationChecks')
-			.withIndex('by_cache_key', (q) =>
-				q
-					.eq('videoId', check.videoId)
-					.eq('field', check.field)
-					.eq('checkId', check.checkId)
-					.eq('inputHash', check.inputHash)
-					.eq('model', check.model)
-					.eq('promptVersion', check.promptVersion)
-					.eq('modelConfigHash', check.modelConfigHash)
-			)
-			.unique();
+		const scopedExisting = check.organizationId
+			? await ctx.db
+					.query('aiValidationChecks')
+					.withIndex('by_organizationId_and_cache_key', (q) =>
+						q
+							.eq('organizationId', check.organizationId)
+							.eq('videoId', check.videoId)
+							.eq('field', check.field)
+							.eq('checkId', check.checkId)
+							.eq('inputHash', check.inputHash)
+							.eq('model', check.model)
+							.eq('promptVersion', check.promptVersion)
+							.eq('modelConfigHash', check.modelConfigHash)
+					)
+					.unique()
+			: null;
+		const legacyExistingChecks = scopedExisting
+			? []
+			: await ctx.db
+					.query('aiValidationChecks')
+					.withIndex('by_cache_key', (q) =>
+						q
+							.eq('videoId', check.videoId)
+							.eq('field', check.field)
+							.eq('checkId', check.checkId)
+							.eq('inputHash', check.inputHash)
+							.eq('model', check.model)
+							.eq('promptVersion', check.promptVersion)
+							.eq('modelConfigHash', check.modelConfigHash)
+					)
+					.take(10);
+		const existing =
+			scopedExisting ??
+			legacyExistingChecks.find((candidate) => candidate.organizationId === undefined);
 
-		if (existing) {
+		if (
+			existing &&
+			(existing.organizationId === check.organizationId || existing.organizationId === undefined)
+		) {
 			await ctx.db.patch(existing._id, check);
 			const writtenCheck = await ctx.db.get(existing._id);
 

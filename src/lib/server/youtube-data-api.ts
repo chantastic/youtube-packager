@@ -18,6 +18,7 @@ type YouTubeThumbnail = {
 type YouTubeSnippet = {
 	title?: string;
 	description?: string;
+	channelId?: string;
 	channelTitle?: string;
 	publishedAt?: string;
 	thumbnails?: Record<string, YouTubeThumbnail>;
@@ -39,6 +40,7 @@ type YouTubePlaylistItemsResponse = {
 		id?: string;
 		snippet?: YouTubeSnippet & {
 			position?: number;
+			videoOwnerChannelId?: string;
 			videoOwnerChannelTitle?: string;
 			resourceId?: {
 				videoId?: string;
@@ -104,6 +106,7 @@ type YouTubeChannelListResponse = {
 export type PublicPlaylistVideo = {
 	playlistItemId: string;
 	videoId: string;
+	channelId?: string;
 	title: string;
 	description?: string;
 	position: number;
@@ -118,6 +121,7 @@ export type PublicPlaylistVideo = {
 
 export type PublicVideoData = {
 	youtubeVideoId: string;
+	channelId?: string;
 	title: string;
 	description?: string;
 	videoUrl: string;
@@ -130,6 +134,7 @@ export type PublicVideoData = {
 
 export type PublicPlaylistData = {
 	playlistId: string;
+	channelId?: string;
 	title?: string;
 	description?: string;
 	channelTitle?: string;
@@ -312,6 +317,7 @@ async function getPlaylistVideos(playlistId: string, accessToken: string) {
 			videos.push({
 				playlistItemId: item.id,
 				videoId,
+				channelId: item.snippet?.videoOwnerChannelId ?? item.snippet?.channelId,
 				title: item.snippet?.title ?? 'Untitled video',
 				description: item.snippet?.description,
 				position: item.snippet?.position ?? videos.length,
@@ -368,6 +374,7 @@ export async function getYouTubeVideoData(
 
 	return {
 		youtubeVideoId: video.id,
+		channelId: video.snippet.channelId,
 		title: video.snippet.title ?? 'Untitled video',
 		description: video.snippet.description ?? '',
 		videoUrl: youtubeVideoUrl(video.id),
@@ -517,6 +524,7 @@ export async function getYouTubePlaylistData(
 
 	return {
 		playlistId,
+		channelId: playlist.snippet?.channelId,
 		title: playlist.snippet?.title,
 		description: playlist.snippet?.description,
 		channelTitle: playlist.snippet?.channelTitle,

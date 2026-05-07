@@ -1,6 +1,11 @@
 import { v } from 'convex/values';
 import { internalMutation, mutation } from './_generated/server';
 import { internal } from './_generated/api';
+import {
+	documentBelongsToOrganization,
+	requireDocumentInOrganization,
+	requireOrganizationId
+} from './authz';
 import { descriptionGenerationTask } from './aiJobTypes';
 import { generatedDescriptionValidator } from './descriptionGenerationTypes';
 import type { Doc, Id } from './_generated/dataModel';
@@ -11,13 +16,14 @@ export const requestDescriptionGeneration = mutation({
 		videoId: v.id('videos')
 	},
 	handler: async (ctx, { videoId }) => {
-		const video = await ctx.db.get(videoId);
+		const organizationId = await requireOrganizationId(ctx);
+		const video = requireDocumentInOrganization(
+			await ctx.db.get(videoId),
+			organizationId,
+			'Video not found.'
+		);
 
-		if (!video) {
-			throw new Error('Video not found.');
-		}
-
-		const inFlightJob = await findInFlightDescriptionJob(ctx, video._id);
+		const inFlightJob = await findInFlightDescriptionJob(ctx, video._id, organizationId);
 
 		if (inFlightJob) {
 			return {
@@ -26,7 +32,7 @@ export const requestDescriptionGeneration = mutation({
 			};
 		}
 
-		const caption = await findLatestCaption(ctx, video._id);
+		const caption = await findLatestCaption(ctx, video._id, organizationId);
 
 		if (!caption) {
 			return {
@@ -37,6 +43,7 @@ export const requestDescriptionGeneration = mutation({
 
 		const now = Date.now();
 		const jobId = await ctx.db.insert('aiJobs', {
+			organizationId,
 			task: descriptionGenerationTask,
 			status: 'queued',
 			videoId: video._id,
@@ -117,23 +124,51 @@ export const recordDescriptionGenerationErrorInternal = internalMutation({
 	}
 });
 
-async function findInFlightDescriptionJob(ctx: MutationCtx, videoId: Id<'videos'>) {
-	const jobs = await ctx.db
+async function findInFlightDescriptionJob(
+	ctx: MutationCtx,
+	videoId: Id<'videos'>,
+	organizationId: string
+) {
+	const scopedJobs = await ctx.db
+		.query('aiJobs')
+		.withIndex('by_organizationId_and_task_and_videoId_and_queuedAt', (q) =>
+			q
+				.eq('organizationId', organizationId)
+				.eq('task', descriptionGenerationTask)
+				.eq('videoId', videoId)
+		)
+		.order('desc')
+		.take(10);
+	const legacyJobs = await ctx.db
 		.query('aiJobs')
 		.withIndex('by_task_and_videoId_and_queuedAt', (q) =>
 			q.eq('task', descriptionGenerationTask).eq('videoId', videoId)
 		)
 		.order('desc')
 		.take(10);
+	const jobs = [
+		...legacyJobs.filter((job) => documentBelongsToOrganization(job, organizationId)),
+		...scopedJobs
+	];
 
 	return jobs.find((job) => job.status === 'queued' || job.status === 'running') ?? null;
 }
 
-async function findLatestCaption(ctx: MutationCtx, videoId: Id<'videos'>) {
-	const captions = await ctx.db
+async function findLatestCaption(ctx: MutationCtx, videoId: Id<'videos'>, organizationId: string) {
+	const scopedCaptions = await ctx.db
+		.query('videoCaptions')
+		.withIndex('by_organizationId_and_videoId', (q) =>
+			q.eq('organizationId', organizationId).eq('videoId', videoId)
+		)
+		.take(50);
+	const legacyCaptions = await ctx.db
 		.query('videoCaptions')
 		.withIndex('by_videoId', (q) => q.eq('videoId', videoId))
 		.take(50);
+	const captions = [
+		...legacyCaptions.filter((caption) => documentBelongsToOrganization(caption, organizationId)),
+		...scopedCaptions
+	];
 
 	return captions.sort((a, b) => b.fetchedAt - a.fetchedAt)[0] ?? null;
 }

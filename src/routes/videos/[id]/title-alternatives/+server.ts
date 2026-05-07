@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { getConvexClient } from '$lib/server/convex';
+import { getConvexClientForEvent } from '$lib/server/convex';
 import {
 	buildTitleAlternativesInput,
 	prepareTitleAlternativesValidationContext
@@ -9,8 +9,9 @@ import type { VideoValidation } from '$lib/video-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ params }) => {
-	const client = getConvexClient();
+export const POST: RequestHandler = async (event) => {
+	const { params } = event;
+	const client = getConvexClientForEvent(event);
 	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
 		routeParam: params.id
 	});

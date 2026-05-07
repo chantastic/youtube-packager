@@ -2,6 +2,7 @@ import { v, type Infer } from 'convex/values';
 import { videoValidationValidator } from './videoValidationTypes';
 
 export const aiValidationCacheKeyValidator = v.object({
+	organizationId: v.optional(v.string()),
 	videoId: v.string(),
 	field: v.string(),
 	checkId: v.string(),
@@ -12,6 +13,7 @@ export const aiValidationCacheKeyValidator = v.object({
 });
 
 export const aiValidationCheckWriteValidator = v.object({
+	organizationId: v.optional(v.string()),
 	videoId: v.string(),
 	field: v.string(),
 	checkId: v.string(),

@@ -16,11 +16,13 @@ import type * as aiValidationChecks from "../aiValidationChecks.js";
 import type * as anthropicLlmProvider from "../anthropicLlmProvider.js";
 import type * as auth from "../auth.js";
 import type * as authViews from "../authViews.js";
+import type * as authz from "../authz.js";
 import type * as descriptionGenerationTypes from "../descriptionGenerationTypes.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as llmProvider from "../llmProvider.js";
+import type * as organizationCommands from "../organizationCommands.js";
 import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
 import type * as secrets from "../secrets.js";
@@ -33,6 +35,7 @@ import type * as videoValidationTypes from "../videoValidationTypes.js";
 import type * as videoViews from "../videoViews.js";
 import type * as videoWorkflows from "../videoWorkflows.js";
 import type * as videos from "../videos.js";
+import type * as youtubeChannelCommands from "../youtubeChannelCommands.js";
 
 import type {
   ApiFromModules,
@@ -49,11 +52,13 @@ declare const fullApi: ApiFromModules<{
   anthropicLlmProvider: typeof anthropicLlmProvider;
   auth: typeof auth;
   authViews: typeof authViews;
+  authz: typeof authz;
   descriptionGenerationTypes: typeof descriptionGenerationTypes;
   eventPlaylistStats: typeof eventPlaylistStats;
   events: typeof events;
   http: typeof http;
   llmProvider: typeof llmProvider;
+  organizationCommands: typeof organizationCommands;
   playlistAssignmentViews: typeof playlistAssignmentViews;
   playlistAssignments: typeof playlistAssignments;
   secrets: typeof secrets;
@@ -66,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   videoViews: typeof videoViews;
   videoWorkflows: typeof videoWorkflows;
   videos: typeof videos;
+  youtubeChannelCommands: typeof youtubeChannelCommands;
 }>;
 
 /**

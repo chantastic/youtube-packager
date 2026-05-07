@@ -41,7 +41,12 @@ async function seedVideo(t: ReturnType<typeof convexTest>) {
 }
 
 test('upsert stores and replaces captions by video ID and caption track ID', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const videoId = await seedVideo(t);
 
 	const created = await t.mutation(
@@ -92,7 +97,12 @@ test('upsert stores and replaces captions by video ID and caption track ID', asy
 });
 
 test('collectByVideoIdInternal sorts captions by newest fetch first', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const videoId = await seedVideo(t);
 
 	vi.useFakeTimers();
@@ -130,7 +140,12 @@ test('collectByVideoIdInternal sorts captions by newest fetch first', async () =
 });
 
 test('upsert rejects captions when the video has not been ingested', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const missingVideoId = await t.run(async (ctx) => {
 		const id = await ctx.db.insert('videos', {
 			youtubeVideoId: 'deleted-video',

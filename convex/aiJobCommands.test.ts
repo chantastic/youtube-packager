@@ -96,7 +96,12 @@ afterEach(() => {
 });
 
 test('requestDescriptionGeneration reports missing captions without creating a job', async () => {
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const video = await createVideo(t);
 
 	await expect(
@@ -117,7 +122,12 @@ test('requestDescriptionGeneration reports missing captions without creating a j
 
 test('requestDescriptionGeneration creates a queued durable job', async () => {
 	vi.useFakeTimers();
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const video = await createVideo(t);
 	const caption = await addCaption(t, video._id);
 	const result = await t.mutation(api.aiJobCommands.requestDescriptionGeneration, {
@@ -177,7 +187,12 @@ test('scheduled description workflow records completed job result', async () => 
 			]
 		})
 	);
-	const t = convexTest(schema, modules);
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
 	const video = await createVideo(t);
 
 	await addCaption(t, video._id);
