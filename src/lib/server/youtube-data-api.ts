@@ -85,6 +85,22 @@ type YouTubeVideoListResponse = {
 	}>;
 };
 
+type YouTubeChannelListResponse = {
+	items?: Array<{
+		id?: string;
+		snippet?: {
+			title?: string;
+			customUrl?: string;
+			thumbnails?: Record<string, YouTubeThumbnail>;
+		};
+		contentDetails?: {
+			relatedPlaylists?: {
+				uploads?: string;
+			};
+		};
+	}>;
+};
+
 export type PublicPlaylistVideo = {
 	playlistItemId: string;
 	videoId: string;
@@ -122,6 +138,14 @@ export type PublicPlaylistData = {
 	studioEditUrl: string;
 	studioContentUrl: string;
 	videos: PublicPlaylistVideo[];
+};
+
+export type AuthorizedYouTubeChannel = {
+	id: string;
+	title: string;
+	customUrl?: string;
+	thumbnailUrl?: string;
+	uploadsPlaylistId?: string;
 };
 
 export const youtubeCaptionFormats = ['srt', 'vtt', 'sbv', 'scc', 'ttml'] as const;
@@ -440,6 +464,33 @@ export async function downloadYouTubeCaptionTrack(
 		},
 		accessToken
 	);
+}
+
+export async function listAuthorizedYouTubeChannels(accessToken: string) {
+	const response = await youtubeGet<YouTubeChannelListResponse>(
+		'/channels',
+		{
+			part: 'snippet,contentDetails',
+			mine: 'true'
+		},
+		accessToken
+	);
+
+	return (response.items ?? [])
+		.filter((channel) => typeof channel.id === 'string')
+		.map((channel): AuthorizedYouTubeChannel => {
+			const thumbnailUrl = pickThumbnail(channel.snippet?.thumbnails);
+
+			return {
+				id: channel.id as string,
+				title: channel.snippet?.title ?? 'Untitled channel',
+				...(channel.snippet?.customUrl ? { customUrl: channel.snippet.customUrl } : {}),
+				...(thumbnailUrl ? { thumbnailUrl } : {}),
+				...(channel.contentDetails?.relatedPlaylists?.uploads
+					? { uploadsPlaylistId: channel.contentDetails.relatedPlaylists.uploads }
+					: {})
+			};
+		});
 }
 
 export async function getYouTubePlaylistData(

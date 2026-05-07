@@ -30,7 +30,6 @@ import type * as videoValidationTypes from "../videoValidationTypes.js";
 import type * as videoViews from "../videoViews.js";
 import type * as videoWorkflows from "../videoWorkflows.js";
 import type * as videos from "../videos.js";
-import type * as youtubeConnections from "../youtubeConnections.js";
 
 import type {
   ApiFromModules,
@@ -61,7 +60,6 @@ declare const fullApi: ApiFromModules<{
   videoViews: typeof videoViews;
   videoWorkflows: typeof videoWorkflows;
   videos: typeof videos;
-  youtubeConnections: typeof youtubeConnections;
 }>;
 
 /**

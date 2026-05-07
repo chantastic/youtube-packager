@@ -57,10 +57,9 @@ getYoutubeAccessToken(ctx, input);
 Current strategy:
 
 - App-owned global secrets live in Convex or host environment variables.
-- WorkOS Pipes owns OAuth provider token lifecycle for YouTube when available.
-- Legacy direct Google OAuth can remain as an explicit fallback while Pipes support hardens.
+- WorkOS Pipes owns the OAuth provider token lifecycle for YouTube.
 - Feature code should call the app's provider boundary rather than importing WorkOS, Google,
-  or token refresh helpers directly.
+  or provider token helpers directly.
 
 Future SaaS strategy:
 

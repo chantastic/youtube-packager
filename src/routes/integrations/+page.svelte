@@ -7,9 +7,6 @@
 	const activePipesConnection = $derived(
 		data.pipesConnection?.active === true ? data.pipesConnection : null
 	);
-	const directConnectedAt = $derived(
-		data.directConnection ? new Date(data.directConnection.connectedAt).toLocaleString() : null
-	);
 	const testResult = $derived(form && 'testResult' in form ? form.testResult : null);
 
 	function pipesStatusTone() {
@@ -44,16 +41,6 @@
 		return data.pipesConnection.error === 'needs_reauthorization'
 			? 'WorkOS says this connection needs reauthorization.'
 			: 'WorkOS says this provider is not installed for this user.';
-	}
-
-	function directStatusLabel() {
-		if (data.directConfigError) return 'Configuration issue';
-		if (!data.directConnection) return 'Not connected';
-		if (data.directConnection.status === 'needs_reauthorization') return 'Reconnect required';
-		if (data.hasDirectWriteAccess) return 'Write access enabled';
-		if (data.hasDirectReadonlyAccess) return 'Read-only connected';
-
-		return 'Missing YouTube scope';
 	}
 </script>
 
@@ -101,8 +88,8 @@
 							<dd class="mt-1 text-gray-950">{pipesStatusLabel()}</dd>
 						</div>
 						<div>
-							<dt class="text-gray-500">Token source</dt>
-							<dd class="mt-1 text-gray-950">{data.tokenSource}</dd>
+							<dt class="text-gray-500">Provider</dt>
+							<dd class="mt-1 text-gray-950">{data.pipesProvider}</dd>
 						</div>
 						<div>
 							<dt class="text-gray-500">Read-only scope</dt>
@@ -189,25 +176,6 @@
 							{/if}
 						</div>
 					{/if}
-
-					<details class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
-						<summary class="cursor-pointer text-sm font-medium text-gray-700">
-							Legacy direct OAuth fallback
-						</summary>
-						<dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-							<div>
-								<dt class="text-gray-500">Status</dt>
-								<dd class="mt-1 text-gray-950">{directStatusLabel()}</dd>
-							</div>
-							<div>
-								<dt class="text-gray-500">Connected</dt>
-								<dd class="mt-1 text-gray-950">{directConnectedAt ?? 'Not connected'}</dd>
-							</div>
-						</dl>
-						{#if data.directConnection?.lastError}
-							<p class="mt-3 text-sm text-amber-700">{data.directConnection.lastError}</p>
-						{/if}
-					</details>
 				{/if}
 			</div>
 

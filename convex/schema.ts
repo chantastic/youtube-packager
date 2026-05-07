@@ -99,19 +99,6 @@ export default defineSchema({
 		validationStats: v.array(validationStatValidator),
 		lastFetchedAt: v.number()
 	}).index('by_eventId', ['eventId']),
-	youtubeConnections: defineTable({
-		userId: v.string(),
-		organizationId: v.optional(v.string()),
-		organizationKey: v.string(),
-		refreshTokenCiphertext: v.string(),
-		refreshTokenIv: v.string(),
-		scopes: v.array(v.string()),
-		tokenType: v.optional(v.string()),
-		status: v.union(v.literal('active'), v.literal('needs_reauthorization')),
-		lastError: v.optional(v.string()),
-		connectedAt: v.number(),
-		updatedAt: v.number()
-	}).index('by_userId_and_organizationKey', ['userId', 'organizationKey']),
 	aiValidationChecks: defineTable({
 		videoId: v.string(),
 		field: v.string(),

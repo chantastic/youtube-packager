@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
 	downloadYouTubeCaptionTrack,
 	getYouTubePlaylistData,
+	listAuthorizedYouTubeChannels,
 	listYouTubeCaptionTracks,
 	updateYouTubeVideoTitle
 } from './youtube-data-api';
@@ -137,6 +138,52 @@ describe('YouTube Data API helpers', () => {
 
 		expect(requestUrl.pathname).toBe('/youtube/v3/captions/caption%2Fwith%20slash');
 		expect(requestUrl.searchParams.get('tfmt')).toBe('srt');
+	});
+
+	test('lists channels authorized through the current YouTube access token', async () => {
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+			jsonResponse({
+				items: [
+					{
+						id: 'channel-1',
+						snippet: {
+							title: 'WorkOS',
+							customUrl: '@workos',
+							thumbnails: {
+								default: {
+									url: 'https://yt.example/channel.jpg'
+								}
+							}
+						},
+						contentDetails: {
+							relatedPlaylists: {
+								uploads: 'uploads-playlist'
+							}
+						}
+					},
+					{
+						snippet: {
+							title: 'Malformed channel'
+						}
+					}
+				]
+			})
+		);
+
+		await expect(listAuthorizedYouTubeChannels('access-token')).resolves.toEqual([
+			{
+				id: 'channel-1',
+				title: 'WorkOS',
+				customUrl: '@workos',
+				thumbnailUrl: 'https://yt.example/channel.jpg',
+				uploadsPlaylistId: 'uploads-playlist'
+			}
+		]);
+
+		const requestUrl = new URL(fetchMock.mock.calls[0][0] as string);
+
+		expect(requestUrl.pathname).toBe('/youtube/v3/channels');
+		expect(requestUrl.searchParams.get('mine')).toBe('true');
 	});
 
 	test('surfaces caption authorization errors from YouTube text responses', async () => {
