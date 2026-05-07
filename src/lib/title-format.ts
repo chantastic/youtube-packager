@@ -16,10 +16,8 @@ export type VideoTitleFormatRecord = {
 
 export type VideoType =
 	| 'talk'
-	| 'presentation'
 	| 'panelDiscussion'
 	| 'keynote'
-	| 'demo'
 	| 'interview'
 	| 'custom';
 
@@ -80,15 +78,7 @@ export const videoTypeOptions = [
 	defaultComposedTitleFormat?: string;
 }>;
 
-const legacyVideoTypeAliases: Partial<Record<VideoType, VideoType>> = {
-	presentation: 'talk',
-	demo: 'talk'
-};
-const videoTypeValues = new Set<VideoType>([
-	...videoTypeOptions.map((option) => option.value),
-	'presentation',
-	'demo'
-]);
+const videoTypeValues = new Set<VideoType>(videoTypeOptions.map((option) => option.value));
 
 function normalizeSpaces(value: string) {
 	return value.replace(/\s+/g, ' ').trim();
@@ -172,7 +162,7 @@ export function normalizeVideoType(value: unknown): VideoType {
 		return defaultVideoType;
 	}
 
-	return legacyVideoTypeAliases[value] ?? value;
+	return value;
 }
 
 export function canCustomizeVideoTitleFormat(value: unknown) {

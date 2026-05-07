@@ -68,28 +68,23 @@ describe('title formatting', () => {
 		).toBe('Building AuthKit — Chan, WorkOS');
 	});
 
-	test('normalizes presentation and demo records to the Talk template', () => {
-		expect(normalizeVideoType('presentation')).toBe('talk');
-		expect(normalizeVideoType('demo')).toBe('talk');
+	test('normalizes unknown video types to the Talk template', () => {
+		expect(normalizeVideoType('unknown')).toBe('talk');
 		expect(getDefaultVideoTypeTitleFormat('talk')).toBe(
 			'{title} — {speaker}, {company} {event_suffix}'
 		);
-		expect(getDefaultVideoTypeTitleFormat('presentation')).toBe(
-			getDefaultVideoTypeTitleFormat('talk')
-		);
-		expect(getDefaultVideoTypeTitleFormat('demo')).toBe(getDefaultVideoTypeTitleFormat('talk'));
 		expect(
 			formatComposedVideoTitle(
 				'Building AuthKit',
-				{ speaker: 'Chan', company: 'WorkOS', videoType: 'demo' },
+				{ speaker: 'Chan', company: 'WorkOS' },
 				{ name: 'Launch Week', year: 2026, titleFormat: '{title} | {event_name} {year}' }
 			)
 		).toBe('Building AuthKit — Chan, WorkOS | Launch Week 2026');
 	});
 
 	test('only honors custom video formats for the custom video type', () => {
-		expect(normalizeVideoTitleFormat('{title} with {speaker}', 'presentation')).toBe(
-			getDefaultVideoTitleFormat('presentation')
+		expect(normalizeVideoTitleFormat('{title} with {speaker}', 'talk')).toBe(
+			getDefaultVideoTitleFormat('talk')
 		);
 		expect(normalizeVideoTitleFormat('{title} with {speaker}', 'custom')).toBe(
 			'{title} with {speaker}'
@@ -98,7 +93,7 @@ describe('title formatting', () => {
 			formatVideoRecordTitle('{title} with {speaker}', 'Building AuthKit', {
 				speaker: 'Chan',
 				company: 'WorkOS',
-				videoType: 'demo'
+				videoType: 'talk'
 			})
 		).toBe('Building AuthKit — Chan, WorkOS');
 		expect(

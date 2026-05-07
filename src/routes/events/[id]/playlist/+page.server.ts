@@ -100,7 +100,7 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 	return [...inputsByKey.values()];
 }
 
-async function cachedTitleAiValidationsByVideoId(assignments: AssignmentRow[], event: EventRow) {
+async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event: EventRow) {
 	const inputs = titleAiInputsForAssignments(assignments, event);
 
 	if (!inputs.length) {
@@ -154,8 +154,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			playlistAssignments: [],
 			playlistError: null,
 			validationFilter,
-			titleQualityValidationsByVideoId: {},
-			titleQualityError: null
+			titleAiChecksByVideoId: {},
+			titleAiChecksError: null
 		};
 	}
 
@@ -196,7 +196,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		const playlistAssignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 			eventId: event._id
 		});
-		const titleQualityValidationsByVideoId = await cachedTitleAiValidationsByVideoId(
+		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
 			playlistAssignments,
 			event
 		);
@@ -207,8 +207,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			playlistAssignments,
 			playlistError: null,
 			validationFilter,
-			titleQualityValidationsByVideoId,
-			titleQualityError: null
+			titleAiChecksByVideoId,
+			titleAiChecksError: null
 		};
 	} catch (err) {
 		if (err instanceof YouTubeDataApiError || err instanceof YouTubeConnectionError) {
@@ -221,8 +221,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					message: err.message
 				},
 				validationFilter,
-				titleQualityValidationsByVideoId: {},
-				titleQualityError: null
+				titleAiChecksByVideoId: {},
+				titleAiChecksError: null
 			};
 		}
 

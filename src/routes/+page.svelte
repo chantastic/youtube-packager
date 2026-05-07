@@ -5,7 +5,7 @@
 </script>
 
 <main class="container mx-auto max-w-2xl p-8">
-	<h1 class="mb-6 text-3xl font-bold">Welcome to SvelteKit</h1>
+	<h1 class="mb-6 text-3xl font-bold">YouTube Packager</h1>
 
 	{#if data.auth?.user}
 		<div class="rounded-lg border border-green-200 bg-green-50 p-6">

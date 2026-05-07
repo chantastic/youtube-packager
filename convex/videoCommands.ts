@@ -29,10 +29,8 @@ const playlistVideoSnapshotValidator = v.object({
 
 const videoTypeValidator = v.union(
 	v.literal('talk'),
-	v.literal('presentation'),
 	v.literal('panelDiscussion'),
 	v.literal('keynote'),
-	v.literal('demo'),
 	v.literal('interview'),
 	v.literal('custom')
 );

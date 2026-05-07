@@ -43,9 +43,9 @@
 	};
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
-	let titleQualityValidations = $state<VideoValidation[]>([]);
-	let titleQualityError = $state<string | null>(null);
-	let titleQualityLoading = $state(false);
+	let titleAiChecks = $state<VideoValidation[]>([]);
+	let titleAiChecksError = $state<string | null>(null);
+	let titleAiChecksLoading = $state(false);
 	let titleAlternativesByAssignmentId = $state<Record<string, AssignmentTitleAlternatives>>({});
 	let titleAlternativesError = $state<string | null>(null);
 	let titleAlternativesLoading = $state(false);
@@ -87,7 +87,7 @@
 	}
 
 	onMount(() => {
-		void loadTitleQuality();
+		void loadTitleAiChecks();
 	});
 
 	function formatDate(value?: number | string) {
@@ -272,7 +272,7 @@
 				return;
 			}
 
-			await loadTitleQuality();
+			await loadTitleAiChecks();
 			titleAlternativesByAssignmentId = {};
 			metadataSaved = true;
 
@@ -297,7 +297,7 @@
 			return async ({ update }: { update: () => Promise<void> }) => {
 				try {
 					await update();
-					await loadTitleQuality();
+					await loadTitleAiChecks();
 				} finally {
 					applyingTitle = null;
 				}
@@ -351,13 +351,13 @@
 		}, 1600);
 	}
 
-	async function loadTitleQuality() {
-		titleQualityLoading = true;
-		titleQualityError = null;
+	async function loadTitleAiChecks() {
+		titleAiChecksLoading = true;
+		titleAiChecksError = null;
 
 		try {
 			const response = await fetch(
-				`/videos/${encodeURIComponent(data.videoView.video._id)}/title-quality`,
+				`/videos/${encodeURIComponent(data.videoView.video._id)}/title-ai-checks`,
 				{
 					method: 'POST'
 				}
@@ -367,13 +367,13 @@
 				error?: string | null;
 			};
 
-			titleQualityValidations = body.validations ?? [];
-			titleQualityError =
+			titleAiChecks = body.validations ?? [];
+			titleAiChecksError =
 				body.error ?? (response.ok ? null : `AI title validation failed with ${response.status}.`);
 		} catch {
-			titleQualityError = 'AI title validation is temporarily unavailable.';
+			titleAiChecksError = 'AI title validation is temporarily unavailable.';
 		} finally {
-			titleQualityLoading = false;
+			titleAiChecksLoading = false;
 		}
 	}
 
@@ -920,13 +920,13 @@
 			<h2 class="text-sm font-semibold text-gray-950">Video Validations</h2>
 		</div>
 		<div class="px-4 py-4">
-			{#if titleQualityLoading}
+			{#if titleAiChecksLoading}
 				<p class="text-sm text-gray-500">Checking AI title validations...</p>
-			{:else if titleQualityError}
-				<p class="text-sm text-amber-700">{titleQualityError}</p>
-			{:else if titleQualityValidations.length}
+			{:else if titleAiChecksError}
+				<p class="text-sm text-amber-700">{titleAiChecksError}</p>
+			{:else if titleAiChecks.length}
 				<div class="flex flex-wrap gap-2">
-					{#each titleQualityValidations as validation (validation.id)}
+					{#each titleAiChecks as validation (validation.id)}
 						<span
 							class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
 							title={validation.expected ? `Expected: ${validation.expected}` : undefined}
@@ -935,7 +935,7 @@
 						</span>
 					{/each}
 				</div>
-				{#each titleQualityValidations as validation (validation.id)}
+				{#each titleAiChecks as validation (validation.id)}
 					{#if validation.details?.length}
 						<p class="mt-2 text-xs text-gray-500">{validation.details.join(' ')}</p>
 					{/if}

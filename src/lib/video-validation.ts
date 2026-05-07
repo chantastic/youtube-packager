@@ -53,7 +53,6 @@ const weakTitleOpeners = [
 	'talk',
 	'session',
 	'keynote',
-	'presentation',
 	'workshop',
 	'fireside chat',
 	'interview'

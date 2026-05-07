@@ -34,20 +34,20 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let copiedVideoId = $state<string | null>(null);
-	let loadedTitleQualityValidationsByVideoId = $state<Record<string, VideoValidation[]> | null>(
+	let loadedTitleAiChecksByVideoId = $state<Record<string, VideoValidation[]> | null>(
 		null
 	);
-	let loadedTitleQualityError = $state<string | null | undefined>(undefined);
-	let titleQualityValidationsByVideoId = $derived.by(
+	let loadedTitleAiChecksError = $state<string | null | undefined>(undefined);
+	let titleAiChecksByVideoId = $derived.by(
 		(): Record<string, VideoValidation[]> =>
-			loadedTitleQualityValidationsByVideoId ?? data.titleQualityValidationsByVideoId
+			loadedTitleAiChecksByVideoId ?? data.titleAiChecksByVideoId
 	);
-	let titleQualityError = $derived(loadedTitleQualityError ?? data.titleQualityError);
-	let titleQualityLoading = $state(false);
+	let titleAiChecksError = $derived(loadedTitleAiChecksError ?? data.titleAiChecksError);
+	let titleAiChecksLoading = $state(false);
 	let updatingVideoType = $state<string | null>(null);
 
 	onMount(() => {
-		void loadTitleQuality();
+		void loadTitleAiChecks();
 	});
 
 	function assignmentRowFor(videoId: string) {
@@ -140,12 +140,12 @@
 		});
 	}
 
-	function titleQualityValidations(videoId: string) {
-		return titleQualityValidationsByVideoId[videoId] ?? [];
+	function titleAiChecksForVideo(videoId: string) {
+		return titleAiChecksByVideoId[videoId] ?? [];
 	}
 
 	function validationsForVideo(videoId: string, videoTitle: string) {
-		return [...baselineValidations(videoId, videoTitle), ...titleQualityValidations(videoId)];
+		return [...baselineValidations(videoId, videoTitle), ...titleAiChecksForVideo(videoId)];
 	}
 
 	function validationMatchesFilter(validations: VideoValidation[]) {
@@ -223,7 +223,7 @@
 		};
 	}
 
-	function titleQualitySummary() {
+	function titleAiChecksSummary() {
 		if (!data.playlist) {
 			return { checked: 0, total: 0 };
 		}
@@ -232,7 +232,7 @@
 			checked: data.playlist.videos.reduce(
 				(total, video) =>
 					total +
-					(titleQualityValidationsByVideoId[video.videoId]?.filter(
+					(titleAiChecksByVideoId[video.videoId]?.filter(
 						(validation) => validation.status !== 'pending'
 					).length ?? 0),
 				0
@@ -291,18 +291,18 @@
 		}, 1600);
 	}
 
-	async function loadTitleQuality() {
+	async function loadTitleAiChecks() {
 		const playlist = data.playlist;
 
 		if (!playlist?.videos.length) {
 			return;
 		}
 
-		titleQualityLoading = true;
-		loadedTitleQualityError = null;
+		titleAiChecksLoading = true;
+		loadedTitleAiChecksError = null;
 
 		try {
-			const response = await fetch(`/events/${data.event._id}/playlist/title-quality`, {
+			const response = await fetch(`/events/${data.event._id}/playlist/title-ai-checks`, {
 				method: 'POST'
 			});
 			const body = (await response.json().catch(() => ({}))) as {
@@ -310,13 +310,13 @@
 				error?: string | null;
 			};
 
-			loadedTitleQualityValidationsByVideoId = body.validationsByVideoId ?? {};
-			loadedTitleQualityError =
+			loadedTitleAiChecksByVideoId = body.validationsByVideoId ?? {};
+			loadedTitleAiChecksError =
 				body.error ?? (response.ok ? null : `AI title validation failed with ${response.status}.`);
 		} catch {
-			loadedTitleQualityError = 'AI title validation is temporarily unavailable.';
+			loadedTitleAiChecksError = 'AI title validation is temporarily unavailable.';
 		} finally {
-			titleQualityLoading = false;
+			titleAiChecksLoading = false;
 		}
 	}
 </script>
@@ -347,7 +347,7 @@
 		</section>
 	{:else if data.playlist}
 		{@const summary = baselineSummary()}
-		{@const titleQuality = titleQualitySummary()}
+		{@const aiCheckSummary = titleAiChecksSummary()}
 		<section class="mb-6 rounded-lg border border-gray-200 bg-white p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div>
@@ -407,13 +407,13 @@
 					The hook uses the title segment before formatting, capped at {youtubeTitleFocusLength}
 					characters.
 				</p>
-				{#if titleQualityLoading}
+				{#if titleAiChecksLoading}
 					<p class="mt-1 text-xs text-gray-500">Checking AI title validations...</p>
-				{:else if titleQualityError}
-					<p class="mt-1 text-xs text-amber-700">{titleQualityError}</p>
+				{:else if titleAiChecksError}
+					<p class="mt-1 text-xs text-amber-700">{titleAiChecksError}</p>
 				{:else}
 					<p class="mt-1 text-xs text-gray-500">
-						AI title checks: {titleQuality.checked}/{titleQuality.total}
+						AI title checks: {aiCheckSummary.checked}/{aiCheckSummary.total}
 					</p>
 				{/if}
 				{#if form?.videoTypeError}
