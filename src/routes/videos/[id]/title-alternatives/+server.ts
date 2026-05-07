@@ -1,6 +1,4 @@
 import { error, json } from '@sveltejs/kit';
-import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
-import { generateTitleAlternativesWithAnthropic } from '$lib/server/anthropic-title-alternatives';
 import { getConvexClient } from '$lib/server/convex';
 import {
 	buildTitleAlternativesInput,
@@ -26,38 +24,12 @@ export const POST: RequestHandler = async ({ params }) => {
 	const aiValidationsByInputKey = new Map<string, VideoValidation>();
 
 	if (validationContext.aiInputsByKey.size > 0) {
-		const cachePlan = await planAiValidationCache([...validationContext.aiInputsByKey.values()]);
-		const freshResult = await client.action(api.anthropicWorkflows.validateTitleAiChecks, {
-			inputs: cachePlan.misses.map((entry) => ({
-				requestId: entry.cacheKeyString,
-				videoId: entry.videoId,
-				field: entry.field,
-				checkId: entry.checkId,
-				label: entry.label,
-				input: entry.input
-			}))
-		});
-		const now = Date.now();
-		const freshEntries = cachePlan.misses.flatMap((entry) => {
-			const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
-
-			return validation
-				? [
-						{
-							...entry,
-							validation,
-							checkedAt: now
-						}
-					]
-				: [];
+		const titleAiChecks = await client.action(api.anthropicWorkflows.buildTitleAiChecks, {
+			inputs: [...validationContext.aiInputsByKey.values()]
 		});
 
-		await saveAiValidationCache(freshEntries);
-
-		for (const entry of cachePlan.entries) {
-			const validation =
-				cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
-				freshResult.validationsByRequestId[entry.cacheKeyString];
+		for (const entry of validationContext.aiInputsByKey.values()) {
+			const validation = titleAiChecks.validationsByInputKey[titleAiValidationInputKey(entry)];
 
 			if (validation) {
 				aiValidationsByInputKey.set(titleAiValidationInputKey(entry), validation);
@@ -65,9 +37,9 @@ export const POST: RequestHandler = async ({ params }) => {
 		}
 	}
 
-	const result = await generateTitleAlternativesWithAnthropic(
-		buildTitleAlternativesInput(videoView, validationContext, aiValidationsByInputKey)
-	);
+	const result = await client.action(api.anthropicWorkflows.generateTitleAlternatives, {
+		input: buildTitleAlternativesInput(videoView, validationContext, aiValidationsByInputKey)
+	});
 
 	return json(result);
 };

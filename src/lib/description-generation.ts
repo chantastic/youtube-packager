@@ -1,17 +1,4 @@
-import { env } from '$env/dynamic/private';
-
-const anthropicApiUrl = 'https://api.anthropic.com/v1/messages';
-const anthropicVersion = '2023-06-01';
-const defaultDescriptionModel = 'claude-opus-4-7';
 const transcriptPromptLimit = 120_000;
-
-type AnthropicMessageResponse = {
-	content?: Array<{
-		type?: string;
-		text?: string;
-	}>;
-	stop_reason?: string;
-};
 
 export type TranscriptCue = {
 	startMs: number;
@@ -87,15 +74,11 @@ export type DescriptionGenerationResult = {
 	error: string | null;
 };
 
-function model() {
-	return env.ANTHROPIC_DESCRIPTION_MODEL ?? defaultDescriptionModel;
-}
-
-function isOpus47Model(value: string) {
+export function isOpus47Model(value: string) {
 	return value === 'claude-opus-4-7' || value.startsWith('claude-opus-4-7-');
 }
 
-function descriptionOutputConfig(selectedModel: string) {
+export function descriptionOutputConfig(selectedModel: string) {
 	return {
 		...(isOpus47Model(selectedModel) ? { effort: 'xhigh' } : {}),
 		format: {
@@ -150,10 +133,6 @@ function descriptionOutputConfig(selectedModel: string) {
 	};
 }
 
-function reasoningEffort() {
-	return env.ANTHROPIC_DESCRIPTION_EFFORT ?? 'high';
-}
-
 function stripJsonFence(value: string) {
 	return value
 		.trim()
@@ -161,24 +140,6 @@ function stripJsonFence(value: string) {
 		.replace(/^```\s*/i, '')
 		.replace(/\s*```$/i, '')
 		.trim();
-}
-
-function textFromAnthropicResponse(response: AnthropicMessageResponse) {
-	return response.content?.find((item) => item.type === 'text' && item.text)?.text ?? '';
-}
-
-function anthropicErrorMessage(message: string | undefined, status: number) {
-	const fallback = `Anthropic description generation failed with ${status}.`;
-
-	if (!message) {
-		return fallback;
-	}
-
-	if (message.toLowerCase().includes('model')) {
-		return `Anthropic description generation could not use model "${model()}". Set ANTHROPIC_DESCRIPTION_MODEL to a model available for this API key.`;
-	}
-
-	return message;
 }
 
 function parseSrtTimestamp(value: string) {
@@ -336,7 +297,7 @@ function knownLinks(input: DescriptionGenerationInput) {
 	];
 }
 
-function buildPrompt(input: DescriptionGenerationInput, cues: TranscriptCue[]) {
+export function buildDescriptionPrompt(input: DescriptionGenerationInput, cues: TranscriptCue[]) {
 	const durationMs = transcriptDurationMs(cues);
 	const chapterTarget = recommendedChapterCount(durationMs);
 	const chapterCandidates = chapterTimestampCandidates(cues);
@@ -503,10 +464,11 @@ function descriptionFromParts(
 		.trim();
 }
 
-function normalizeGeneratedDescription(
+export function normalizeGeneratedDescription(
 	value: DescriptionResponse,
 	input: DescriptionGenerationInput,
-	cues: TranscriptCue[]
+	cues: TranscriptCue[],
+	model: string
 ): GeneratedDescription {
 	const fallbackHook = `Learn the key ideas from ${input.video.title}`;
 	const hook = normalizeHook(value.hook, fallbackHook);
@@ -523,15 +485,17 @@ function normalizeGeneratedDescription(
 		chapters,
 		links,
 		description: description.startsWith(hook) ? description : `${hook}\n\n${description}`,
-		model: model(),
+		model,
 		chapterTarget: recommendedChapterCount(durationMs),
 		durationSeconds: Math.round(durationMs / 1000)
 	};
 }
 
-export async function generateDescriptionWithAnthropic(
-	input: DescriptionGenerationInput
-): Promise<DescriptionGenerationResult> {
+export function descriptionFromResponse(
+	input: DescriptionGenerationInput,
+	responseText: string,
+	model: string
+): DescriptionGenerationResult {
 	const cues = parseSrtCues(input.caption.body);
 
 	if (cues.length === 0) {
@@ -541,84 +505,35 @@ export async function generateDescriptionWithAnthropic(
 		};
 	}
 
-	if (!env.ANTHROPIC_API_KEY) {
-		return {
-			description: null,
-			error: 'Set ANTHROPIC_API_KEY to generate descriptions.'
-		};
-	}
-
-	let response: Response;
-
-	try {
-		const selectedModel = model();
-		response = await fetch(anthropicApiUrl, {
-			method: 'POST',
-			headers: {
-				'x-api-key': env.ANTHROPIC_API_KEY,
-				'anthropic-version': anthropicVersion,
-				'content-type': 'application/json'
-			},
-			body: JSON.stringify({
-				model: selectedModel,
-				max_tokens: 8192,
-				...(isOpus47Model(selectedModel)
-					? {
-							thinking: {
-								type: 'adaptive'
-							}
-						}
-					: {}),
-				output_config: {
-					...descriptionOutputConfig(selectedModel),
-					...(isOpus47Model(selectedModel) ? { effort: reasoningEffort() } : {})
-				},
-				messages: [
-					{
-						role: 'user',
-						content: buildPrompt(input, cues)
-					}
-				]
-			})
-		});
-	} catch {
-		return {
-			description: null,
-			error: 'Anthropic description generation is temporarily unavailable.'
-		};
-	}
-
-	const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse & {
-		error?: { message?: string };
+	return {
+		description: normalizeGeneratedDescription(
+			parseDescriptionResponse(responseText),
+			input,
+			cues,
+			model
+		),
+		error: null
 	};
+}
 
-	if (!response.ok) {
+export function descriptionPromptForInput(input: DescriptionGenerationInput): {
+	prompt: string;
+	cues: TranscriptCue[];
+	error: string | null;
+} {
+	const cues = parseSrtCues(input.caption.body);
+
+	if (cues.length === 0) {
 		return {
-			description: null,
-			error: anthropicErrorMessage(body.error?.message, response.status)
+			prompt: '',
+			cues: [],
+			error: 'Stored captions do not contain readable SRT cues.'
 		};
 	}
 
-	if (body.stop_reason === 'max_tokens') {
-		return {
-			description: null,
-			error: 'Anthropic description generation response was truncated.'
-		};
-	}
-
-	try {
-		return {
-			description: normalizeGeneratedDescription(
-				parseDescriptionResponse(textFromAnthropicResponse(body)),
-				input,
-				cues
-			),
-			error: null
-		};
-	} catch {
-		return {
-			description: null,
-			error: 'Anthropic returned an unreadable description.'
-		};
-	}
+	return {
+		prompt: buildDescriptionPrompt(input, cues),
+		cues,
+		error: null
+	};
 }

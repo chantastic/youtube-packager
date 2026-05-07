@@ -34,9 +34,7 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let copiedVideoId = $state<string | null>(null);
-	let loadedTitleAiChecksByVideoId = $state<Record<string, VideoValidation[]> | null>(
-		null
-	);
+	let loadedTitleAiChecksByVideoId = $state<Record<string, VideoValidation[]> | null>(null);
 	let loadedTitleAiChecksError = $state<string | null | undefined>(undefined);
 	let titleAiChecksByVideoId = $derived.by(
 		(): Record<string, VideoValidation[]> =>
@@ -213,7 +211,7 @@
 		}
 
 		const checks = data.playlist.videos.flatMap((video) =>
-			baselineValidations(video.videoId, video.title).filter((check) => check.id === 'event')
+			baselineValidations(video.videoId, video.title)
 		);
 		const actionableChecks = checks.filter((check) => check.status !== 'info');
 
@@ -361,7 +359,7 @@
 					</p>
 					{#if summary.total > 0}
 						<p class="mt-1 text-sm text-gray-500">
-							{summary.passing}/{summary.total} titles include the event suffix
+							Static title checks: {summary.passing}/{summary.total} passing
 						</p>
 					{/if}
 				</div>
@@ -460,6 +458,7 @@
 				<article
 					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
 				>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href={video.playlistVideoUrl} target="_blank" rel="noreferrer" class="block">
 						{#if video.thumbnailUrl}
 							<img
@@ -551,7 +550,11 @@
 							{/each}
 						</div>
 						<div class="mt-3 flex flex-wrap gap-2 md:hidden">
-							<IconButton href={videoDetailHref(video.videoId)} icon={FileText} label="Video details" />
+							<IconButton
+								href={videoDetailHref(video.videoId)}
+								icon={FileText}
+								label="Video details"
+							/>
 							<ExternalLinkButton
 								href={video.playlistVideoUrl}
 								icon={CirclePlay}
@@ -604,7 +607,11 @@
 						{/if}
 					</div>
 					<div class="hidden items-start gap-2 md:flex">
-						<IconButton href={videoDetailHref(video.videoId)} icon={FileText} label="Video details" />
+						<IconButton
+							href={videoDetailHref(video.videoId)}
+							icon={FileText}
+							label="Video details"
+						/>
 						<ExternalLinkButton
 							href={video.playlistVideoUrl}
 							icon={CirclePlay}

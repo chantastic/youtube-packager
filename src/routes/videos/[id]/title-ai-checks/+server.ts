@@ -1,7 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
-import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
-import { buildTitleAiValidationInputs } from '$lib/title-ai-validation';
+import { buildTitleAiValidationInputs, titleAiValidationInputKey } from '$lib/title-ai-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
 
@@ -51,47 +50,15 @@ export const POST: RequestHandler = async ({ params }) => {
 		speakers,
 		video: videoRecord
 	});
-	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await client.action(api.anthropicWorkflows.validateTitleAiChecks, {
-		inputs: cachePlan.misses.map((entry) => ({
-			requestId: entry.cacheKeyString,
-			videoId: entry.videoId,
-			field: entry.field,
-			checkId: entry.checkId,
-			label: entry.label,
-			input: entry.input
-		}))
+	const result = await client.action(api.anthropicWorkflows.buildTitleAiChecks, {
+		inputs
 	});
-	const now = Date.now();
-	const freshEntries = cachePlan.misses.flatMap((entry) => {
-		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
-
-		return validation
-			? [
-					{
-						...entry,
-						validation,
-						checkedAt: now
-					}
-				]
-			: [];
-	});
-
-	await saveAiValidationCache(freshEntries);
 
 	return json({
-		validations: cachePlan.entries
-			.map(
-				(entry) =>
-					cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
-					freshResult.validationsByRequestId[entry.cacheKeyString]
-			)
+		validations: inputs
+			.map((input) => result.validationsByInputKey[titleAiValidationInputKey(input)])
 			.filter(Boolean),
-		error: freshResult.error,
-		cache: {
-			hits: inputs.length - cachePlan.misses.length,
-			misses: cachePlan.misses.length,
-			writes: freshEntries.length
-		}
+		error: result.error,
+		cache: result.cache
 	});
 };

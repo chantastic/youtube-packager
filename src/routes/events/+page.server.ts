@@ -2,12 +2,6 @@ import { fail } from '@sveltejs/kit';
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClient } from '$lib/server/convex';
 import {
-	planAiValidationCache,
-	saveAiValidationCache,
-	type AiValidationCacheEntry,
-	type AiValidationCachePlan
-} from '$lib/server/ai-validation-cache';
-import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,
 	type TitleAiValidationInput
@@ -23,6 +17,7 @@ import {
 	pendingVideoValidation,
 	summarizeVideoValidations,
 	validateVideoBaseline,
+	type VideoValidation,
 	videoValidationContextKey
 } from '$lib/video-validation';
 import { api } from '../../../convex/_generated/api';
@@ -32,6 +27,15 @@ import type { PageServerLoad, Actions } from './$types';
 
 type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
 type EventRow = FunctionReturnType<typeof api.events.collect>[number];
+type CachedTitleAiChecks = {
+	validationsByInputKey: Record<string, VideoValidation>;
+	cache: {
+		hits: number;
+		misses: number;
+		writes: number;
+		total: number;
+	};
+};
 type ValidationBuildState =
 	| {
 			kind: 'playlist';
@@ -107,17 +111,10 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 	return [...inputsByKey.values()];
 }
 
-function aiValidationEntriesByInputKey(cachePlan: AiValidationCachePlan | null) {
-	return new Map(
-		(cachePlan?.entries ?? []).map((entry) => [titleAiValidationInputKey(entry), entry])
-	);
-}
-
 function cachedAiValidationsForRow(
 	row: AssignmentRow,
 	event: EventRow,
-	cachePlan: AiValidationCachePlan | null,
-	entriesByInputKey: Map<string, AiValidationCacheEntry>
+	cachedTitleAiChecks: CachedTitleAiChecks | null
 ) {
 	return buildTitleAiValidationInputs({
 		videoId: row.video._id,
@@ -126,12 +123,9 @@ function cachedAiValidationsForRow(
 		speakers: speakerRecordsForValidation(row),
 		video: videoRecordForValidation(row)
 	}).map((input) => {
-		const entry = entriesByInputKey.get(titleAiValidationInputKey(input));
+		const validation = cachedTitleAiChecks?.validationsByInputKey[titleAiValidationInputKey(input)];
 
-		return entry
-			? (cachePlan?.cachedValidationsByCacheKey[entry.cacheKeyString] ??
-					pendingVideoValidation(input.checkId, input.label))
-			: pendingVideoValidation(input.checkId, input.label);
+		return validation ?? pendingVideoValidation(input.checkId, input.label);
 	});
 }
 
@@ -140,41 +134,14 @@ async function buildAiValidationCache(inputs: TitleAiValidationInput[]) {
 		return { checked: 0, total: 0, error: null as string | null };
 	}
 
-	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await getConvexClient().action(
-		api.anthropicWorkflows.validateTitleAiChecks,
-		{
-			inputs: cachePlan.misses.map((entry) => ({
-				requestId: entry.cacheKeyString,
-				videoId: entry.videoId,
-				field: entry.field,
-				checkId: entry.checkId,
-				label: entry.label,
-				input: entry.input
-			}))
-		}
-	);
-	const now = Date.now();
-	const freshEntries = cachePlan.misses.flatMap((entry) => {
-		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
-
-		return validation
-			? [
-					{
-						...entry,
-						validation,
-						checkedAt: now
-					}
-				]
-			: [];
+	const result = await getConvexClient().action(api.anthropicWorkflows.buildTitleAiChecks, {
+		inputs
 	});
 
-	await saveAiValidationCache(freshEntries);
-
 	return {
-		checked: inputs.length - cachePlan.misses.length + freshEntries.length,
-		total: inputs.length,
-		error: freshResult.error
+		checked: result.cache.hits + result.cache.writes,
+		total: result.cache.total,
+		error: result.error
 	};
 }
 
@@ -239,8 +206,12 @@ export const load: PageServerLoad = async () => {
 
 		return event ? titleAiInputsForAssignments(rows, event) : [];
 	});
-	const aiCache = titleAiInputs.length > 0 ? await planAiValidationCache(titleAiInputs) : null;
-	const aiEntriesByInputKey = aiValidationEntriesByInputKey(aiCache);
+	const aiCache =
+		titleAiInputs.length > 0
+			? await client.action(api.anthropicWorkflows.collectCachedTitleAiChecks, {
+					inputs: titleAiInputs
+				})
+			: null;
 
 	const validationStats = events.flatMap((event) => {
 		const assignments = assignmentsByEventId.get(event._id) ?? [];
@@ -258,7 +229,7 @@ export const load: PageServerLoad = async () => {
 							speakers: speakerRecordsForValidation(row),
 							video: videoRecordForValidation(row)
 						}),
-						...cachedAiValidationsForRow(row, event, aiCache, aiEntriesByInputKey)
+						...cachedAiValidationsForRow(row, event, aiCache)
 					])
 				)
 			] as const
@@ -284,11 +255,9 @@ export const load: PageServerLoad = async () => {
 			continue;
 		}
 
-		const missingAiCount = titleAiInputsForAssignments(assignments, event).filter((input) => {
-			const entry = aiEntriesByInputKey.get(titleAiValidationInputKey(input));
-
-			return !entry || !aiCache?.cachedValidationsByCacheKey[entry.cacheKeyString];
-		}).length;
+		const missingAiCount = titleAiInputsForAssignments(assignments, event).filter(
+			(input) => !aiCache?.validationsByInputKey[titleAiValidationInputKey(input)]
+		).length;
 
 		if (missingAiCount === 0) {
 			continue;

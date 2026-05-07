@@ -1,4 +1,3 @@
-import { env } from '$env/dynamic/private';
 import {
 	deriveComposedBaseTitle,
 	formatComposedVideoTitle,
@@ -10,25 +9,13 @@ import {
 	videoTypeLabelFor,
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
-} from '$lib/title-format';
+} from './title-format';
 import {
 	validateTitleFocus,
 	type VideoValidation,
 	youtubeTitleFocusLength,
 	youtubeTitleMaxLength
-} from '$lib/video-validation';
-
-const anthropicApiUrl = 'https://api.anthropic.com/v1/messages';
-const anthropicVersion = '2023-06-01';
-const defaultModel = 'claude-haiku-4-5-20251001';
-
-type AnthropicMessageResponse = {
-	content?: Array<{
-		type?: string;
-		text?: string;
-	}>;
-	stop_reason?: string;
-};
+} from './video-validation';
 
 export type TitleAlternativesAssignmentInput = {
 	assignmentId: string;
@@ -80,10 +67,6 @@ export type TitleAlternativesResult = {
 	error: string | null;
 };
 
-function model() {
-	return env.ANTHROPIC_MODEL ?? defaultModel;
-}
-
 function stripJsonFence(value: string) {
 	return value
 		.trim()
@@ -91,10 +74,6 @@ function stripJsonFence(value: string) {
 		.replace(/^```\s*/i, '')
 		.replace(/\s*```$/i, '')
 		.trim();
-}
-
-function textFromAnthropicResponse(response: AnthropicMessageResponse) {
-	return response.content?.find((item) => item.type === 'text' && item.text)?.text ?? '';
 }
 
 function titleWarningsForPrompt(validations: VideoValidation[] = []) {
@@ -231,7 +210,7 @@ export function finalizeTitleAlternatives(
 	return alternatives;
 }
 
-function fallbackAlternativesByAssignmentId(input: TitleAlternativesInput, error: string) {
+export function fallbackAlternativesByAssignmentId(input: TitleAlternativesInput, error: string) {
 	return Object.fromEntries(
 		input.assignments.map((assignment) => [
 			assignment.assignmentId,
@@ -244,120 +223,33 @@ function fallbackAlternativesByAssignmentId(input: TitleAlternativesInput, error
 	);
 }
 
-function anthropicErrorMessage(message: string | undefined, status: number) {
-	const fallback = `Anthropic title alternatives failed with ${status}.`;
+export function titleAlternativesFromResponse(
+	input: TitleAlternativesInput,
+	responseText: string
+): TitleAlternativesResult {
+	const parsed = parseTitleAlternativesResponse(responseText);
+	const resultsByAssignmentId = new Map(
+		(parsed.results ?? []).map((result) => [result.assignmentId, result.baseTitles ?? []])
+	);
+	const alternativesByAssignmentId: Record<string, AssignmentTitleAlternatives> = {};
 
-	if (!message) {
-		return fallback;
-	}
-
-	if (message.toLowerCase().includes('model')) {
-		return `Anthropic title alternatives could not use model "${model()}". Set ANTHROPIC_MODEL to a model available for this API key.`;
-	}
-
-	return message;
-}
-
-export async function generateTitleAlternativesWithAnthropic(
-	input: TitleAlternativesInput
-): Promise<TitleAlternativesResult> {
-	if (input.assignments.length === 0) {
-		return { alternativesByAssignmentId: {}, error: null };
-	}
-
-	if (!env.ANTHROPIC_API_KEY) {
-		const error = 'Set ANTHROPIC_API_KEY to generate title alternatives.';
-
-		return {
-			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(input, error),
-			error
-		};
-	}
-
-	let response: Response;
-
-	try {
-		response = await fetch(anthropicApiUrl, {
-			method: 'POST',
-			headers: {
-				'x-api-key': env.ANTHROPIC_API_KEY,
-				'anthropic-version': anthropicVersion,
-				'content-type': 'application/json'
-			},
-			body: JSON.stringify({
-				model: model(),
-				max_tokens: 2048,
-				messages: [
-					{
-						role: 'user',
-						content: buildTitleAlternativesPrompt(input)
-					}
-				]
-			})
-		});
-	} catch {
-		const error = 'Anthropic title alternatives are temporarily unavailable.';
-
-		return {
-			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(input, error),
-			error
-		};
-	}
-
-	const body = (await response.json().catch(() => ({}))) as AnthropicMessageResponse & {
-		error?: { message?: string };
-	};
-
-	if (!response.ok) {
-		const error = anthropicErrorMessage(body.error?.message, response.status);
-
-		return {
-			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(input, error),
-			error
-		};
-	}
-
-	if (body.stop_reason === 'max_tokens') {
-		const error = 'Anthropic title alternatives response was truncated.';
-
-		return {
-			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(input, error),
-			error
-		};
-	}
-
-	try {
-		const parsed = parseTitleAlternativesResponse(textFromAnthropicResponse(body));
-		const resultsByAssignmentId = new Map(
-			(parsed.results ?? []).map((result) => [result.assignmentId, result.baseTitles ?? []])
+	for (const assignment of input.assignments) {
+		const alternatives = finalizeTitleAlternatives(
+			resultsByAssignmentId.get(assignment.assignmentId) ?? [],
+			input.currentTitle,
+			input.video,
+			assignment.event
 		);
-		const alternativesByAssignmentId: Record<string, AssignmentTitleAlternatives> = {};
 
-		for (const assignment of input.assignments) {
-			const alternatives = finalizeTitleAlternatives(
-				resultsByAssignmentId.get(assignment.assignmentId) ?? [],
-				input.currentTitle,
-				input.video,
-				assignment.event
-			);
-
-			alternativesByAssignmentId[assignment.assignmentId] = {
-				assignmentId: assignment.assignmentId,
-				alternatives,
-				error: alternatives.length ? null : 'No alternatives fit the playlist rules.'
-			};
-		}
-
-		return {
-			alternativesByAssignmentId,
-			error: null
-		};
-	} catch {
-		const error = 'Anthropic returned unreadable title alternatives.';
-
-		return {
-			alternativesByAssignmentId: fallbackAlternativesByAssignmentId(input, error),
-			error
+		alternativesByAssignmentId[assignment.assignmentId] = {
+			assignmentId: assignment.assignmentId,
+			alternatives,
+			error: alternatives.length ? null : 'No alternatives fit the playlist rules.'
 		};
 	}
+
+	return {
+		alternativesByAssignmentId,
+		error: null
+	};
 }

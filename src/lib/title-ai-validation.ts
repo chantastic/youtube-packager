@@ -3,9 +3,10 @@ import {
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
 } from './title-format';
+import { titleAiCheckIds, titleCheckLabel, type TitleAiCheckId } from './title-checks';
 import { youtubeTitleFocusLength, type VideoValidation } from './video-validation';
 
-export type TitleAiValidationCheckId = 'hook' | 'mechanics';
+export type TitleAiValidationCheckId = TitleAiCheckId;
 export type TitleAiValidationField = 'title';
 
 export type TitleAiValidationInput = {
@@ -28,16 +29,16 @@ export type TitleAiValidationContext = {
 	video?: VideoTitleFormatRecord;
 };
 
-export const titleAiValidationChecks = [
-	{ id: 'hook', label: 'Hook' },
-	{ id: 'mechanics', label: 'Mechanics' }
-] as const satisfies ReadonlyArray<{
+export const titleAiValidationChecks = titleAiCheckIds.map((id) => ({
+	id,
+	label: titleCheckLabel(id)
+})) satisfies Array<{
 	id: TitleAiValidationCheckId;
 	label: string;
 }>;
 
 export function titleAiValidationLabel(checkId: TitleAiValidationCheckId) {
-	return titleAiValidationChecks.find((check) => check.id === checkId)?.label ?? checkId;
+	return titleCheckLabel(checkId);
 }
 
 export function buildTitleAiValidationInputs(

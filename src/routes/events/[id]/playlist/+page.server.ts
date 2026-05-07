@@ -7,7 +7,6 @@ import {
 } from '$lib/server/youtube-connection';
 import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
 import { isVideoType, normalizeVideoType } from '$lib/title-format';
-import { planAiValidationCache } from '$lib/server/ai-validation-cache';
 import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,
@@ -107,9 +106,11 @@ async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event:
 		return {};
 	}
 
-	const cachePlan = await planAiValidationCache(inputs);
-	const entriesByInputKey = new Map(
-		cachePlan.entries.map((entry) => [titleAiValidationInputKey(entry), entry])
+	const cachedTitleAiChecks = await getConvexClient().action(
+		api.anthropicWorkflows.collectCachedTitleAiChecks,
+		{
+			inputs
+		}
 	);
 	const validationsByVideoId: Record<string, VideoValidation[]> = {};
 
@@ -121,12 +122,10 @@ async function cachedTitleAiChecksByVideoId(assignments: AssignmentRow[], event:
 			speakers: speakerRecordsForValidation(row),
 			video: videoRecordForValidation(row)
 		}).map((input) => {
-			const entry = entriesByInputKey.get(titleAiValidationInputKey(input));
+			const validation =
+				cachedTitleAiChecks.validationsByInputKey[titleAiValidationInputKey(input)];
 
-			return entry
-				? (cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
-						pendingVideoValidation(input.checkId, input.label))
-				: pendingVideoValidation(input.checkId, input.label);
+			return validation ?? pendingVideoValidation(input.checkId, input.label);
 		});
 
 		validationsByVideoId[row.video.youtubeVideoId] = validations;
@@ -196,10 +195,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		const playlistAssignments = await client.query(api.playlistAssignmentViews.getForEvent, {
 			eventId: event._id
 		});
-		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
-			playlistAssignments,
-			event
-		);
+		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(playlistAssignments, event);
 
 		return {
 			event,

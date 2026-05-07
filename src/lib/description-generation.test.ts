@@ -1,27 +1,14 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
+	descriptionFromResponse,
+	descriptionPromptForInput,
 	formatChapterTimestamp,
-	generateDescriptionWithAnthropic,
 	parseSrtCues,
 	recommendedChapterCount,
 	transcriptDurationMs
-} from './anthropic-description';
-
-function jsonResponse(body: unknown, status = 200) {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
-}
+} from './description-generation';
 
 describe('anthropic description helpers', () => {
-	afterEach(() => {
-		vi.unstubAllEnvs();
-		vi.restoreAllMocks();
-	});
-
 	test('parses SRT cues', () => {
 		expect(
 			parseSrtCues(`1
@@ -69,51 +56,8 @@ We are building with WorkOS.
 		expect(recommendedChapterCount(75 * 60_000)).toBe(12);
 	});
 
-	test('sends transcript, speaker, event, and link context when generating a description', async () => {
-		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
-		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-			jsonResponse({
-				content: [
-					{
-						type: 'text',
-						text: JSON.stringify({
-							hook: 'Agent-native auth is changing how teams ship secure products.',
-							metadata: [
-								{
-									label: 'Speaker',
-									value: 'Chan, Developer Advocate, WorkOS'
-								},
-								{
-									label: 'Event',
-									value: 'MCP Night: Auth for Agents'
-								}
-							],
-							chapters: [
-								{ timestamp: '0:00', title: 'Why agent auth matters' },
-								{ timestamp: '1:00', title: 'Designing safer sessions' },
-								{ timestamp: '2:00', title: 'Shipping the integration' }
-							],
-							links: [
-								{
-									label: 'WorkOS',
-									url: 'https://workos.com',
-									placeholder: ''
-								},
-								{
-									label: 'Chan profile',
-									url: '',
-									placeholder: 'TODO: add Chan profile URL'
-								}
-							],
-							description:
-								'Agent-native auth is changing how teams ship secure products.\n\nSpeaker: Chan, Developer Advocate, WorkOS'
-						})
-					}
-				]
-			})
-		);
-
-		const result = await generateDescriptionWithAnthropic({
+	test('builds transcript, speaker, event, and link context for description generation', () => {
+		const input = {
 			video: {
 				youtubeVideoId: 'video-1',
 				title: 'Build Agent-Native Auth',
@@ -161,14 +105,45 @@ Teams should leave with a practical path for their own implementation.
 				label: 'WorkOS',
 				url: 'https://workos.com'
 			}
-		});
-		const request = fetchMock.mock.calls[0][1] as RequestInit;
-		const body = JSON.parse(request.body as string);
-		const prompt = body.messages[0].content as string;
+		};
+		const prompt = descriptionPromptForInput(input).prompt;
+		const result = descriptionFromResponse(
+			input,
+			JSON.stringify({
+				hook: 'Agent-native auth is changing how teams ship secure products.',
+				metadata: [
+					{
+						label: 'Speaker',
+						value: 'Chan, Developer Advocate, WorkOS'
+					},
+					{
+						label: 'Event',
+						value: 'MCP Night: Auth for Agents'
+					}
+				],
+				chapters: [
+					{ timestamp: '0:00', title: 'Why agent auth matters' },
+					{ timestamp: '1:00', title: 'Designing safer sessions' },
+					{ timestamp: '2:00', title: 'Shipping the integration' }
+				],
+				links: [
+					{
+						label: 'WorkOS',
+						url: 'https://workos.com',
+						placeholder: ''
+					},
+					{
+						label: 'Chan profile',
+						url: '',
+						placeholder: 'TODO: add Chan profile URL'
+					}
+				],
+				description:
+					'Agent-native auth is changing how teams ship secure products.\n\nSpeaker: Chan, Developer Advocate, WorkOS'
+			}),
+			'claude-opus-4-7'
+		);
 
-		expect(request.method).toBe('POST');
-		expect(body.model).toBe('claude-opus-4-7');
-		expect(body.output_config.effort).toBe('high');
 		expect(prompt).toContain('Build Agent-Native Auth');
 		expect(prompt).toContain('Chan');
 		expect(prompt).toContain('Developer Advocate');
@@ -186,31 +161,5 @@ Teams should leave with a practical path for their own implementation.
 			'1:00',
 			'2:00'
 		]);
-	});
-
-	test('reports truncated Anthropic description responses', async () => {
-		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
-		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-			jsonResponse({ stop_reason: 'max_tokens' })
-		);
-
-		await expect(
-			generateDescriptionWithAnthropic({
-				video: {
-					youtubeVideoId: 'video-1',
-					title: 'Build Agent-Native Auth'
-				},
-				speakers: [],
-				assignments: [],
-				caption: {
-					body: `1
-00:00:00,000 --> 00:00:01,000
-Readable captions.`
-				}
-			})
-		).resolves.toEqual({
-			description: null,
-			error: 'Anthropic description generation response was truncated.'
-		});
 	});
 });

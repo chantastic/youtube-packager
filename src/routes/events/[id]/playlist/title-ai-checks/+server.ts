@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { getConvexClient } from '$lib/server/convex';
-import { planAiValidationCache, saveAiValidationCache } from '$lib/server/ai-validation-cache';
 import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,
@@ -102,56 +101,29 @@ export const POST: RequestHandler = async ({ params }) => {
 		);
 	}
 
-	const cachePlan = await planAiValidationCache(inputs);
-	const freshResult = await client.action(api.anthropicWorkflows.validateTitleAiChecks, {
-		inputs: cachePlan.misses.map((entry) => ({
-			requestId: entry.cacheKeyString,
-			videoId: entry.videoId,
-			field: entry.field,
-			checkId: entry.checkId,
-			label: entry.label,
-			input: entry.input
-		}))
+	const result = await client.action(api.anthropicWorkflows.buildTitleAiChecks, {
+		inputs
 	});
-	const now = Date.now();
-	const freshEntries = cachePlan.misses.flatMap((entry) => {
-		const validation = freshResult.validationsByRequestId[entry.cacheKeyString];
-
-		return validation
-			? [
-					{
-						...entry,
-						validation,
-						checkedAt: now
-					}
-				]
-			: [];
-	});
-
-	await saveAiValidationCache(freshEntries);
 
 	return json({
-		validationsByVideoId: cachePlan.entries.reduce<Record<string, VideoValidation[]>>(
-			(result, entry) => {
-				const validation =
-					cachePlan.cachedValidationsByCacheKey[entry.cacheKeyString] ??
-					freshResult.validationsByRequestId[entry.cacheKeyString];
+		validationsByVideoId: inputs.reduce<Record<string, VideoValidation[]>>(
+			(validationsByVideoId, entry) => {
+				const validation = result.validationsByInputKey[titleAiValidationInputKey(entry)];
 
 				if (validation) {
 					const responseVideoId = youtubeVideoIdByVideoId.get(entry.videoId) ?? entry.videoId;
 
-					result[responseVideoId] = [...(result[responseVideoId] ?? []), validation];
+					validationsByVideoId[responseVideoId] = [
+						...(validationsByVideoId[responseVideoId] ?? []),
+						validation
+					];
 				}
 
-				return result;
+				return validationsByVideoId;
 			},
 			{}
 		),
-		error: freshResult.error,
-		cache: {
-			hits: inputs.length - cachePlan.misses.length,
-			misses: cachePlan.misses.length,
-			writes: freshEntries.length
-		}
+		error: result.error,
+		cache: result.cache
 	});
 };

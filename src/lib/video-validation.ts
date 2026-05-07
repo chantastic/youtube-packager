@@ -8,6 +8,7 @@ import {
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
 } from './title-format';
+import { titleCheckLabel, titleCheckOrder, type TitleCheckId } from './title-checks';
 
 export type ValidationStatus = 'pass' | 'fail' | 'info' | 'pending';
 
@@ -57,8 +58,6 @@ const weakTitleOpeners = [
 	'fireside chat',
 	'interview'
 ];
-const validationOrder = ['hook', 'profile', 'event', 'format', 'mechanics'];
-
 function normalizeComparable(value: string) {
 	return value.replace(/\s+/g, ' ').trim();
 }
@@ -88,7 +87,7 @@ export function validateTitleEventSuffix(title: string, event: TitleFormatEvent)
 	if (!suffix) {
 		return {
 			id: 'event',
-			label: 'Event',
+			label: titleCheckLabel('event'),
 			status: 'info',
 			message: 'No event suffix configured'
 		};
@@ -98,7 +97,7 @@ export function validateTitleEventSuffix(title: string, event: TitleFormatEvent)
 
 	return {
 		id: 'event',
-		label: 'Event',
+		label: titleCheckLabel('event'),
 		status: titleIncludesSuffix ? 'pass' : 'fail',
 		message: titleIncludesSuffix ? 'Includes event suffix' : 'Missing event suffix',
 		expected: suffix
@@ -115,7 +114,7 @@ export function validateSelectedTitleFormat(
 	if (!prefix && !suffix) {
 		return {
 			id: 'format',
-			label: 'Format',
+			label: titleCheckLabel('format'),
 			status: 'info',
 			message: 'No format affixes configured'
 		};
@@ -131,7 +130,7 @@ export function validateSelectedTitleFormat(
 
 	return {
 		id: 'format',
-		label: 'Format',
+		label: titleCheckLabel('format'),
 		status: hasExpectedPrefix && hasExpectedSuffix ? 'pass' : 'fail',
 		message:
 			hasExpectedPrefix && hasExpectedSuffix
@@ -168,7 +167,7 @@ export function validateTitleProfile(
 	if (missingMetadata.length) {
 		return {
 			id: 'profile',
-			label: 'Profile',
+			label: titleCheckLabel('profile'),
 			status: 'fail',
 			message: `Missing ${missingMetadata.join(' and ')}`,
 			expected: 'Presenter and company'
@@ -184,7 +183,7 @@ export function validateTitleProfile(
 
 	return {
 		id: 'profile',
-		label: 'Profile',
+		label: titleCheckLabel('profile'),
 		status: missingFromTitle.length ? 'fail' : 'pass',
 		message: missingFromTitle.length
 			? 'Missing presenter or company'
@@ -223,7 +222,7 @@ export function validateTitleFocus(
 	if (!normalizedFocus) {
 		return {
 			id: 'hook',
-			label: 'Hook',
+			label: titleCheckLabel('hook'),
 			status: 'fail',
 			message: 'Missing title hook',
 			expected: `Clear topic or hook in the first ${youtubeTitleFocusLength} characters`
@@ -233,7 +232,7 @@ export function validateTitleFocus(
 	if (startsWithEventName || startsWithEventYear) {
 		return {
 			id: 'hook',
-			label: 'Hook',
+			label: titleCheckLabel('hook'),
 			status: 'fail',
 			message: 'Starts with event metadata',
 			expected: `Clear topic or hook in the first ${youtubeTitleFocusLength} characters`,
@@ -244,7 +243,7 @@ export function validateTitleFocus(
 	if (speaker || company) {
 		return {
 			id: 'hook',
-			label: 'Hook',
+			label: titleCheckLabel('hook'),
 			status: 'fail',
 			message: speaker ? 'Starts with speaker metadata' : 'Starts with company metadata',
 			expected: `Clear topic or hook in the first ${youtubeTitleFocusLength} characters`,
@@ -255,7 +254,7 @@ export function validateTitleFocus(
 	if (weakOpener) {
 		return {
 			id: 'hook',
-			label: 'Hook',
+			label: titleCheckLabel('hook'),
 			status: 'fail',
 			message: 'Starts with weak framing',
 			expected: `Clear topic or hook in the first ${youtubeTitleFocusLength} characters`,
@@ -265,7 +264,7 @@ export function validateTitleFocus(
 
 	return {
 		id: 'hook',
-		label: 'Hook',
+		label: titleCheckLabel('hook'),
 		status: 'pass',
 		message: 'Hook is front-loaded',
 		expected: `Clear topic or hook in the first ${youtubeTitleFocusLength} characters`
@@ -290,7 +289,7 @@ export function validateVideoBaseline(
 	];
 }
 
-export function pendingVideoValidation(id: string, label: string): VideoValidation {
+export function pendingVideoValidation(id: string, label = titleCheckLabel(id)): VideoValidation {
 	return {
 		id,
 		label,
@@ -338,10 +337,10 @@ export function summarizeVideoValidations(validationsByVideo: VideoValidation[][
 	}
 
 	return [...byId.values()].sort((a, b) => {
-		const aIndex = validationOrder.indexOf(a.id);
-		const bIndex = validationOrder.indexOf(b.id);
-		const normalizedAIndex = aIndex === -1 ? validationOrder.length : aIndex;
-		const normalizedBIndex = bIndex === -1 ? validationOrder.length : bIndex;
+		const aIndex = titleCheckOrder.indexOf(a.id as TitleCheckId);
+		const bIndex = titleCheckOrder.indexOf(b.id as TitleCheckId);
+		const normalizedAIndex = aIndex === -1 ? titleCheckOrder.length : aIndex;
+		const normalizedBIndex = bIndex === -1 ? titleCheckOrder.length : bIndex;
 
 		return normalizedAIndex - normalizedBIndex;
 	});

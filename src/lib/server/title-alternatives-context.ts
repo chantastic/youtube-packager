@@ -1,4 +1,4 @@
-import type { TitleAlternativesInput } from '$lib/server/anthropic-title-alternatives';
+import type { TitleAlternativesInput } from '$lib/title-alternatives';
 import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,

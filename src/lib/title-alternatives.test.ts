@@ -1,19 +1,10 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
 	buildTitleAlternativesPrompt,
 	finalizeTitleAlternatives,
-	generateTitleAlternativesWithAnthropic,
-	parseTitleAlternativesResponse
-} from './anthropic-title-alternatives';
-
-function jsonResponse(body: unknown, status = 200) {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
-}
+	parseTitleAlternativesResponse,
+	titleAlternativesFromResponse
+} from './title-alternatives';
 
 const titleAlternativesInput = {
 	currentTitle: 'Overview of Agent-Native Auth — Chan, WorkOS | TestConf 2026',
@@ -35,13 +26,6 @@ const titleAlternativesInput = {
 };
 
 describe('Anthropic title alternatives', () => {
-	afterEach(() => {
-		vi.unstubAllEnvs();
-		vi.doUnmock('$env/dynamic/private');
-		vi.resetModules();
-		vi.restoreAllMocks();
-	});
-
 	test('accepts fenced JSON', () => {
 		expect(
 			parseTitleAlternativesResponse(
@@ -186,103 +170,28 @@ describe('Anthropic title alternatives', () => {
 		expect(prompt).not.toContain('Matches selected format');
 	});
 
-	test('does not call Anthropic when the API key is missing', async () => {
-		vi.doMock('$env/dynamic/private', () => ({
-			env: {
-				ANTHROPIC_API_KEY: ''
-			}
-		}));
-		const { generateTitleAlternativesWithAnthropic } =
-			await import('./anthropic-title-alternatives');
-		const fetchMock = vi.spyOn(globalThis, 'fetch');
-
-		await expect(generateTitleAlternativesWithAnthropic(titleAlternativesInput)).resolves.toEqual({
-			alternativesByAssignmentId: {
-				'assignment-1': {
-					assignmentId: 'assignment-1',
-					alternatives: [],
-					error: 'Set ANTHROPIC_API_KEY to generate title alternatives.'
-				}
-			},
-			error: 'Set ANTHROPIC_API_KEY to generate title alternatives.'
-		});
-		expect(fetchMock).not.toHaveBeenCalled();
-	});
-
-	test('reports truncated Anthropic title alternative responses', async () => {
-		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
-		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-			jsonResponse({ stop_reason: 'max_tokens' })
-		);
-
-		await expect(generateTitleAlternativesWithAnthropic(titleAlternativesInput)).resolves.toEqual({
-			alternativesByAssignmentId: {
-				'assignment-1': {
-					assignmentId: 'assignment-1',
-					alternatives: [],
-					error: 'Anthropic title alternatives response was truncated.'
-				}
-			},
-			error: 'Anthropic title alternatives response was truncated.'
-		});
-	});
-
-	test('reports unavailable Anthropic title alternative models with the configured model name', async () => {
-		vi.doMock('$env/dynamic/private', () => ({
-			env: {
-				ANTHROPIC_API_KEY: 'test-api-key',
-				ANTHROPIC_MODEL: 'claude-missing-model'
-			}
-		}));
-		const { generateTitleAlternativesWithAnthropic } =
-			await import('./anthropic-title-alternatives');
-		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-			jsonResponse(
-				{
-					error: {
-						message: 'model: claude-missing-model not found'
-					}
-				},
-				400
+	test('normalizes generated base titles into final title alternatives', () => {
+		expect(
+			titleAlternativesFromResponse(
+				titleAlternativesInput,
+				JSON.stringify({
+					results: [
+						{
+							assignmentId: 'assignment-1',
+							baseTitles: ['Build Agent-Native Auth That Works']
+						}
+					]
+				})
 			)
-		);
-
-		await expect(generateTitleAlternativesWithAnthropic(titleAlternativesInput)).resolves.toEqual({
+		).toEqual({
 			alternativesByAssignmentId: {
 				'assignment-1': {
 					assignmentId: 'assignment-1',
-					alternatives: [],
-					error:
-						'Anthropic title alternatives could not use model "claude-missing-model". Set ANTHROPIC_MODEL to a model available for this API key.'
+					alternatives: ['Build Agent-Native Auth That Works — Chan, WorkOS | TestConf 2026'],
+					error: null
 				}
 			},
-			error:
-				'Anthropic title alternatives could not use model "claude-missing-model". Set ANTHROPIC_MODEL to a model available for this API key.'
-		});
-	});
-
-	test('reports unreadable Anthropic title alternative JSON', async () => {
-		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
-		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-			jsonResponse({
-				content: [
-					{
-						type: 'text',
-						text: 'not json'
-					}
-				]
-			})
-		);
-
-		await expect(generateTitleAlternativesWithAnthropic(titleAlternativesInput)).resolves.toEqual({
-			alternativesByAssignmentId: {
-				'assignment-1': {
-					assignmentId: 'assignment-1',
-					alternatives: [],
-					error: 'Anthropic returned unreadable title alternatives.'
-				}
-			},
-			error: 'Anthropic returned unreadable title alternatives.'
+			error: null
 		});
 	});
 });

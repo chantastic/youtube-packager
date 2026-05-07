@@ -1,5 +1,4 @@
 import { error, json } from '@sveltejs/kit';
-import { generateDescriptionWithAnthropic } from '$lib/server/anthropic-description';
 import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
 import { api, internal } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
@@ -31,12 +30,9 @@ export const POST: RequestHandler = async ({ params }) => {
 		throw error(404, 'Video not found.');
 	}
 
-	const captions = await convexAdminFunction(
-		internal.videoCaptions.collectByVideoIdInternal,
-		{
-			videoId: videoView.video._id
-		}
-	);
+	const captions = await convexAdminFunction(internal.videoCaptions.collectByVideoIdInternal, {
+		videoId: videoView.video._id
+	});
 	const caption = captions[0];
 
 	if (!caption) {
@@ -46,34 +42,36 @@ export const POST: RequestHandler = async ({ params }) => {
 		});
 	}
 
-	const result = await generateDescriptionWithAnthropic({
-		video: {
-			youtubeVideoId: videoView.video.youtubeVideoId,
-			title: videoView.video.title,
-			description: videoView.video.description,
-			channelTitle: videoView.video.channelTitle,
-			publishedAt: videoView.video.publishedAt,
-			videoPublishedAt: videoView.video.videoPublishedAt,
-			videoType: videoView.video.videoType
-		},
-		speakers: videoView.speakers.map((row) => ({
-			name: row.speaker.name,
-			company: row.speaker.company,
-			position: row.speaker.position
-		})),
-		assignments: videoView.assignments.map((row) => ({
-			assignmentId: row.assignment._id,
-			event: row.event
-		})),
-		caption: {
-			language: caption.language,
-			name: caption.name,
-			trackKind: caption.trackKind,
-			body: caption.body
-		},
-		host: {
-			label: 'WorkOS',
-			url: 'https://workos.com'
+	const result = await client.action(api.anthropicWorkflows.generateDescription, {
+		input: {
+			video: {
+				youtubeVideoId: videoView.video.youtubeVideoId,
+				title: videoView.video.title,
+				description: videoView.video.description,
+				channelTitle: videoView.video.channelTitle,
+				publishedAt: videoView.video.publishedAt,
+				videoPublishedAt: videoView.video.videoPublishedAt,
+				videoType: videoView.video.videoType
+			},
+			speakers: videoView.speakers.map((row) => ({
+				name: row.speaker.name,
+				company: row.speaker.company,
+				position: row.speaker.position
+			})),
+			assignments: videoView.assignments.map((row) => ({
+				assignmentId: row.assignment._id,
+				event: row.event
+			})),
+			caption: {
+				language: caption.language,
+				name: caption.name,
+				trackKind: caption.trackKind,
+				body: caption.body
+			},
+			host: {
+				label: 'WorkOS',
+				url: 'https://workos.com'
+			}
 		}
 	});
 
