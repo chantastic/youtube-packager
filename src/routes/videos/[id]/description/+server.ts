@@ -21,9 +21,11 @@ function speakerNames(
 }
 
 export const POST: RequestHandler = async ({ params }) => {
-	const videoView = await getConvexClient().query(api.videoViews.getByYoutubeVideoId, {
-		youtubeVideoId: params.videoId
+	const client = getConvexClient();
+	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
+		routeParam: params.id
 	});
+	const videoView = routeTarget?.videoView ?? null;
 
 	if (!videoView) {
 		throw error(404, 'Video not found.');
@@ -32,7 +34,7 @@ export const POST: RequestHandler = async ({ params }) => {
 	const captions = await convexAdminFunction(
 		internal.videoCaptions.collectByYoutubeVideoIdInternal,
 		{
-			youtubeVideoId: params.videoId
+			youtubeVideoId: videoView.video.youtubeVideoId
 		}
 	);
 	const caption = captions[0];

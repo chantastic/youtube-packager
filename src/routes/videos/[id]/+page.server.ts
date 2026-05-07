@@ -1,4 +1,4 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { convexAdminFunction, getConvexClient } from '$lib/server/convex';
 import {
 	canCustomizeVideoTitleFormat,
@@ -86,26 +86,37 @@ function videoTitleRecord(
 	};
 }
 
+async function resolveVideoRouteTarget(client: ReturnType<typeof getConvexClient>, routeParam: string) {
+	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
+		routeParam
+	});
+
+	if (!routeTarget) {
+		throw error(404, 'Video not found.');
+	}
+
+	return routeTarget;
+}
+
 export const load: PageServerLoad = async (event) => {
 	const client = getConvexClient();
-	let videoView = await client.query(api.videoViews.getByYoutubeVideoId, {
-		youtubeVideoId: event.params.videoId
-	});
+	const routeTarget = await resolveVideoRouteTarget(client, event.params.id);
+	let videoView = routeTarget.videoView;
 	let refreshError: string | null = null;
 
-	if (!videoView) {
-		throw error(404, 'Video not found.');
+	if (routeTarget.kind === 'youtubeVideoId') {
+		throw redirect(308, `/videos/${videoView.video._id}`);
 	}
 
 	try {
 		const auth = youtubeAuthContext(event);
 		const accessToken = await getConnectedYouTubeAccessToken(auth);
-		const refreshedVideo = await getYouTubeVideoData(event.params.videoId, accessToken);
+		const refreshedVideo = await getYouTubeVideoData(videoView.video.youtubeVideoId, accessToken);
 
 		await client.mutation(api.videoCommands.recordYoutubeSnapshotByYoutubeVideoId, refreshedVideo);
 		videoView =
-			(await client.query(api.videoViews.getByYoutubeVideoId, {
-				youtubeVideoId: event.params.videoId
+			(await client.query(api.videoViews.get, {
+				id: videoView.video._id
 			})) ?? videoView;
 	} catch (caught) {
 		if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
@@ -118,7 +129,7 @@ export const load: PageServerLoad = async (event) => {
 	const captions = await convexAdminFunction(
 		internal.videoCaptions.collectByYoutubeVideoIdInternal,
 		{
-			youtubeVideoId: event.params.videoId
+			youtubeVideoId: videoView.video.youtubeVideoId
 		}
 	);
 	const availableSpeakers = await client.query(api.speakers.collect, {});
@@ -148,10 +159,15 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	fetchCaptions: async (event) => {
 		const auth = youtubeAuthContext(event);
+		const videoView = (await resolveVideoRouteTarget(
+			getConvexClient(),
+			event.params.id
+		)).videoView;
+		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		try {
 			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
-			const tracks = await listYouTubeCaptionTracks(event.params.videoId, accessToken);
+			const tracks = await listYouTubeCaptionTracks(youtubeVideoId, accessToken);
 			const track = bestCaptionTrack(tracks);
 
 			if (!track) {
@@ -165,7 +181,7 @@ export const actions: Actions = {
 			await convexAdminFunction(
 				internal.videoCaptions.upsertByYoutubeVideoIdAndCaptionTrackIdInternal,
 				{
-					youtubeVideoId: event.params.videoId,
+					youtubeVideoId,
 					caption: {
 						captionTrackId: track.id,
 						...(track.language !== undefined ? { language: track.language } : {}),
@@ -197,6 +213,8 @@ export const actions: Actions = {
 		const titleOverride = optionalString(data, 'titleOverride');
 		const titleOverrideEnabled = data.get('titleOverrideEnabled') === 'on';
 		const client = getConvexClient();
+		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		if (titleOverrideEnabled && !titleOverride) {
 			return fail(400, {
@@ -207,17 +225,13 @@ export const actions: Actions = {
 		try {
 			let updatedTitle = titleOverride;
 			let wroteYouTubeTitle = false;
-			const existingVideo = titleOverride
-				? await client.query(api.videos.findByYoutubeVideoId, {
-						youtubeVideoId: event.params.videoId
-					})
-				: null;
+			const existingVideo = titleOverride ? videoView.video : null;
 
 			if (titleOverride && existingVideo?.title !== titleOverride) {
 				const auth = youtubeAuthContext(event);
 				const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
 				const updatedVideo = await updateYouTubeVideoTitle(
-					event.params.videoId,
+					youtubeVideoId,
 					titleOverride,
 					accessToken
 				);
@@ -227,7 +241,7 @@ export const actions: Actions = {
 			}
 
 			await client.mutation(api.videoCommands.setMetadataByYoutubeVideoId, {
-				youtubeVideoId: event.params.videoId,
+				youtubeVideoId,
 				videoType,
 				...(updatedTitle ? { titleOverride: updatedTitle } : { clearTitleOverride: true }),
 				...(canCustomizeVideoTitleFormat(videoType)
@@ -237,7 +251,7 @@ export const actions: Actions = {
 
 			if (updatedTitle && existingVideo?.title !== updatedTitle) {
 				await client.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
-					youtubeVideoId: event.params.videoId,
+					youtubeVideoId,
 					title: updatedTitle
 				});
 			}
@@ -269,12 +283,15 @@ export const actions: Actions = {
 		}
 
 		try {
+			const client = getConvexClient();
+			const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+			const youtubeVideoId = videoView.video.youtubeVideoId;
 			const auth = youtubeAuthContext(event);
 			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
-			const updatedVideo = await updateYouTubeVideoTitle(event.params.videoId, title, accessToken);
+			const updatedVideo = await updateYouTubeVideoTitle(youtubeVideoId, title, accessToken);
 
-			await getConvexClient().mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
-				youtubeVideoId: event.params.videoId,
+			await client.mutation(api.videoCommands.recordTitleByYoutubeVideoId, {
+				youtubeVideoId,
 				title: updatedVideo.title
 			});
 
@@ -292,10 +309,12 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const speakerId = optionalString(data, 'speakerId');
 		const name = optionalString(data, 'name');
+		const videoView = (await resolveVideoRouteTarget(getConvexClient(), params.id)).videoView;
+		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		if (speakerId) {
 			await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-				youtubeVideoId: params.videoId,
+				youtubeVideoId,
 				speakerId: speakerId as Id<'speakers'>
 			});
 
@@ -307,7 +326,7 @@ export const actions: Actions = {
 		}
 
 		await getConvexClient().mutation(api.videoCommands.assignSpeakerByYoutubeVideoId, {
-			youtubeVideoId: params.videoId,
+			youtubeVideoId,
 			name,
 			company: optionalString(data, 'company'),
 			position: optionalString(data, 'position')
@@ -322,10 +341,11 @@ export const actions: Actions = {
 			return;
 		}
 
+		const videoView = (await resolveVideoRouteTarget(getConvexClient(), params.id)).videoView;
 		await getConvexClient().mutation(
 			api.videoCommands.removeSpeakerByYoutubeVideoIdAndSpeakerId,
 			{
-				youtubeVideoId: params.videoId,
+				youtubeVideoId: videoView.video.youtubeVideoId,
 				speakerId: speakerId as Id<'speakers'>
 			}
 		);

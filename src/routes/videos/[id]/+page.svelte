@@ -357,7 +357,7 @@
 
 		try {
 			const response = await fetch(
-				`/videos/${encodeURIComponent(data.videoView.video.youtubeVideoId)}/title-quality`,
+				`/videos/${encodeURIComponent(data.videoView.video._id)}/title-quality`,
 				{
 					method: 'POST'
 				}
@@ -383,7 +383,7 @@
 
 		try {
 			const response = await fetch(
-				`/videos/${encodeURIComponent(data.videoView.video.youtubeVideoId)}/title-alternatives`,
+				`/videos/${encodeURIComponent(data.videoView.video._id)}/title-alternatives`,
 				{
 					method: 'POST'
 				}
@@ -410,7 +410,7 @@
 
 		try {
 			const response = await fetch(
-				`/videos/${encodeURIComponent(data.videoView.video.youtubeVideoId)}/description`,
+				`/videos/${encodeURIComponent(data.videoView.video._id)}/description`,
 				{
 					method: 'POST'
 				}

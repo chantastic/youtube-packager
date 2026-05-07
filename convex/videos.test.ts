@@ -106,6 +106,37 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 	});
 });
 
+test('video view resolves both canonical ids and legacy YouTube video ids', async () => {
+	const t = convexTest(schema, modules);
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+	const eventId = event!._id;
+
+	await t.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
+		eventId,
+		playlist: {
+			playlistId: 'PL123',
+			validationContextKey: 'testconf-2026',
+			validationStats: [],
+			videos: [video({ youtubeVideoId: 'legacy-youtube-id' })]
+		}
+	});
+
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
+		youtubeVideoId: 'legacy-youtube-id'
+	});
+	const canonicalRoute = await t.query(api.videoViews.getByRouteParam, {
+		routeParam: videoDoc!._id
+	});
+	const legacyRoute = await t.query(api.videoViews.getByRouteParam, {
+		routeParam: 'legacy-youtube-id'
+	});
+
+	expect(canonicalRoute?.kind).toBe('id');
+	expect(canonicalRoute?.videoView.video._id).toBe(videoDoc!._id);
+	expect(legacyRoute?.kind).toBe('youtubeVideoId');
+	expect(legacyRoute?.videoView.video._id).toBe(videoDoc!._id);
+});
+
 test('event type sets the default video type for ingested videos', async () => {
 	const t = convexTest(schema, modules);
 	const event = await t.mutation(api.events.upsert, {
@@ -226,8 +257,8 @@ test('speaker assignments and video title format survive playlist syncs', async 
 	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-1'
 	});
-	const videoView = await t.query(api.videoViews.getByYoutubeVideoId, {
-		youtubeVideoId: 'video-1'
+	const videoView = await t.query(api.videoViews.get, {
+		id: videoDoc!._id
 	});
 
 	expect(videoDoc).toMatchObject({
@@ -306,8 +337,11 @@ test('existing speakers can be assigned to another video', async () => {
 		speakerId: speakers[0]._id
 	});
 
-	const videoView = await t.query(api.videoViews.getByYoutubeVideoId, {
+	const videoDoc = await t.query(api.videos.findByYoutubeVideoId, {
 		youtubeVideoId: 'video-2'
+	});
+	const videoView = await t.query(api.videoViews.get, {
+		id: videoDoc!._id
 	});
 
 	expect(speakers).toHaveLength(1);
@@ -430,8 +464,8 @@ test('a video can have assignments in multiple playlists', async () => {
 	const assignments = await t.query(api.playlistAssignments.collectByVideoId, {
 		videoId: videoDoc!._id
 	});
-	const videoView = await t.query(api.videoViews.getByYoutubeVideoId, {
-		youtubeVideoId: 'shared-video'
+	const videoView = await t.query(api.videoViews.get, {
+		id: videoDoc!._id
 	});
 
 	expect(assignments).toHaveLength(2);

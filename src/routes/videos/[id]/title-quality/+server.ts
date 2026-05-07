@@ -7,9 +7,10 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params }) => {
 	const client = getConvexClient();
-	const videoView = await client.query(api.videoViews.getByYoutubeVideoId, {
-		youtubeVideoId: params.videoId
+	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
+		routeParam: params.id
 	});
+	const videoView = routeTarget?.videoView ?? null;
 
 	if (!videoView) {
 		throw error(404, 'Video not found.');

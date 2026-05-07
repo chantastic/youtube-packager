@@ -54,6 +54,10 @@
 		return data.playlistAssignments.find((row) => row.video.youtubeVideoId === videoId);
 	}
 
+	function videoDetailHref(videoId: string) {
+		return `/videos/${assignmentRowFor(videoId)?.video._id ?? videoId}`;
+	}
+
 	function titleFocusSpeakers(videoId: string) {
 		const row = assignmentRowFor(videoId);
 
@@ -537,7 +541,7 @@
 							{/each}
 						</div>
 						<div class="mt-3 flex flex-wrap gap-2 md:hidden">
-							<IconButton href={`/videos/${video.videoId}`} icon={FileText} label="Video details" />
+							<IconButton href={videoDetailHref(video.videoId)} icon={FileText} label="Video details" />
 							<ExternalLinkButton
 								href={video.playlistVideoUrl}
 								icon={CirclePlay}
@@ -590,7 +594,7 @@
 						{/if}
 					</div>
 					<div class="hidden items-start gap-2 md:flex">
-						<IconButton href={`/videos/${video.videoId}`} icon={FileText} label="Video details" />
+						<IconButton href={videoDetailHref(video.videoId)} icon={FileText} label="Video details" />
 						<ExternalLinkButton
 							href={video.playlistVideoUrl}
 							icon={CirclePlay}
