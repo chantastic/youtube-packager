@@ -1,11 +1,28 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
 	chunkTitleQualityInputs,
 	parseTitleAiValidationResponse,
-	parseTitleQualityResponse
+	parseTitleQualityResponse,
+	validateTitleAiChecksWithAnthropic
 } from './anthropic-title-validation';
 
+function jsonResponse(body: unknown, status = 200) {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: {
+			'Content-Type': 'application/json'
+		}
+	});
+}
+
 describe('Anthropic title validation parsing', () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		vi.doUnmock('$env/dynamic/private');
+		vi.resetModules();
+		vi.restoreAllMocks();
+	});
+
 	test('maps JSON results to validation objects', () => {
 		expect(
 			parseTitleQualityResponse(
@@ -139,6 +156,123 @@ describe('Anthropic title validation parsing', () => {
 				status: 'pass',
 				message: 'Looks clean'
 			}
+		});
+	});
+
+	test('does not call Anthropic when the API key is missing', async () => {
+		vi.doMock('$env/dynamic/private', () => ({
+			env: {
+				ANTHROPIC_API_KEY: ''
+			}
+		}));
+		const { validateTitleAiChecksWithAnthropic } = await import('./anthropic-title-validation');
+		const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+		await expect(
+			validateTitleAiChecksWithAnthropic([
+				{
+					requestId: 'video-1:title:hook',
+					videoId: 'video-1',
+					field: 'title',
+					checkId: 'hook',
+					label: 'Hook',
+					input: { title: 'Overview of Auth', hookText: 'Overview of Auth' }
+				}
+			])
+		).resolves.toEqual({
+			validationsByRequestId: {},
+			error: 'Set ANTHROPIC_API_KEY to run AI title checks.'
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('reports truncated Anthropic validation responses', async () => {
+		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
+		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+			jsonResponse({ stop_reason: 'max_tokens' })
+		);
+
+		await expect(
+			validateTitleAiChecksWithAnthropic([
+				{
+					requestId: 'video-1:title:hook',
+					videoId: 'video-1',
+					field: 'title',
+					checkId: 'hook',
+					label: 'Hook',
+					input: { title: 'Overview of Auth', hookText: 'Overview of Auth' }
+				}
+			])
+		).resolves.toEqual({
+			validationsByRequestId: {},
+			error: 'Anthropic title validation response was truncated. Try a smaller batch.'
+		});
+	});
+
+	test('reports unavailable Anthropic validation models with the configured model name', async () => {
+		vi.doMock('$env/dynamic/private', () => ({
+			env: {
+				ANTHROPIC_API_KEY: 'test-api-key',
+				ANTHROPIC_MODEL: 'claude-missing-model'
+			}
+		}));
+		const { validateTitleAiChecksWithAnthropic } = await import('./anthropic-title-validation');
+		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+			jsonResponse(
+				{
+					error: {
+						message: 'model: claude-missing-model not found'
+					}
+				},
+				400
+			)
+		);
+
+		await expect(
+			validateTitleAiChecksWithAnthropic([
+				{
+					requestId: 'video-1:title:mechanics',
+					videoId: 'video-1',
+					field: 'title',
+					checkId: 'mechanics',
+					label: 'Mechanics',
+					input: { title: 'Build Better Auth' }
+				}
+			])
+		).resolves.toEqual({
+			validationsByRequestId: {},
+			error:
+				'Anthropic title validation could not use model "claude-missing-model". Set ANTHROPIC_MODEL to a model available for this API key.'
+		});
+	});
+
+	test('reports unreadable Anthropic validation JSON', async () => {
+		vi.stubEnv('ANTHROPIC_API_KEY', 'test-api-key');
+		vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+			jsonResponse({
+				content: [
+					{
+						type: 'text',
+						text: 'not json'
+					}
+				]
+			})
+		);
+
+		await expect(
+			validateTitleAiChecksWithAnthropic([
+				{
+					requestId: 'video-1:title:mechanics',
+					videoId: 'video-1',
+					field: 'title',
+					checkId: 'mechanics',
+					label: 'Mechanics',
+					input: { title: 'Build Better Auth' }
+				}
+			])
+		).resolves.toEqual({
+			validationsByRequestId: {},
+			error: 'Anthropic returned an unreadable title validation response.'
 		});
 	});
 });
