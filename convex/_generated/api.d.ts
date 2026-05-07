@@ -14,9 +14,12 @@ import type * as aiJobViews from "../aiJobViews.js";
 import type * as aiValidationCheckTypes from "../aiValidationCheckTypes.js";
 import type * as aiValidationChecks from "../aiValidationChecks.js";
 import type * as anthropicLlmProvider from "../anthropicLlmProvider.js";
+import type * as auth from "../auth.js";
+import type * as authViews from "../authViews.js";
 import type * as descriptionGenerationTypes from "../descriptionGenerationTypes.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as events from "../events.js";
+import type * as http from "../http.js";
 import type * as llmProvider from "../llmProvider.js";
 import type * as playlistAssignmentViews from "../playlistAssignmentViews.js";
 import type * as playlistAssignments from "../playlistAssignments.js";
@@ -44,9 +47,12 @@ declare const fullApi: ApiFromModules<{
   aiValidationCheckTypes: typeof aiValidationCheckTypes;
   aiValidationChecks: typeof aiValidationChecks;
   anthropicLlmProvider: typeof anthropicLlmProvider;
+  auth: typeof auth;
+  authViews: typeof authViews;
   descriptionGenerationTypes: typeof descriptionGenerationTypes;
   eventPlaylistStats: typeof eventPlaylistStats;
   events: typeof events;
+  http: typeof http;
   llmProvider: typeof llmProvider;
   playlistAssignmentViews: typeof playlistAssignmentViews;
   playlistAssignments: typeof playlistAssignments;
@@ -88,4 +94,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
+};

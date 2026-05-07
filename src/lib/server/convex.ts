@@ -18,6 +18,20 @@ export function getConvexClient() {
 	return new ConvexHttpClient(publicEnv.PUBLIC_CONVEX_URL);
 }
 
+export function getAuthenticatedConvexClient(accessToken?: string | null) {
+	const client = getConvexClient();
+
+	if (accessToken) {
+		client.setAuth(accessToken);
+	}
+
+	return client;
+}
+
+export function getConvexClientForEvent(event: { locals: App.Locals }) {
+	return getAuthenticatedConvexClient(event.locals.auth?.accessToken);
+}
+
 function convexAdminToken() {
 	const token = privateEnv.CONVEX_ADMIN_TOKEN ?? privateEnv.CONVEX_ADMIN_KEY;
 

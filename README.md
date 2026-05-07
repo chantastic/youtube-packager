@@ -27,11 +27,28 @@ WORKOS_CLIENT_ID=your_workos_client_id
 WORKOS_API_KEY=your_workos_api_key
 WORKOS_REDIRECT_URI=http://localhost:5173/auth/callback
 WORKOS_COOKIE_PASSWORD=your_32_character_cookie_password
+WORKOS_WEBHOOK_SECRET=your_workos_webhook_secret
 YOUTUBE_PIPES_PROVIDER=google
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_DESCRIPTION_MODEL=claude-opus-4-7
 ANTHROPIC_DESCRIPTION_EFFORT=high
+```
+
+WorkOS AuthKit is configured for Convex. The WorkOS AuthKit component syncs WorkOS users
+into Convex through a webhook at:
+
+```text
+https://<your-convex-deployment>.convex.site/workos/webhook
+```
+
+Configure that WorkOS webhook for `user.created`, `user.updated`, and `user.deleted`, then set
+the signing secret on your Convex deployment:
+
+```sh
+pnpm exec convex env set WORKOS_CLIENT_ID <client-id>
+pnpm exec convex env set WORKOS_API_KEY <api-key>
+pnpm exec convex env set WORKOS_WEBHOOK_SECRET <webhook-secret>
 ```
 
 YouTube Data API calls use WorkOS Pipes. WorkOS owns the OAuth lifecycle,

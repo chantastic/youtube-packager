@@ -57,6 +57,8 @@ getYoutubeAccessToken(ctx, input);
 Current strategy:
 
 - App-owned global secrets live in Convex or host environment variables.
+- WorkOS AuthKit is the auth provider; Convex validates WorkOS JWTs and the
+  WorkOS AuthKit component owns durable user sync from WorkOS webhooks.
 - WorkOS Pipes owns the OAuth provider token lifecycle for YouTube.
 - Feature code should call the app's provider boundary rather than importing WorkOS, Google,
   or provider token helpers directly.
