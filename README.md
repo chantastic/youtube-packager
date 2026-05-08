@@ -18,7 +18,14 @@ workflow pattern, and future WorkOS Vault/SaaS secret strategy.
 
 ## Environment
 
-Create `.env.local` with:
+Environment is split across two runtimes:
+
+- SvelteKit / Cloudflare Worker env starts AuthKit sessions, handles app routing, and starts
+  WorkOS Pipes authorization.
+- Convex deployment env runs AuthKit webhooks, durable AI jobs, and YouTube workflows. YouTube
+  workflows now call WorkOS Pipes from Convex, so Convex must have its own WorkOS env values.
+
+Create `.env.local` for the SvelteKit / Worker runtime with:
 
 ```bash
 PUBLIC_CONVEX_URL=your_convex_url
@@ -46,6 +53,18 @@ pnpm exec convex env set WORKOS_API_KEY <api-key>
 pnpm exec convex env set WORKOS_WEBHOOK_SECRET <webhook-secret>
 ```
 
+YouTube Data API calls use WorkOS Pipes. WorkOS owns the OAuth lifecycle,
+credential storage, and token refresh; Convex workflows ask WorkOS for a fresh provider token
+when a queued YouTube job runs. Configure the Google provider in Pipes with the YouTube scopes
+the app needs.
+
+Convex also needs the Pipes provider when using anything other than the default `google`.
+Set it in both `.env.local` and Convex so the authorization UI and background workflows agree:
+
+```sh
+pnpm exec convex env set YOUTUBE_PIPES_PROVIDER google
+```
+
 AI workflows run in Convex. Set Anthropic values on the Convex deployment:
 
 ```sh
@@ -54,11 +73,6 @@ pnpm exec convex env set ANTHROPIC_MODEL claude-haiku-4-5-20251001
 pnpm exec convex env set ANTHROPIC_DESCRIPTION_MODEL claude-opus-4-7
 pnpm exec convex env set ANTHROPIC_DESCRIPTION_EFFORT high
 ```
-
-YouTube Data API calls use WorkOS Pipes. WorkOS owns the OAuth lifecycle,
-credential storage, and token refresh; Convex workflows ask WorkOS for a fresh provider token
-when a queued YouTube job runs. Configure the Google provider in Pipes with the YouTube scopes
-the app needs.
 
 ## Development
 
