@@ -12,6 +12,7 @@ configureAuthKit({
 });
 
 const protectedPrefixes = ['/events', '/videos', '/integrations'];
+const missingOrganizationPath = '/access-required';
 
 const guardOrganizationRoutes: Handle = async ({ event, resolve }) => {
 	if (protectedPrefixes.some((prefix) => event.url.pathname.startsWith(prefix))) {
@@ -22,7 +23,7 @@ const guardOrganizationRoutes: Handle = async ({ event, resolve }) => {
 		}
 
 		if (!event.locals.auth.organizationId) {
-			throw redirect(303, `/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+			throw redirect(303, `${missingOrganizationPath}?returnTo=${encodeURIComponent(returnTo)}`);
 		}
 	}
 
