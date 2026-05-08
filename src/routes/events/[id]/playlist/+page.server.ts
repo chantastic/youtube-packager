@@ -1,24 +1,17 @@
 import { error, fail } from '@sveltejs/kit';
 import { getConvexClientForEvent } from '$lib/server/convex';
-import {
-	getConnectedYouTubeAccessToken,
-	YouTubeConnectionError,
-	youtubeAuthContext
-} from '$lib/server/youtube-connection';
-import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
 import { isVideoType, normalizeVideoType } from '$lib/title-format';
+import {
+	youtubePlaylistUrl,
+	youtubeStudioPlaylistContentUrl,
+	youtubeStudioPlaylistEditUrl
+} from '$lib/youtube';
 import {
 	buildTitleAiValidationInputs,
 	titleAiValidationInputKey,
 	type TitleAiValidationInput
 } from '$lib/title-ai-validation';
-import {
-	pendingVideoValidation,
-	summarizeVideoValidations,
-	validateVideoBaseline,
-	type VideoValidation,
-	videoValidationContextKey
-} from '$lib/video-validation';
+import { pendingVideoValidation, type VideoValidation } from '$lib/video-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../convex/_generated/dataModel';
@@ -26,6 +19,9 @@ import type { Actions, PageServerLoad } from './$types';
 
 type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
 type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
+type EventPlaylistStats = FunctionReturnType<
+	typeof api.eventPlaylistStats.collectByEventId
+>[number];
 
 function validationFilterFromUrl(url: URL) {
 	const id = url.searchParams.get('validation')?.trim();
@@ -137,9 +133,49 @@ async function cachedTitleAiChecksByVideoId(
 	return validationsByVideoId;
 }
 
+function storedPlaylistForEvent(
+	event: EventRow,
+	stats: EventPlaylistStats | null,
+	assignments: AssignmentRow[]
+) {
+	const playlistId = stats?.playlistId ?? event.youtubePlaylistId;
+
+	if (!playlistId || (!stats && assignments.length === 0)) {
+		return null;
+	}
+
+	return {
+		playlistId,
+		title: stats?.playlistTitle ?? playlistId,
+		channelTitle: stats?.playlistChannelTitle,
+		itemCount: stats?.playlistItemCount,
+		url: youtubePlaylistUrl(playlistId),
+		studioEditUrl: youtubeStudioPlaylistEditUrl(playlistId),
+		studioContentUrl: youtubeStudioPlaylistContentUrl(playlistId),
+		videos: assignments.map((row) => ({
+			playlistItemId: row.assignment.playlistItemId,
+			videoId: row.video.youtubeVideoId,
+			...(row.video.youtubeChannelId !== undefined
+				? { channelId: row.video.youtubeChannelId }
+				: {}),
+			title: row.video.title,
+			...(row.video.description !== undefined ? { description: row.video.description } : {}),
+			position: row.assignment.position,
+			videoUrl: row.video.videoUrl,
+			playlistVideoUrl: row.assignment.playlistVideoUrl,
+			studioEditUrl: row.video.studioEditUrl,
+			...(row.video.thumbnailUrl !== undefined ? { thumbnailUrl: row.video.thumbnailUrl } : {}),
+			...(row.video.channelTitle !== undefined ? { channelTitle: row.video.channelTitle } : {}),
+			...(row.video.publishedAt !== undefined ? { publishedAt: row.video.publishedAt } : {}),
+			...(row.video.videoPublishedAt !== undefined
+				? { videoPublishedAt: row.video.videoPublishedAt }
+				: {})
+		}))
+	};
+}
+
 export const load: PageServerLoad = async (requestEvent) => {
-	const { params, locals, url } = requestEvent;
-	const auth = youtubeAuthContext({ locals });
+	const { params, url } = requestEvent;
 	const client = getConvexClientForEvent(requestEvent);
 	const validationFilter = validationFilterFromUrl(url);
 	const event = await client.query(api.events.find, {
@@ -158,85 +194,68 @@ export const load: PageServerLoad = async (requestEvent) => {
 			playlistError: null,
 			validationFilter,
 			titleAiChecksByVideoId: {},
-			titleAiChecksError: null
+			titleAiChecksError: null,
+			syncJob: null
 		};
 	}
 
-	try {
-		const accessToken = await getConnectedYouTubeAccessToken(auth);
-		const playlist = await getYouTubePlaylistData(event.youtubePlaylistId, accessToken);
-		const validationStats = summarizeVideoValidations(
-			playlist.videos.map((video) => validateVideoBaseline(video.title, event))
-		);
-
-		await client.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
-			eventId: event._id,
-			playlist: {
-				playlistId: playlist.playlistId,
-				...(playlist.channelId !== undefined ? { youtubeChannelId: playlist.channelId } : {}),
-				...(playlist.title !== undefined ? { title: playlist.title } : {}),
-				...(playlist.channelTitle !== undefined ? { channelTitle: playlist.channelTitle } : {}),
-				...(playlist.itemCount !== undefined ? { itemCount: playlist.itemCount } : {}),
-				validationContextKey: videoValidationContextKey(event),
-				validationStats,
-				videos: playlist.videos.map((video) => ({
-					playlistItemId: video.playlistItemId,
-					youtubeVideoId: video.videoId,
-					...(video.channelId !== undefined ? { youtubeChannelId: video.channelId } : {}),
-					title: video.title,
-					position: video.position,
-					videoUrl: video.videoUrl,
-					playlistVideoUrl: video.playlistVideoUrl,
-					studioEditUrl: video.studioEditUrl,
-					...(video.description !== undefined ? { description: video.description } : {}),
-					...(video.thumbnailUrl !== undefined ? { thumbnailUrl: video.thumbnailUrl } : {}),
-					...(video.channelTitle !== undefined ? { channelTitle: video.channelTitle } : {}),
-					...(video.publishedAt !== undefined ? { publishedAt: video.publishedAt } : {}),
-					...(video.videoPublishedAt !== undefined
-						? { videoPublishedAt: video.videoPublishedAt }
-						: {})
-				}))
-			}
-		});
-		const playlistAssignments = await client.query(api.playlistAssignmentViews.getForEvent, {
+	const [playlistAssignments, statsRows, syncJob] = await Promise.all([
+		client.query(api.playlistAssignmentViews.getForEvent, {
 			eventId: event._id
-		});
-		const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
-			client,
-			playlistAssignments,
-			event
-		);
+		}),
+		client.query(api.eventPlaylistStats.collectByEventId, {
+			eventIds: [event._id]
+		}),
+		client.query(api.workflowJobViews.getLatestForEventTask, {
+			eventId: event._id,
+			task: 'youtubePlaylistSync'
+		})
+	]);
+	const playlist = storedPlaylistForEvent(event, statsRows[0] ?? null, playlistAssignments);
+	const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
+		client,
+		playlistAssignments,
+		event
+	);
 
-		return {
-			event,
-			playlist,
-			playlistAssignments,
-			playlistError: null,
-			validationFilter,
-			titleAiChecksByVideoId,
-			titleAiChecksError: null
-		};
-	} catch (err) {
-		if (err instanceof YouTubeDataApiError || err instanceof YouTubeConnectionError) {
-			return {
-				event,
-				playlist: null,
-				playlistAssignments: [],
-				playlistError: {
-					status: err.status,
-					message: err.message
-				},
-				validationFilter,
-				titleAiChecksByVideoId: {},
-				titleAiChecksError: null
-			};
-		}
-
-		throw err;
-	}
+	return {
+		event,
+		playlist,
+		playlistAssignments,
+		playlistError: null,
+		validationFilter,
+		titleAiChecksByVideoId,
+		titleAiChecksError: null,
+		syncJob
+	};
 };
 
 export const actions: Actions = {
+	syncPlaylist: async (event) => {
+		const client = getConvexClientForEvent(event);
+		const foundEvent = await client.query(api.events.find, {
+			id: event.params.id as Id<'events'>
+		});
+
+		if (!foundEvent) {
+			throw error(404, 'Event not found.');
+		}
+
+		const result = await client.mutation(api.youtubeCommands.requestPlaylistSync, {
+			eventId: foundEvent._id
+		});
+
+		if (result.error) {
+			return fail(400, {
+				playlistSyncError: result.error
+			});
+		}
+
+		return {
+			playlistSyncMessage: 'Queued playlist sync.'
+		};
+	},
+
 	updateVideoType: async (event) => {
 		const { request } = event;
 		const client = getConvexClientForEvent(event);

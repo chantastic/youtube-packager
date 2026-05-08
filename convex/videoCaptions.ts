@@ -1,5 +1,8 @@
 import { v } from 'convex/values';
-import { internalMutation, internalQuery } from './_generated/server';
+import { internalMutation, internalQuery, query } from './_generated/server';
+import { documentBelongsToOrganization, requireOrganizationId } from './authz';
+import type { Id } from './_generated/dataModel';
+import type { QueryCtx } from './_generated/server';
 
 const captionValidator = {
 	captionTrackId: v.string(),
@@ -12,6 +15,22 @@ const captionValidator = {
 	body: v.string()
 };
 
+export const collectByVideoId = query({
+	args: {
+		videoId: v.id('videos')
+	},
+	handler: async (ctx, { videoId }) => {
+		const organizationId = await requireOrganizationId(ctx);
+		const video = await ctx.db.get(videoId);
+
+		if (!documentBelongsToOrganization(video, organizationId)) {
+			return [];
+		}
+
+		return await collectCaptionsByVideoId(ctx, video._id, organizationId);
+	}
+});
+
 export const collectByVideoIdInternal = internalQuery({
 	args: {
 		videoId: v.id('videos')
@@ -23,16 +42,24 @@ export const collectByVideoIdInternal = internalQuery({
 			return [];
 		}
 
-		const captions = await ctx.db
-			.query('videoCaptions')
-			.withIndex('by_organizationId_and_videoId', (q) =>
-				q.eq('organizationId', video.organizationId).eq('videoId', videoId)
-			)
-			.take(50);
-
-		return captions.sort((a, b) => b.fetchedAt - a.fetchedAt);
+		return await collectCaptionsByVideoId(ctx, video._id, video.organizationId);
 	}
 });
+
+async function collectCaptionsByVideoId(
+	ctx: QueryCtx,
+	videoId: Id<'videos'>,
+	organizationId: string
+) {
+	const captions = await ctx.db
+		.query('videoCaptions')
+		.withIndex('by_organizationId_and_videoId', (q) =>
+			q.eq('organizationId', organizationId).eq('videoId', videoId)
+		)
+		.take(50);
+
+	return captions.sort((a, b) => b.fetchedAt - a.fetchedAt);
+}
 
 export const upsertByVideoIdAndCaptionTrackIdInternal = internalMutation({
 	args: {

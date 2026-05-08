@@ -6,19 +6,12 @@ import {
 	titleAiValidationInputKey,
 	type TitleAiValidationInput
 } from '$lib/title-ai-validation';
-import {
-	getConnectedYouTubeAccessToken,
-	YouTubeConnectionError,
-	youtubeAuthContext
-} from '$lib/server/youtube-connection';
-import { getYouTubePlaylistData, YouTubeDataApiError } from '$lib/server/youtube-data-api';
 import { defaultEventType, isEventType } from '$lib/event-type';
 import {
 	pendingVideoValidation,
 	summarizeVideoValidations,
 	validateVideoBaseline,
-	type VideoValidation,
-	videoValidationContextKey
+	type VideoValidation
 } from '$lib/video-validation';
 import { api } from '../../../convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
@@ -148,50 +141,6 @@ async function buildAiValidationCache(
 		total: result.cache.total,
 		error: result.error
 	};
-}
-
-async function syncPlaylistForEvent(
-	client: ReturnType<typeof getConvexClientForEvent>,
-	event: EventRow,
-	accessToken: string
-) {
-	if (!event.youtubePlaylistId) {
-		throw new Error('Event has no playlist.');
-	}
-
-	const playlist = await getYouTubePlaylistData(event.youtubePlaylistId, accessToken);
-
-	await client.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
-		eventId: event._id,
-		playlist: {
-			playlistId: playlist.playlistId,
-			...(playlist.channelId !== undefined ? { youtubeChannelId: playlist.channelId } : {}),
-			...(playlist.title !== undefined ? { title: playlist.title } : {}),
-			...(playlist.channelTitle !== undefined ? { channelTitle: playlist.channelTitle } : {}),
-			...(playlist.itemCount !== undefined ? { itemCount: playlist.itemCount } : {}),
-			validationContextKey: videoValidationContextKey(event),
-			validationStats: [],
-			videos: playlist.videos.map((video) => ({
-				playlistItemId: video.playlistItemId,
-				youtubeVideoId: video.videoId,
-				...(video.channelId !== undefined ? { youtubeChannelId: video.channelId } : {}),
-				title: video.title,
-				position: video.position,
-				videoUrl: video.videoUrl,
-				playlistVideoUrl: video.playlistVideoUrl,
-				studioEditUrl: video.studioEditUrl,
-				...(video.description !== undefined ? { description: video.description } : {}),
-				...(video.thumbnailUrl !== undefined ? { thumbnailUrl: video.thumbnailUrl } : {}),
-				...(video.channelTitle !== undefined ? { channelTitle: video.channelTitle } : {}),
-				...(video.publishedAt !== undefined ? { publishedAt: video.publishedAt } : {}),
-				...(video.videoPublishedAt !== undefined
-					? { videoPublishedAt: video.videoPublishedAt }
-					: {})
-			}))
-		}
-	});
-
-	return playlist;
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -348,7 +297,7 @@ export const actions: Actions = {
 	},
 
 	buildValidations: async (requestEvent) => {
-		const { request, locals } = requestEvent;
+		const { request } = requestEvent;
 		const data = await request.formData();
 		const eventId = optionalString(data, 'eventId');
 
@@ -370,32 +319,44 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			const auth = youtubeAuthContext({ locals });
-			const accessToken = await getConnectedYouTubeAccessToken(auth);
-			const playlist = await syncPlaylistForEvent(client, event, accessToken);
-			const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
-				eventId: event._id
-			});
-			const aiChecks = await buildAiValidationCache(
-				client,
-				titleAiInputsForAssignments(assignments, event)
-			);
+		const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
+			eventId: event._id
+		});
+		const titleAiInputs = titleAiInputsForAssignments(assignments, event);
+		const cachedTitleAiChecks =
+			titleAiInputs.length > 0
+				? await client.action(api.videoWorkflows.collectCachedTitleAiChecks, {
+						inputs: titleAiInputs
+					})
+				: null;
+		const missingAiInputs = titleAiInputs.filter(
+			(input) => !cachedTitleAiChecks?.validationsByInputKey[titleAiValidationInputKey(input)]
+		);
+
+		if (assignments.length > 0 && missingAiInputs.length > 0) {
+			const aiChecks = await buildAiValidationCache(client, missingAiInputs);
 
 			return {
 				buildEventId: event._id,
-				buildMessage: `Built validations for ${event.name}. Synced ${playlist.videos.length} videos and checked AI title validations for ${aiChecks.checked}/${aiChecks.total}.`,
+				buildMessage: `Built AI title validations for ${aiChecks.checked}/${aiChecks.total}.`,
 				buildWarning: aiChecks.error
 			};
-		} catch (err) {
-			if (err instanceof YouTubeDataApiError || err instanceof YouTubeConnectionError) {
-				return fail(err.status, {
-					buildEventId: eventId,
-					buildError: err.message
-				});
-			}
-
-			throw err;
 		}
+
+		const result = await client.mutation(api.youtubeCommands.requestPlaylistSync, {
+			eventId: event._id
+		});
+
+		if (result.error) {
+			return fail(400, {
+				buildEventId: eventId,
+				buildError: result.error
+			});
+		}
+
+		return {
+			buildEventId: event._id,
+			buildMessage: `Queued playlist sync for ${event.name}.`
+		};
 	}
 };

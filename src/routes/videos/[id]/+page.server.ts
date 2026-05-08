@@ -1,26 +1,13 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { convexAdminFunction, getConvexClient, getConvexClientForEvent } from '$lib/server/convex';
+import { getConvexClient, getConvexClientForEvent } from '$lib/server/convex';
 import {
 	canCustomizeVideoTitleFormat,
 	isVideoType,
 	type VideoTitleFormatRecord
 } from '$lib/title-format';
 import { isTitleCheckId, titleCheckIds } from '$lib/title-checks';
-import {
-	getConnectedYouTubeAccessToken,
-	YouTubeConnectionError,
-	youtubeAuthContext
-} from '$lib/server/youtube-connection';
-import {
-	downloadYouTubeCaptionTrack,
-	getYouTubeVideoData,
-	listYouTubeCaptionTracks,
-	updateYouTubeVideoTitle,
-	YouTubeDataApiError,
-	type YouTubeCaptionTrack
-} from '$lib/server/youtube-data-api';
 import { validateVideoBaseline } from '$lib/video-validation';
-import { api, internal } from '../../../../convex/_generated/api';
+import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -33,22 +20,6 @@ function optionalVideoType(data: FormData) {
 	const value = optionalString(data, 'videoType');
 
 	return isVideoType(value) ? value : undefined;
-}
-
-function captionTrackScore(track: YouTubeCaptionTrack) {
-	const language = track.language?.toLowerCase() ?? '';
-	const trackKind = track.trackKind?.toLowerCase() ?? '';
-
-	return (
-		(language === 'en' ? 100 : language.startsWith('en-') ? 90 : 0) +
-		(trackKind === 'standard' ? 50 : 0) +
-		(track.isAutoSynced ? 0 : 10) +
-		(track.status === 'serving' ? 5 : 0)
-	);
-}
-
-function bestCaptionTrack(tracks: YouTubeCaptionTrack[]) {
-	return [...tracks].sort((a, b) => captionTrackScore(b) - captionTrackScore(a))[0];
 }
 
 function videoTitleRecord(
@@ -105,62 +76,34 @@ async function resolveVideoRouteTarget(
 export const load: PageServerLoad = async (event) => {
 	const client = getConvexClientForEvent(event);
 	const routeTarget = await resolveVideoRouteTarget(client, event.params.id);
-	let videoView = routeTarget.videoView;
-	let refreshError: string | null = null;
+	const videoView = routeTarget.videoView;
 
 	if (routeTarget.kind === 'youtubeVideoId') {
 		throw redirect(308, `/videos/${videoView.video._id}`);
 	}
 
-	try {
-		const auth = youtubeAuthContext(event);
-		const accessToken = await getConnectedYouTubeAccessToken(auth);
-		const refreshedVideo = await getYouTubeVideoData(videoView.video.youtubeVideoId, accessToken);
-
-		await client.mutation(api.videoCommands.recordYoutubeSnapshot, {
-			videoId: videoView.video._id,
-			youtubeVideoId: refreshedVideo.youtubeVideoId,
-			...(refreshedVideo.channelId !== undefined
-				? { youtubeChannelId: refreshedVideo.channelId }
-				: {}),
-			title: refreshedVideo.title,
-			...(refreshedVideo.description !== undefined
-				? { description: refreshedVideo.description }
-				: {}),
-			videoUrl: refreshedVideo.videoUrl,
-			studioEditUrl: refreshedVideo.studioEditUrl,
-			...(refreshedVideo.thumbnailUrl !== undefined
-				? { thumbnailUrl: refreshedVideo.thumbnailUrl }
-				: {}),
-			...(refreshedVideo.channelTitle !== undefined
-				? { channelTitle: refreshedVideo.channelTitle }
-				: {}),
-			...(refreshedVideo.publishedAt !== undefined
-				? { publishedAt: refreshedVideo.publishedAt }
-				: {}),
-			...(refreshedVideo.videoPublishedAt !== undefined
-				? { videoPublishedAt: refreshedVideo.videoPublishedAt }
-				: {})
-		});
-		videoView =
-			(await client.query(api.videoViews.get, {
-				id: videoView.video._id
-			})) ?? videoView;
-	} catch (caught) {
-		if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
-			refreshError = caught.message;
-		} else {
-			throw caught;
-		}
-	}
-
-	const captions = await convexAdminFunction(internal.videoCaptions.collectByVideoIdInternal, {
-		videoId: videoView.video._id
-	});
-	const descriptionJob = await client.query(api.aiJobViews.getLatestDescriptionGenerationForVideo, {
-		videoId: videoView.video._id
-	});
-	const availableSpeakers = await client.query(api.speakers.collect, {});
+	const [captions, descriptionJob, availableSpeakers, refreshJob, captionJob, titleUpdateJob] =
+		await Promise.all([
+			client.query(api.videoCaptions.collectByVideoId, {
+				videoId: videoView.video._id
+			}),
+			client.query(api.aiJobViews.getLatestDescriptionGenerationForVideo, {
+				videoId: videoView.video._id
+			}),
+			client.query(api.speakers.collect, {}),
+			client.query(api.workflowJobViews.getLatestForVideoTask, {
+				videoId: videoView.video._id,
+				task: 'youtubeVideoRefresh'
+			}),
+			client.query(api.workflowJobViews.getLatestForVideoTask, {
+				videoId: videoView.video._id,
+				task: 'youtubeCaptionFetch'
+			}),
+			client.query(api.workflowJobViews.getLatestForVideoTask, {
+				videoId: videoView.video._id,
+				task: 'youtubeTitleUpdate'
+			})
+		]);
 	const speakers = videoView.speakers.map((speakerRow) => ({
 		name: speakerRow.speaker.name,
 		company: speakerRow.speaker.company
@@ -172,7 +115,9 @@ export const load: PageServerLoad = async (event) => {
 		captions,
 		descriptionJob,
 		availableSpeakers,
-		refreshError,
+		refreshJob,
+		captionJob,
+		titleUpdateJob,
 		assignmentValidationsById: Object.fromEntries(
 			videoView.assignments.map((row) => [
 				row.assignment._id,
@@ -187,49 +132,38 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	fetchCaptions: async (event) => {
-		const auth = youtubeAuthContext(event);
+	refreshVideo: async (event) => {
 		const client = getConvexClientForEvent(event);
 		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
-		const youtubeVideoId = videoView.video.youtubeVideoId;
+		const result = await client.mutation(api.youtubeCommands.requestVideoRefresh, {
+			videoId: videoView.video._id
+		});
 
-		try {
-			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
-			const tracks = await listYouTubeCaptionTracks(youtubeVideoId, accessToken);
-			const track = bestCaptionTrack(tracks);
-
-			if (!track) {
-				return {
-					captionError: 'No caption tracks were found for this video.'
-				};
-			}
-
-			const body = await downloadYouTubeCaptionTrack(track.id, accessToken, 'srt');
-
-			await convexAdminFunction(internal.videoCaptions.upsertByVideoIdAndCaptionTrackIdInternal, {
-				videoId: videoView.video._id,
-				caption: {
-					captionTrackId: track.id,
-					...(track.language !== undefined ? { language: track.language } : {}),
-					...(track.name !== undefined ? { name: track.name } : {}),
-					...(track.trackKind !== undefined ? { trackKind: track.trackKind } : {}),
-					...(track.isAutoSynced !== undefined ? { isAutoSynced: track.isAutoSynced } : {}),
-					...(track.status !== undefined ? { status: track.status } : {}),
-					format: 'srt',
-					body
-				}
+		if (result.error) {
+			return fail(400, {
+				refreshError: result.error
 			});
-
-			return {
-				captionMessage: `Fetched ${track.language ?? 'unknown'} captions.`
-			};
-		} catch (caught) {
-			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
-				return { captionError: caught.message };
-			}
-
-			throw caught;
 		}
+
+		return {
+			refreshMessage: 'Queued YouTube refresh.'
+		};
+	},
+
+	fetchCaptions: async (event) => {
+		const client = getConvexClientForEvent(event);
+		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const result = await client.mutation(api.youtubeCommands.requestCaptionFetch, {
+			videoId: videoView.video._id
+		});
+
+		if (result.error) {
+			return { captionError: result.error };
+		}
+
+		return {
+			captionMessage: 'Queued caption fetch.'
+		};
 	},
 
 	updateMetadata: async (event) => {
@@ -239,7 +173,6 @@ export const actions: Actions = {
 		const titleOverrideEnabled = data.get('titleOverrideEnabled') === 'on';
 		const client = getConvexClientForEvent(event);
 		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
-		const youtubeVideoId = videoView.video.youtubeVideoId;
 
 		if (titleOverrideEnabled && !titleOverride) {
 			return fail(400, {
@@ -247,56 +180,37 @@ export const actions: Actions = {
 			});
 		}
 
-		try {
-			let updatedTitle = titleOverride;
-			let wroteYouTubeTitle = false;
-			const existingVideo = titleOverride ? videoView.video : null;
+		await client.mutation(api.videoCommands.setMetadata, {
+			videoId: videoView.video._id,
+			videoType,
+			...(titleOverrideEnabled && titleOverride ? { titleOverride } : { clearTitleOverride: true }),
+			...(canCustomizeVideoTitleFormat(videoType)
+				? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
+				: {})
+		});
 
-			if (titleOverride && existingVideo?.title !== titleOverride) {
-				const auth = youtubeAuthContext(event);
-				const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
-				const updatedVideo = await updateYouTubeVideoTitle(
-					youtubeVideoId,
-					titleOverride,
-					accessToken
-				);
-
-				updatedTitle = updatedVideo.title;
-				wroteYouTubeTitle = true;
-			}
-
-			await client.mutation(api.videoCommands.setMetadata, {
+		if (titleOverrideEnabled && titleOverride && videoView.video.title !== titleOverride) {
+			const result = await client.mutation(api.youtubeCommands.requestTitleUpdate, {
 				videoId: videoView.video._id,
-				videoType,
-				...(updatedTitle ? { titleOverride: updatedTitle } : { clearTitleOverride: true }),
-				...(canCustomizeVideoTitleFormat(videoType)
-					? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
-					: {})
+				title: titleOverride
 			});
 
-			if (updatedTitle && existingVideo?.title !== updatedTitle) {
-				await client.mutation(api.videoCommands.recordTitle, {
-					videoId: videoView.video._id,
-					title: updatedTitle
+			if (result.error) {
+				return fail(400, {
+					metadataError: result.error
 				});
 			}
 
 			return {
-				metadataMessage: wroteYouTubeTitle
-					? 'Saved metadata and updated YouTube title.'
-					: updatedTitle
-						? 'Saved metadata. YouTube title already matches.'
-						: 'Saved metadata.'
+				metadataMessage: 'Saved metadata and queued YouTube title update.'
 			};
-		} catch (caught) {
-			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
-				return fail(caught.status >= 400 && caught.status < 500 ? caught.status : 400, {
-					metadataError: caught.message
-				});
-			}
-
-			throw caught;
 		}
+
+		return {
+			metadataMessage: titleOverrideEnabled
+				? 'Saved metadata. YouTube title already matches.'
+				: 'Saved metadata.'
+		};
 	},
 
 	applyTitle: async (event) => {
@@ -307,27 +221,18 @@ export const actions: Actions = {
 			return { titleUpdateError: 'Choose a title before updating YouTube.' };
 		}
 
-		try {
-			const client = getConvexClientForEvent(event);
-			const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
-			const youtubeVideoId = videoView.video.youtubeVideoId;
-			const auth = youtubeAuthContext(event);
-			const accessToken = await getConnectedYouTubeAccessToken(auth, { requireWrite: true });
-			const updatedVideo = await updateYouTubeVideoTitle(youtubeVideoId, title, accessToken);
+		const client = getConvexClientForEvent(event);
+		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const result = await client.mutation(api.youtubeCommands.requestTitleUpdate, {
+			videoId: videoView.video._id,
+			title
+		});
 
-			await client.mutation(api.videoCommands.recordTitle, {
-				videoId: videoView.video._id,
-				title: updatedVideo.title
-			});
-
-			return { titleUpdateMessage: 'Updated title on YouTube.' };
-		} catch (caught) {
-			if (caught instanceof YouTubeConnectionError || caught instanceof YouTubeDataApiError) {
-				return { titleUpdateError: caught.message };
-			}
-
-			throw caught;
+		if (result.error) {
+			return { titleUpdateError: result.error };
 		}
+
+		return { titleUpdateMessage: 'Queued YouTube title update.' };
 	},
 
 	setValidationPreferences: async (event) => {

@@ -1,9 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import {
-	getConnectedYouTubePipesAccessToken,
-	pipesAccessTokenHasScope
-} from '$lib/server/youtube-connection';
-import { listAuthorizedYouTubeChannels } from '$lib/server/youtube-data-api';
+import { pipesAccessTokenHasScope } from '$lib/server/youtube-connection';
 import { youtubeReadonlyScope, youtubeWriteScope } from '$lib/server/youtube-scopes';
 import {
 	getWorkOSPipesAccessToken,
@@ -48,6 +44,13 @@ export const load: PageServerLoad = async (event) => {
 		pipesConnection,
 		pipesConfigError,
 		pipesError,
+		channelSyncJob: await getConvexClientForEvent(event).query(
+			api.workflowJobViews.getLatestByKey,
+			{
+				key: 'integration:youtube',
+				task: 'youtubeChannelSync'
+			}
+		),
 		readonlyScope: youtubeReadonlyScope,
 		writeScope: youtubeWriteScope,
 		hasPipesReadonlyAccess: pipesConnection
@@ -84,29 +87,17 @@ export const actions: Actions = {
 	},
 
 	testPipesRead: async (event) => {
-		const auth = authContext(event);
-
 		try {
-			const accessToken = await getConnectedYouTubePipesAccessToken(auth);
-			const channels = await listAuthorizedYouTubeChannels(accessToken);
 			const client = getConvexClientForEvent(event);
+			const result = await client.mutation(api.youtubeCommands.requestChannelSync, {});
 
-			await client.mutation(api.youtubeChannelCommands.recordAuthorizedChannels, {
-				channels: channels.map((channel) => ({
-					youtubeChannelId: channel.id,
-					title: channel.title,
-					...(channel.customUrl !== undefined ? { handle: channel.customUrl } : {}),
-					...(channel.thumbnailUrl !== undefined ? { thumbnailUrl: channel.thumbnailUrl } : {}),
-					...(channel.uploadsPlaylistId !== undefined
-						? { uploadsPlaylistId: channel.uploadsPlaylistId }
-						: {})
-				}))
-			});
+			if (result.error) {
+				throw new Error(result.error);
+			}
 
 			return {
-				testResult: {
+				syncResult: {
 					checkedAt: new Date().toISOString(),
-					channels,
 					source: 'WorkOS Pipes'
 				}
 			};

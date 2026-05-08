@@ -20,7 +20,7 @@
 		type VideoValidation
 	} from '$lib/video-validation';
 	import { titleCheckDefinitions } from '$lib/title-checks';
-	import { CirclePlay, ListVideo, SquarePen } from 'lucide-svelte';
+	import { CirclePlay, ListVideo, RefreshCw, SquarePen } from 'lucide-svelte';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -45,8 +45,22 @@
 	};
 
 	type DescriptionJob = NonNullable<PageData['descriptionJob']>;
+	type WorkflowJob = PageData['refreshJob'];
+	type VideoActionData =
+		| ActionData
+		| {
+				refreshError?: string;
+				refreshMessage?: string;
+				captionError?: string;
+				captionMessage?: string;
+				metadataError?: string;
+				metadataMessage?: string;
+				titleUpdateError?: string;
+				titleUpdateMessage?: string;
+				validationPreferencesMessage?: string;
+		  };
 
-	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let { data, form }: { data: PageData; form: VideoActionData } = $props();
 	let titleAiChecks = $state<VideoValidation[]>([]);
 	let titleAiChecksError = $state<string | null>(null);
 	let titleAiChecksLoading = $state(false);
@@ -63,6 +77,7 @@
 	let descriptionLoading = $state(descriptionJobIsActive(currentDescriptionJob()));
 	let copiedDescription = $state(false);
 	let metadataSaved = $state(false);
+	let videoRefreshing = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
 	let selectedVideoType = $state(currentVideoType());
@@ -149,6 +164,25 @@
 	}
 
 	function descriptionJobTone(job: DescriptionJob | null | undefined) {
+		if (!job) return 'border-gray-200 bg-gray-50 text-gray-600';
+		if (job.status === 'complete') return 'border-green-200 bg-green-50 text-green-700';
+		if (job.status === 'error') return 'border-amber-200 bg-amber-50 text-amber-800';
+		return 'border-blue-200 bg-blue-50 text-blue-700';
+	}
+
+	function workflowJobIsActive(job: WorkflowJob | null | undefined) {
+		return job?.status === 'queued' || job?.status === 'running';
+	}
+
+	function workflowJobLabel(job: WorkflowJob | null | undefined) {
+		if (!job) return 'No job';
+		if (job.status === 'queued') return 'Queued';
+		if (job.status === 'running') return 'Running';
+		if (job.status === 'complete') return 'Complete';
+		return 'Error';
+	}
+
+	function workflowJobTone(job: WorkflowJob | null | undefined) {
 		if (!job) return 'border-gray-200 bg-gray-50 text-gray-600';
 		if (job.status === 'complete') return 'border-green-200 bg-green-50 text-green-700';
 		if (job.status === 'error') return 'border-amber-200 bg-amber-50 text-amber-800';
@@ -335,6 +369,18 @@
 			setTimeout(() => {
 				metadataSaved = false;
 			}, 1600);
+		};
+	}
+
+	function afterVideoRefresh() {
+		videoRefreshing = true;
+
+		return async ({ update }: { update: () => Promise<void> }) => {
+			try {
+				await update();
+			} finally {
+				videoRefreshing = false;
+			}
 		};
 	}
 
@@ -589,6 +635,16 @@
 				size="md"
 				tone="primary"
 			/>
+			<form method="POST" action="?/refreshVideo" use:enhance={afterVideoRefresh}>
+				<IconButton
+					type="submit"
+					icon={RefreshCw}
+					label={videoRefreshing ? 'Refreshing' : 'Refresh'}
+					labelVisible
+					size="md"
+					disabled={videoRefreshing}
+				/>
+			</form>
 		</div>
 	</PageHeader>
 
@@ -622,12 +678,25 @@
 					<dd class="mt-1 text-gray-950">{data.videoView.assignments.length}</dd>
 				</div>
 			</dl>
-			{#if data.refreshError}
+			{#if form?.refreshError}
 				<p
 					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700"
 				>
-					YouTube refresh failed: {data.refreshError}
+					{form.refreshError}
 				</p>
+			{:else if form?.refreshMessage}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
+				>
+					{form.refreshMessage}
+				</p>
+			{:else if data.refreshJob}
+				<div class={`mt-3 rounded border px-3 py-2 text-xs ${workflowJobTone(data.refreshJob)}`}>
+					YouTube refresh: {workflowJobLabel(data.refreshJob)}
+					{#if data.refreshJob.error}
+						<span class="block">{data.refreshJob.error}</span>
+					{/if}
+				</div>
 			{/if}
 		</div>
 	</section>
@@ -995,6 +1064,14 @@
 			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
 				{form.captionMessage}
 			</p>
+		{:else if data.captionJob && workflowJobIsActive(data.captionJob)}
+			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+				Caption fetch {data.captionJob.status}.
+			</p>
+		{:else if data.captionJob?.status === 'error'}
+			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+				Last caption fetch failed: {data.captionJob.error}
+			</p>
 		{/if}
 		<div class="px-4 py-4">
 			{#if data.captions.length}
@@ -1153,6 +1230,14 @@
 		{:else if form?.titleUpdateMessage}
 			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
 				{form.titleUpdateMessage}
+			</p>
+		{:else if data.titleUpdateJob && workflowJobIsActive(data.titleUpdateJob)}
+			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+				YouTube title update {data.titleUpdateJob.status}.
+			</p>
+		{:else if data.titleUpdateJob?.status === 'error'}
+			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+				Last YouTube title update failed: {data.titleUpdateJob.error}
 			</p>
 		{/if}
 		{#each data.videoView.assignments as row (row.assignment._id)}

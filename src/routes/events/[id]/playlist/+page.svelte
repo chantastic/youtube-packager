@@ -44,6 +44,7 @@
 	let titleAiChecksError = $derived(loadedTitleAiChecksError ?? data.titleAiChecksError);
 	let titleAiChecksLoading = $state(false);
 	let updatingVideoType = $state<string | null>(null);
+	let syncingPlaylist = $state(false);
 
 	onMount(() => {
 		void loadTitleAiChecks();
@@ -275,6 +276,18 @@
 		};
 	}
 
+	function afterPlaylistSync() {
+		syncingPlaylist = true;
+
+		return async ({ update }: { update: () => Promise<void> }) => {
+			try {
+				await update();
+			} finally {
+				syncingPlaylist = false;
+			}
+		};
+	}
+
 	function formatDate(value?: string) {
 		if (!value) return 'Unpublished';
 
@@ -343,11 +356,6 @@
 				Add a YouTube playlist URL or ID to this event before inspecting videos.
 			</p>
 		</section>
-	{:else if data.playlistError}
-		<section class="rounded-lg border border-red-200 bg-red-50 p-5">
-			<h2 class="text-lg font-semibold text-red-950">Could not load playlist</h2>
-			<p class="mt-1 text-sm text-red-700">{data.playlistError.message}</p>
-		</section>
 	{:else if data.playlist}
 		{@const summary = baselineSummary()}
 		{@const aiCheckSummary = titleAiChecksSummary()}
@@ -387,15 +395,41 @@
 						label="Studio edit"
 						labelVisible
 					/>
-					<IconButton
-						href={`/events/${data.event._id}/playlist`}
-						icon={RefreshCw}
-						label="Refresh playlist"
-						labelVisible
-						tone="primary"
-					/>
+					<form method="POST" action="?/syncPlaylist" use:enhance={afterPlaylistSync}>
+						<IconButton
+							type="submit"
+							icon={RefreshCw}
+							label={syncingPlaylist ? 'Syncing' : 'Sync playlist'}
+							labelVisible
+							tone="primary"
+							disabled={syncingPlaylist}
+						/>
+					</form>
 				</div>
 			</div>
+			{#if form?.playlistSyncError}
+				<p
+					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+				>
+					{form.playlistSyncError}
+				</p>
+			{:else if form?.playlistSyncMessage}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+				>
+					{form.playlistSyncMessage}
+				</p>
+			{:else if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
+				<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+					Playlist sync {data.syncJob.status}.
+				</p>
+			{:else if data.syncJob?.status === 'error'}
+				<p
+					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+				>
+					Last playlist sync failed: {data.syncJob.error}
+				</p>
+			{/if}
 			<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
 				<p class="text-xs font-medium text-gray-500 uppercase">Title preview</p>
 				<p class="mt-1 text-sm text-gray-700">
@@ -642,6 +676,43 @@
 						: 'No public videos found in this playlist.'}
 				</p>
 			{/each}
+		</section>
+	{:else}
+		<section class="rounded-lg border border-gray-200 bg-white p-5">
+			<div class="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<h2 class="text-lg font-semibold text-gray-950">No synced playlist data</h2>
+					<p class="mt-1 text-sm text-gray-500">Queue a playlist sync to build the video list.</p>
+					{#if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
+						<p class="mt-2 text-sm text-blue-700">Playlist sync {data.syncJob.status}.</p>
+					{:else if data.syncJob?.status === 'error'}
+						<p class="mt-2 text-sm text-amber-700">Last sync failed: {data.syncJob.error}</p>
+					{/if}
+				</div>
+				<form method="POST" action="?/syncPlaylist" use:enhance={afterPlaylistSync}>
+					<IconButton
+						type="submit"
+						icon={RefreshCw}
+						label={syncingPlaylist ? 'Syncing' : 'Sync playlist'}
+						labelVisible
+						tone="primary"
+						disabled={syncingPlaylist}
+					/>
+				</form>
+			</div>
+			{#if form?.playlistSyncError}
+				<p
+					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+				>
+					{form.playlistSyncError}
+				</p>
+			{:else if form?.playlistSyncMessage}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+				>
+					{form.playlistSyncMessage}
+				</p>
+			{/if}
 		</section>
 	{/if}
 </main>
