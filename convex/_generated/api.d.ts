@@ -34,6 +34,9 @@ import type * as videoValidationTypes from "../videoValidationTypes.js";
 import type * as videoViews from "../videoViews.js";
 import type * as videoWorkflows from "../videoWorkflows.js";
 import type * as videos from "../videos.js";
+import type * as workflowJobCommands from "../workflowJobCommands.js";
+import type * as workflowJobTypes from "../workflowJobTypes.js";
+import type * as workflowJobViews from "../workflowJobViews.js";
 import type * as youtubeChannelCommands from "../youtubeChannelCommands.js";
 
 import type {
@@ -69,6 +72,9 @@ declare const fullApi: ApiFromModules<{
   videoViews: typeof videoViews;
   videoWorkflows: typeof videoWorkflows;
   videos: typeof videos;
+  workflowJobCommands: typeof workflowJobCommands;
+  workflowJobTypes: typeof workflowJobTypes;
+  workflowJobViews: typeof workflowJobViews;
   youtubeChannelCommands: typeof youtubeChannelCommands;
 }>;
 

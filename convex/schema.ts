@@ -4,6 +4,11 @@ import { aiJobStatusValidator, aiJobTaskValidator } from './aiJobTypes';
 import { generatedDescriptionValidator } from './descriptionGenerationTypes';
 import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { videoValidationValidator, validationStatValidator } from './videoValidationTypes';
+import {
+	workflowJobEntityTypeValidator,
+	workflowJobStatusValidator,
+	workflowJobTaskValidator
+} from './workflowJobTypes';
 
 export default defineSchema({
 	organizations: defineTable({
@@ -170,5 +175,40 @@ export default defineSchema({
 		'task',
 		'videoId',
 		'queuedAt'
-	])
+	]),
+	workflowJobs: defineTable({
+		organizationId: v.string(),
+		requestedByUserId: v.string(),
+		task: workflowJobTaskValidator,
+		status: workflowJobStatusValidator,
+		key: v.string(),
+		entityType: workflowJobEntityTypeValidator,
+		eventId: v.optional(v.id('events')),
+		videoId: v.optional(v.id('videos')),
+		input: v.optional(v.string()),
+		result: v.optional(v.string()),
+		error: v.optional(v.string()),
+		queuedAt: v.number(),
+		startedAt: v.optional(v.number()),
+		completedAt: v.optional(v.number()),
+		updatedAt: v.number()
+	})
+		.index('by_organizationId_and_task_and_key_and_queuedAt', [
+			'organizationId',
+			'task',
+			'key',
+			'queuedAt'
+		])
+		.index('by_organizationId_and_eventId_and_task_and_queuedAt', [
+			'organizationId',
+			'eventId',
+			'task',
+			'queuedAt'
+		])
+		.index('by_organizationId_and_videoId_and_task_and_queuedAt', [
+			'organizationId',
+			'videoId',
+			'task',
+			'queuedAt'
+		])
 });
