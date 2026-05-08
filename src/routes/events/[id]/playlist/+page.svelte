@@ -14,7 +14,6 @@
 	} from '$lib/title-format';
 	import {
 		filterDisabledTitleValidations,
-		validateVideoBaseline,
 		youtubeTitleFocusLength,
 		type VideoValidation
 	} from '$lib/video-validation';
@@ -66,17 +65,6 @@
 
 	function videoDetailHref(videoId: string) {
 		return `/videos/${videoRecordId(videoId) ?? videoId}`;
-	}
-
-	function titleFocusSpeakers(videoId: string) {
-		const row = assignmentRowFor(videoId);
-
-		return (
-			row?.speakers.map((speakerRow) => ({
-				name: speakerRow.speaker.name,
-				company: speakerRow.speaker.company
-			})) ?? []
-		);
 	}
 
 	function videoTitleRecord(videoId: string) {
@@ -133,14 +121,8 @@
 			: data.event.name;
 	}
 
-	function baselineValidations(videoId: string, videoTitle: string) {
-		const video = videoTitleRecord(videoId);
-
-		return validateVideoBaseline(videoTitle, data.event, {
-			speakers: titleFocusSpeakers(videoId),
-			...(video ? { video } : {}),
-			disabledTitleValidationIds: assignmentRowFor(videoId)?.video.disabledTitleValidationIds
-		});
+	function baselineValidations(videoId: string) {
+		return assignmentRowFor(videoId)?.baselineValidations ?? [];
 	}
 
 	function titleAiChecksForVideo(videoId: string) {
@@ -150,8 +132,8 @@
 		);
 	}
 
-	function validationsForVideo(videoId: string, videoTitle: string) {
-		return [...baselineValidations(videoId, videoTitle), ...titleAiChecksForVideo(videoId)];
+	function validationsForVideo(videoId: string) {
+		return [...baselineValidations(videoId), ...titleAiChecksForVideo(videoId)];
 	}
 
 	function validationMatchesFilter(validations: VideoValidation[]) {
@@ -169,7 +151,7 @@
 		if (!data.playlist) return [];
 
 		return data.playlist.videos.filter((video) =>
-			validationMatchesFilter(validationsForVideo(video.videoId, video.title))
+			validationMatchesFilter(validationsForVideo(video.videoId))
 		);
 	}
 
@@ -179,7 +161,7 @@
 		if (!filter || !data.playlist) return '';
 
 		const firstMatch = data.playlist.videos
-			.flatMap((video) => validationsForVideo(video.videoId, video.title))
+			.flatMap((video) => validationsForVideo(video.videoId))
 			.find((validation) => validation.id === filter.id);
 
 		return firstMatch?.label ?? filter.id;
@@ -218,9 +200,7 @@
 			return { passing: 0, total: 0 };
 		}
 
-		const checks = data.playlist.videos.flatMap((video) =>
-			baselineValidations(video.videoId, video.title)
-		);
+		const checks = data.playlist.videos.flatMap((video) => baselineValidations(video.videoId));
 		const actionableChecks = checks.filter((check) => check.status !== 'info');
 
 		return {
@@ -243,7 +223,10 @@
 					).length ?? 0),
 				0
 			),
-			total: data.playlist.videos.length * 2
+			total: data.playlist.videos.reduce(
+				(total, video) => total + (assignmentRowFor(video.videoId)?.titleAiInputs.length ?? 0),
+				0
+			)
 		};
 	}
 
@@ -485,7 +468,7 @@
 
 			{#each filteredVideos() as video (video.playlistItemId)}
 				{@const nextTitle = formattedTitle(video.videoId, video.title)}
-				{@const validations = validationsForVideo(video.videoId, video.title)}
+				{@const validations = validationsForVideo(video.videoId)}
 				{@const currentTitleParts = titleFocusParts(video.videoId, video.title)}
 				{@const formattedTitleParts = titleFocusParts(video.videoId, nextTitle)}
 				{@const recordId = videoRecordId(video.videoId)}

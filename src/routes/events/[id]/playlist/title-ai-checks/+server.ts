@@ -1,65 +1,20 @@
 import { json } from '@sveltejs/kit';
 import { getConvexClientForEvent } from '$lib/server/convex';
-import {
-	buildTitleAiValidationInputs,
-	titleAiValidationInputKey,
-	type TitleAiValidationInput
-} from '$lib/title-ai-validation';
+import { titleAiValidationInputKey, type TitleAiValidationInput } from '$lib/title-ai-validation';
 import type { VideoValidation } from '$lib/video-validation';
 import { api } from '../../../../../../convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../../convex/_generated/dataModel';
 import type { RequestHandler } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
-type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
+type EventDetailItem = NonNullable<FunctionReturnType<typeof api.eventViews.getDetail>>;
+type AssignmentRow = EventDetailItem['videos'][number];
 
-function videoRecordForValidation(row: AssignmentRow) {
-	const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
-	const company = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.company)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-	const position = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.position)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-
-	return {
-		speaker: speaker || undefined,
-		company: company || undefined,
-		position: position || undefined,
-		titleOverride: row.video.titleOverride,
-		videoTitleFormat: row.video.videoTitleFormat,
-		videoType: row.video.videoType
-	};
-}
-
-function speakerRecordsForValidation(row: AssignmentRow) {
-	return row.speakers.map((speakerRow) => ({
-		name: speakerRow.speaker.name,
-		company: speakerRow.speaker.company,
-		position: speakerRow.speaker.position
-	}));
-}
-
-function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventRow) {
+function titleAiInputsForAssignments(assignments: AssignmentRow[]) {
 	const inputsByKey = new Map<string, TitleAiValidationInput>();
 
 	for (const row of assignments) {
-		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video._id,
-			title: row.video.title,
-			event,
-			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row)
-		})) {
+		for (const input of row.titleAiInputs) {
 			inputsByKey.set(titleAiValidationInputKey(input), input);
 		}
 	}
@@ -70,11 +25,11 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 export const POST: RequestHandler = async (event) => {
 	const { params } = event;
 	const client = getConvexClientForEvent(event);
-	const youtubeEvent = await client.query(api.events.find, {
-		id: params.id as Id<'events'>
+	const eventItem = await client.query(api.eventViews.getDetail, {
+		eventId: params.id as Id<'events'>
 	});
 
-	if (!youtubeEvent) {
+	if (!eventItem) {
 		return json(
 			{
 				validationsByVideoId: {},
@@ -84,13 +39,11 @@ export const POST: RequestHandler = async (event) => {
 		);
 	}
 
-	const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
-		eventId: youtubeEvent._id
-	});
+	const assignments = eventItem.videos;
 	const youtubeVideoIdByVideoId = new Map<string, string>(
 		assignments.map((row) => [row.video._id, row.video.youtubeVideoId])
 	);
-	const inputs = titleAiInputsForAssignments(assignments, youtubeEvent);
+	const inputs = titleAiInputsForAssignments(assignments);
 
 	if (inputs.length === 0) {
 		return json(

@@ -6,22 +6,17 @@ import {
 	youtubeStudioPlaylistContentUrl,
 	youtubeStudioPlaylistEditUrl
 } from '$lib/youtube';
-import {
-	buildTitleAiValidationInputs,
-	titleAiValidationInputKey,
-	type TitleAiValidationInput
-} from '$lib/title-ai-validation';
+import { titleAiValidationInputKey, type TitleAiValidationInput } from '$lib/title-ai-validation';
 import { pendingVideoValidation, type VideoValidation } from '$lib/video-validation';
 import { api } from '../../../../../convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
-type EventRow = NonNullable<FunctionReturnType<typeof api.events.find>>;
-type EventPlaylistStats = FunctionReturnType<
-	typeof api.eventPlaylistStats.collectByEventId
->[number];
+type EventDetailItem = NonNullable<FunctionReturnType<typeof api.eventViews.getDetail>>;
+type AssignmentRow = EventDetailItem['videos'][number];
+type EventRow = EventDetailItem['event'];
+type EventPlaylistStats = EventDetailItem['playlistStats'];
 
 function validationFilterFromUrl(url: URL) {
 	const id = url.searchParams.get('validation')?.trim();
@@ -42,53 +37,11 @@ function optionalString(data: FormData, key: string) {
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function videoRecordForValidation(row: AssignmentRow) {
-	const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
-	const company = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.company)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-	const position = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.position)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-
-	return {
-		speaker: speaker || undefined,
-		company: company || undefined,
-		position: position || undefined,
-		titleOverride: row.video.titleOverride,
-		videoTitleFormat: row.video.videoTitleFormat,
-		videoType: row.video.videoType
-	};
-}
-
-function speakerRecordsForValidation(row: AssignmentRow) {
-	return row.speakers.map((speakerRow) => ({
-		name: speakerRow.speaker.name,
-		company: speakerRow.speaker.company,
-		position: speakerRow.speaker.position
-	}));
-}
-
-function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventRow) {
+function titleAiInputsForAssignments(assignments: AssignmentRow[]) {
 	const inputsByKey = new Map<string, TitleAiValidationInput>();
 
 	for (const row of assignments) {
-		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video._id,
-			title: row.video.title,
-			event,
-			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row),
-			disabledTitleValidationIds: row.video.disabledTitleValidationIds
-		})) {
+		for (const input of row.titleAiInputs) {
 			inputsByKey.set(titleAiValidationInputKey(input), input);
 		}
 	}
@@ -98,10 +51,9 @@ function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventR
 
 async function cachedTitleAiChecksByVideoId(
 	client: ReturnType<typeof getConvexClientForEvent>,
-	assignments: AssignmentRow[],
-	event: EventRow
+	assignments: AssignmentRow[]
 ) {
-	const inputs = titleAiInputsForAssignments(assignments, event);
+	const inputs = titleAiInputsForAssignments(assignments);
 
 	if (!inputs.length) {
 		return {};
@@ -113,14 +65,7 @@ async function cachedTitleAiChecksByVideoId(
 	const validationsByVideoId: Record<string, VideoValidation[]> = {};
 
 	for (const row of assignments) {
-		const validations = buildTitleAiValidationInputs({
-			videoId: row.video._id,
-			title: row.video.title,
-			event,
-			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row),
-			disabledTitleValidationIds: row.video.disabledTitleValidationIds
-		}).map((input) => {
+		const validations = row.titleAiInputs.map((input) => {
 			const validation =
 				cachedTitleAiChecks.validationsByInputKey[titleAiValidationInputKey(input)];
 
@@ -180,13 +125,15 @@ export const load: PageServerLoad = async (requestEvent) => {
 	const { params, url } = requestEvent;
 	const client = getConvexClientForEvent(requestEvent);
 	const validationFilter = validationFilterFromUrl(url);
-	const event = await client.query(api.events.find, {
-		id: params.id as Id<'events'>
+	const eventItem = await client.query(api.eventViews.getDetail, {
+		eventId: params.id as Id<'events'>
 	});
 
-	if (!event) {
+	if (!eventItem) {
 		throw error(404, 'Event not found.');
 	}
+
+	const { event, playlistStats, videos: playlistAssignments } = eventItem;
 
 	if (!event.youtubePlaylistId) {
 		return {
@@ -201,24 +148,12 @@ export const load: PageServerLoad = async (requestEvent) => {
 		};
 	}
 
-	const [playlistAssignments, statsRows, syncJob] = await Promise.all([
-		client.query(api.playlistAssignmentViews.getForEvent, {
-			eventId: event._id
-		}),
-		client.query(api.eventPlaylistStats.collectByEventId, {
-			eventIds: [event._id]
-		}),
-		client.query(api.workflowJobViews.getLatestForEventTask, {
-			eventId: event._id,
-			task: 'youtubePlaylistSync'
-		})
-	]);
-	const playlist = storedPlaylistForEvent(event, statsRows[0] ?? null, playlistAssignments);
-	const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(
-		client,
-		playlistAssignments,
-		event
-	);
+	const syncJob = await client.query(api.workflowJobViews.getLatestForEventTask, {
+		eventId: event._id,
+		task: 'youtubePlaylistSync'
+	});
+	const playlist = storedPlaylistForEvent(event, playlistStats, playlistAssignments);
+	const titleAiChecksByVideoId = await cachedTitleAiChecksByVideoId(client, playlistAssignments);
 
 	return {
 		event,
@@ -235,16 +170,16 @@ export const load: PageServerLoad = async (requestEvent) => {
 export const actions: Actions = {
 	syncPlaylist: async (event) => {
 		const client = getConvexClientForEvent(event);
-		const foundEvent = await client.query(api.events.find, {
-			id: event.params.id as Id<'events'>
+		const eventItem = await client.query(api.eventViews.getDetail, {
+			eventId: event.params.id as Id<'events'>
 		});
 
-		if (!foundEvent) {
+		if (!eventItem) {
 			throw error(404, 'Event not found.');
 		}
 
 		const result = await client.mutation(api.youtubeCommands.requestPlaylistSync, {
-			eventId: foundEvent._id
+			eventId: eventItem.event._id
 		});
 
 		if (result.error) {
