@@ -56,6 +56,53 @@ SvelteKit actions should request work through Convex commands such as `youtubeCo
 Those commands create or reuse a queued job, schedule an internal workflow action, and return immediately.
 Pages should read the latest job status and stored Convex snapshots instead of calling YouTube during page load.
 
+## Backend Workflow Smoke Tests
+
+Use `convex run --identity` to verify guarded Convex commands and scheduled workflows without a
+browser session. This is useful when testing YouTube or Anthropic workflow execution from the
+backend boundary.
+
+Shape the synthetic identity like a real WorkOS JWT identity. The `user_id` must be a real WorkOS
+user with the relevant provider connection, and `org_id` must match the organization that owns the
+records being tested:
+
+```sh
+pnpm exec convex run youtubeCommands:requestChannelSync '{}' \
+  --identity '{
+    "subject": "user_...",
+    "tokenIdentifier": "https://api.workos.com/|user_...",
+    "user_id": "user_...",
+    "org_id": "org_...",
+    "email": "person@example.com"
+  }'
+```
+
+This exercises the same public Convex mutation the UI calls, including authz helpers, durable job
+creation, scheduled workflow actions, WorkOS Pipes token retrieval, provider API calls, status
+recording, and stored result updates.
+
+When verifying YouTube workflows, prefer non-destructive payloads:
+
+- Channel sync: `youtubeCommands.requestChannelSync`.
+- Playlist sync: use a small known event playlist.
+- Video refresh: use a known video in the current organization.
+- Caption fetch: use a known video with captions.
+- Title update: submit the video's existing title to exercise the write path without changing
+  public metadata.
+
+After queueing work, inspect the persisted job and stored data with readonly queries:
+
+```sh
+pnpm exec convex run --inline-query '
+  const job = await ctx.db.get("workflow_job_id");
+  return job && { task: job.task, status: job.status, result: job.result, error: job.error };
+'
+```
+
+This pattern does not verify WorkOS login redirects, AuthKit cookies, SvelteKit auth wiring, JWT
+issuer/audience configuration, or browser session behavior. Use it as a backend workflow smoke test,
+not as a replacement for a real sign-in test.
+
 ## Provider And Secret Boundaries
 
 Feature code should not import environment variables or provider token logic directly. Use narrow provider boundaries instead:
