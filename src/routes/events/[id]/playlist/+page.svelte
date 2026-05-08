@@ -2,10 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import {
-		deriveBaseTitle,
-		deriveComposedBaseTitle,
-		formatComposedVideoTitle,
-		formatVideoTitle,
 		getTitleHookParts,
 		normalizeVideoType,
 		normalizeTitleFormat,
@@ -14,15 +10,7 @@
 	} from '$lib/title-format';
 	import { titleCheckDefinitions } from '$lib/title-checks';
 	import { youtubeTitleFocusLength, type VideoValidation } from '$lib/video-validation';
-	import {
-		Check,
-		CirclePlay,
-		ClipboardCopy,
-		FileText,
-		ListVideo,
-		RefreshCw,
-		SquarePen
-	} from 'lucide-svelte';
+	import { CirclePlay, FileText, ListVideo, RefreshCw, SquarePen } from 'lucide-svelte';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -32,7 +20,6 @@
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
-	let copiedVideoId = $state<string | null>(null);
 	let loadedTitleAiChecksByVideoId = $state<Record<string, VideoValidation[]> | null>(null);
 	let loadedTitleAiChecksError = $state<string | null | undefined>(undefined);
 	let titleAiChecksByVideoId = $derived.by(
@@ -99,19 +86,6 @@
 
 	function videoTypeValue(videoId: string) {
 		return normalizeVideoType(videoTitleRecord(videoId)?.videoType);
-	}
-
-	function formattedTitle(videoId: string, videoTitle: string) {
-		const video = videoTitleRecord(videoId);
-
-		if (video) {
-			const baseTitle = deriveComposedBaseTitle(videoTitle, video, data.event);
-
-			return formatComposedVideoTitle(baseTitle, video, data.event);
-		}
-
-		const baseTitle = deriveBaseTitle(videoTitle, data.event.titleFormat, data.event);
-		return formatVideoTitle(data.event.titleFormat, baseTitle, data.event);
 	}
 
 	function eventDisplayTitle() {
@@ -290,15 +264,6 @@
 			day: 'numeric',
 			year: 'numeric'
 		}).format(new Date(value));
-	}
-
-	async function copyTitle(videoId: string, title: string) {
-		await navigator.clipboard.writeText(title);
-		copiedVideoId = videoId;
-
-		setTimeout(() => {
-			if (copiedVideoId === videoId) copiedVideoId = null;
-		}, 1600);
 	}
 
 	async function loadTitleAiChecks() {
@@ -506,25 +471,22 @@
 				</div>
 			{/if}
 			<div
-				class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500 uppercase md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
+				class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-500 uppercase md:grid-cols-[84px_124px_minmax(0,1.2fr)_minmax(0,1fr)_180px]"
 			>
 				<div>Video</div>
 				<div class="hidden md:block">Type</div>
 				<div>Current</div>
 				<div class="hidden md:block">Validation</div>
-				<div class="hidden md:block">Formatted</div>
 				<div class="hidden md:block">Actions</div>
 			</div>
 
 			{#each filteredVideos() as video (video.playlistItemId)}
-				{@const nextTitle = formattedTitle(video.videoId, video.title)}
 				{@const validations = validationsForVideo(video.videoId)}
 				{@const currentTitleParts = titleFocusParts(video.videoId, video.title)}
-				{@const formattedTitleParts = titleFocusParts(video.videoId, nextTitle)}
 				{@const recordId = videoRecordId(video.videoId)}
 				{@const statusKey = videoStatusKey(video.videoId)}
 				<article
-					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px]"
+					class="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0 md:grid-cols-[84px_124px_minmax(0,1.2fr)_minmax(0,1fr)_180px]"
 				>
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href={video.playlistVideoUrl} target="_blank" rel="noreferrer" class="block">
@@ -633,12 +595,6 @@
 								icon={SquarePen}
 								label="Open in YouTube Studio"
 							/>
-							<IconButton
-								icon={copiedVideoId === video.videoId ? Check : ClipboardCopy}
-								label={copiedVideoId === video.videoId ? 'Copied title' : 'Copy formatted title'}
-								onclick={() => copyTitle(video.videoId, nextTitle)}
-								tone="primary"
-							/>
 						</div>
 					</div>
 					<div class="hidden min-w-0 md:block">
@@ -664,16 +620,6 @@
 							{/if}
 						{/each}
 					</div>
-					<div class="hidden min-w-0 md:block">
-						<p class="text-sm text-gray-900">
-							<span class="rounded bg-blue-50 px-0.5 text-blue-950"
-								>{formattedTitleParts.focus}</span
-							><span class="text-gray-500">{formattedTitleParts.rest}</span>
-						</p>
-						{#if nextTitle === video.title}
-							<p class="mt-1 text-xs text-green-600">Matches current title</p>
-						{/if}
-					</div>
 					<div class="hidden items-start gap-2 md:flex">
 						<IconButton
 							href={videoDetailHref(video.videoId)}
@@ -689,12 +635,6 @@
 							href={video.studioEditUrl}
 							icon={SquarePen}
 							label="Open in YouTube Studio"
-						/>
-						<IconButton
-							icon={copiedVideoId === video.videoId ? Check : ClipboardCopy}
-							label={copiedVideoId === video.videoId ? 'Copied title' : 'Copy formatted title'}
-							onclick={() => copyTitle(video.videoId, nextTitle)}
-							tone="primary"
 						/>
 					</div>
 				</article>
