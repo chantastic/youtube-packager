@@ -607,7 +607,7 @@
 				<h2 class="text-sm font-semibold text-gray-950">Packaging Workbench</h2>
 				<p class="mt-1 text-xs text-gray-500">
 					{data.videoView.video.channelTitle ?? 'Unknown channel'} · {data.videoView.assignments
-						.length} assignments
+						.length} event contexts
 				</p>
 			</div>
 			<button
@@ -808,6 +808,137 @@
 					{/if}
 				</div>
 			</form>
+			<div class="border-t border-gray-100 px-4 py-4 lg:col-start-2">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<div>
+						<h3 class="text-sm font-semibold text-gray-950">Title Generation</h3>
+						<p class="mt-1 text-xs text-gray-500">Generate titles from the active title rules.</p>
+					</div>
+					<button
+						type="button"
+						onclick={loadTitleAlternatives}
+						disabled={titleAlternativesLoading || data.videoView.assignments.length === 0}
+						class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+					>
+						{titleAlternativesLoading ? 'Generating...' : 'Generate Titles'}
+					</button>
+				</div>
+				{#if titleAlternativesError}
+					<p
+						class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+					>
+						{titleAlternativesError}
+					</p>
+				{/if}
+				{#if form?.titleUpdateError}
+					<p
+						class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+					>
+						{form.titleUpdateError}
+					</p>
+				{:else if data.titleUpdateJob}
+					<WorkflowJobStatus
+						job={data.titleUpdateJob}
+						label="YouTube title update"
+						class="mt-3"
+						size="md"
+					/>
+				{:else if form?.titleUpdateMessage}
+					<p
+						class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+					>
+						{form.titleUpdateMessage}
+					</p>
+				{/if}
+				{#if data.videoView.assignments.length}
+					<div class="mt-4 space-y-3">
+						{#each data.videoView.assignments as row (row.assignment._id)}
+							{@const validations = assignmentTitleValidations(row.event)}
+							{@const alternatives = assignmentAlternatives(row.assignment._id)}
+							<article class="rounded border border-gray-200 bg-gray-50 p-3">
+								<div class="flex flex-wrap items-start justify-between gap-3">
+									<div class="min-w-0">
+										<p class="text-sm font-medium text-gray-950">
+											{eventDisplayTitle(row.event)}
+											<span class="text-gray-400">({row.event.year})</span>
+										</p>
+										<p class="mt-2 text-sm break-words text-gray-700">{composedTitle(row.event)}</p>
+									</div>
+									<div class="flex flex-wrap gap-2">
+										<IconButton
+											href={`/events/${row.event._id}/playlist`}
+											icon={ListVideo}
+											label="Event playlist"
+										/>
+										<ExternalLinkButton
+											href={youtubePlaylistUrl(row.assignment.playlistId)}
+											icon={ListVideo}
+											label="Open YouTube playlist"
+										/>
+										<ExternalLinkButton
+											href={row.assignment.playlistVideoUrl}
+											icon={CirclePlay}
+											label="Watch from playlist"
+										/>
+									</div>
+								</div>
+								<div class="mt-3 flex flex-wrap gap-2">
+									{#each validations as validation (validation.id)}
+										<span
+											class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
+											title={validation.expected ? `Expected: ${validation.expected}` : undefined}
+										>
+											{validation.label}: {validation.message}
+										</span>
+									{/each}
+								</div>
+								{#each validations as validation (validation.id)}
+									{#if validation.expected && validation.status === 'fail'}
+										<p class="mt-2 text-xs text-gray-500">Expected: {validation.expected}</p>
+									{/if}
+								{/each}
+								{#if alternatives?.alternatives.length}
+									<div class="mt-4 space-y-2">
+										{#each alternatives.alternatives as title (title)}
+											<div class="rounded border border-gray-200 bg-white p-3">
+												<p class="text-sm text-gray-950">{title}</p>
+												<div class="mt-2 flex flex-wrap items-center gap-2">
+													<span class="text-xs text-gray-500">{title.length}/100</span>
+													<button
+														type="button"
+														onclick={() => copyTitle(title)}
+														class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+													>
+														{copiedTitle === title ? 'Copied' : 'Copy'}
+													</button>
+													<form
+														method="POST"
+														action="?/applyTitle"
+														use:enhance={afterTitleApply(title)}
+													>
+														<input type="hidden" name="title" value={title} />
+														<button
+															type="submit"
+															disabled={!canApplyTitle(title) || applyingTitle === title}
+															class="rounded bg-gray-950 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+														>
+															{titleApplyLabel(title)}
+														</button>
+													</form>
+												</div>
+											</div>
+										{/each}
+									</div>
+								{:else if alternatives?.error}
+									<p class="mt-3 text-xs text-amber-700">{alternatives.error}</p>
+								{/if}
+							</article>
+						{/each}
+					</div>
+				{:else}
+					<p class="mt-4 text-sm text-gray-500">No event context synced yet.</p>
+				{/if}
+			</div>
 		</div>
 		<div class="border-t border-gray-100 px-4 py-4">
 			<div class="flex flex-wrap items-center justify-between gap-2">
@@ -1112,128 +1243,5 @@
 				{/if}
 			</div>
 		</div>
-	</section>
-
-	<section class="overflow-hidden rounded-lg border border-gray-200 bg-white">
-		<div
-			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
-		>
-			<h2 class="text-sm font-semibold text-gray-950">Playlist Assignments</h2>
-			<button
-				type="button"
-				onclick={loadTitleAlternatives}
-				disabled={titleAlternativesLoading || data.videoView.assignments.length === 0}
-				class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
-			>
-				{titleAlternativesLoading ? 'Generating...' : 'Generate Titles'}
-			</button>
-		</div>
-		{#if titleAlternativesError}
-			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-				{titleAlternativesError}
-			</p>
-		{/if}
-		{#if form?.titleUpdateError}
-			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-				{form.titleUpdateError}
-			</p>
-		{:else if data.titleUpdateJob}
-			<WorkflowJobStatus
-				job={data.titleUpdateJob}
-				label="YouTube title update"
-				class="rounded-none border-x-0 border-t-0 px-4 py-3"
-				size="md"
-			/>
-		{:else if form?.titleUpdateMessage}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				{form.titleUpdateMessage}
-			</p>
-		{/if}
-		{#each data.videoView.assignments as row (row.assignment._id)}
-			{@const validations = assignmentTitleValidations(row.event)}
-			{@const alternatives = assignmentAlternatives(row.assignment._id)}
-			<article
-				class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0"
-			>
-				<div>
-					<p class="font-medium text-gray-950">
-						{eventDisplayTitle(row.event)} <span class="text-gray-400">({row.event.year})</span>
-					</p>
-					<p class="mt-1 text-sm text-gray-500">
-						Position #{row.assignment.position + 1} · Synced {formatDate(
-							row.assignment.lastFetchedAt
-						)}
-					</p>
-					<p class="mt-1 font-mono text-xs text-gray-500">{row.assignment.playlistId}</p>
-					<p class="mt-2 text-sm text-gray-700">{composedTitle(row.event)}</p>
-					<div class="mt-3 flex flex-wrap gap-2">
-						{#each validations as validation (validation.id)}
-							<span
-								class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
-								title={validation.expected ? `Expected: ${validation.expected}` : undefined}
-							>
-								{validation.label}: {validation.message}
-							</span>
-						{/each}
-					</div>
-					{#each validations as validation (validation.id)}
-						{#if validation.expected && validation.status === 'fail'}
-							<p class="mt-2 text-xs text-gray-500">Expected: {validation.expected}</p>
-						{/if}
-					{/each}
-					{#if alternatives?.alternatives.length}
-						<div class="mt-4 space-y-2">
-							<p class="text-xs font-medium text-gray-500 uppercase">Title alternatives</p>
-							{#each alternatives.alternatives as title (title)}
-								<div class="rounded border border-gray-200 bg-gray-50 p-3">
-									<p class="text-sm text-gray-950">{title}</p>
-									<div class="mt-2 flex flex-wrap items-center gap-2">
-										<span class="text-xs text-gray-500">{title.length}/100</span>
-										<button
-											type="button"
-											onclick={() => copyTitle(title)}
-											class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-white"
-										>
-											{copiedTitle === title ? 'Copied' : 'Copy'}
-										</button>
-										<form method="POST" action="?/applyTitle" use:enhance={afterTitleApply(title)}>
-											<input type="hidden" name="title" value={title} />
-											<button
-												type="submit"
-												disabled={!canApplyTitle(title) || applyingTitle === title}
-												class="rounded bg-gray-950 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
-											>
-												{titleApplyLabel(title)}
-											</button>
-										</form>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{:else if alternatives?.error}
-						<p class="mt-3 text-xs text-amber-700">{alternatives.error}</p>
-					{/if}
-				</div>
-				<div class="flex flex-wrap gap-2">
-					<IconButton
-						href={`/events/${row.event._id}/playlist`}
-						icon={ListVideo}
-						label="Event playlist"
-					/>
-					<ExternalLinkButton
-						href={youtubePlaylistUrl(row.assignment.playlistId)}
-						icon={ListVideo}
-						label="Open YouTube playlist"
-					/>
-					<ExternalLinkButton
-						href={row.assignment.playlistVideoUrl}
-						icon={CirclePlay}
-						label="Watch from playlist"
-					/>
-				</div>
-			</article>
-		{:else}
-			<p class="px-4 py-8 text-sm text-gray-500">No playlist assignments synced yet.</p>
-		{/each}
 	</section>
 </main>
