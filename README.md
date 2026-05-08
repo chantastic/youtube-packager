@@ -56,8 +56,9 @@ pnpm exec convex env set ANTHROPIC_DESCRIPTION_EFFORT high
 ```
 
 YouTube Data API calls use WorkOS Pipes. WorkOS owns the OAuth lifecycle,
-credential storage, and token refresh; this app asks WorkOS for a fresh provider token
-server-side. Configure the Google provider in Pipes with the YouTube scopes the app needs.
+credential storage, and token refresh; Convex workflows ask WorkOS for a fresh provider token
+when a queued YouTube job runs. Configure the Google provider in Pipes with the YouTube scopes
+the app needs.
 
 ## Development
 
@@ -68,14 +69,28 @@ pnpm install
 pnpm run dev
 ```
 
-## Building
+## Building And Deployment
 
-To create a production version of your app:
+The SvelteKit app is configured with `@sveltejs/adapter-cloudflare` and deploys as a
+Cloudflare Worker through Wrangler. The Worker handles routing and rendering; durable data,
+authorization checks, AI work, and YouTube provider side effects run in Convex.
+
+To create a production build:
 
 ```sh
 pnpm run build
 ```
 
-You can preview the production build with `pnpm run preview`.
+To preview the Worker locally:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```sh
+pnpm run preview:worker
+```
+
+To deploy to Cloudflare:
+
+```sh
+pnpm run deploy
+```
+
+Cloudflare Worker configuration lives in [`wrangler.jsonc`](./wrangler.jsonc).

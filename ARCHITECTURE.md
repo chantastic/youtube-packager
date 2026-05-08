@@ -11,7 +11,7 @@ This app is expected to grow from an internal YouTube packaging helper into a Sa
 - Convex is the durable application core for data, authorization, workflows, and sync.
 - SvelteKit stays thin: routing, forms, rendering, and light presentation orchestration.
 - Business rules live in Convex functions or shared pure helpers.
-- External API side effects belong in Convex Actions or Workflows once a workflow is moved.
+- External API side effects belong in Convex Actions or Workflows, not in SvelteKit route loads.
 - UI should subscribe to persisted Convex state instead of waiting on long synchronous requests.
 
 ## Convex Function Categories
@@ -44,6 +44,18 @@ Prefer this shape for side-effectful operations:
 
 This keeps the app reactive even when YouTube or Anthropic work takes time.
 
+## Durable Workflow Jobs
+
+Long-running provider work should be represented as a persisted job record. This app uses:
+
+- `aiJobs` for structured description generation, where the result is a typed generated description.
+- `workflowJobs` for provider workflows such as YouTube playlist sync, video refresh, caption fetch,
+  title update, and authorized channel sync.
+
+SvelteKit actions should request work through Convex commands such as `youtubeCommands.requestPlaylistSync`.
+Those commands create or reuse a queued job, schedule an internal workflow action, and return immediately.
+Pages should read the latest job status and stored Convex snapshots instead of calling YouTube during page load.
+
 ## Provider And Secret Boundaries
 
 Feature code should not import environment variables or provider token logic directly. Use narrow provider boundaries instead:
@@ -60,8 +72,14 @@ Current strategy:
 - WorkOS AuthKit is the auth provider; Convex validates WorkOS JWTs and the
   WorkOS AuthKit component owns durable user sync from WorkOS webhooks.
 - WorkOS Pipes owns the OAuth provider token lifecycle for YouTube.
-- Feature code should call the app's provider boundary rather than importing WorkOS, Google,
+- Convex workflow code should call the app's provider boundary rather than importing WorkOS, Google,
   or provider token helpers directly.
+
+## Deployment
+
+The UI deploys to Cloudflare Workers through SvelteKit's Cloudflare adapter and Wrangler. Convex remains
+the durable backend and workflow runtime. Avoid moving provider side effects back into the Cloudflare
+Worker just because it can run server code; the Worker should stay a rendering and form-submission layer.
 
 Future SaaS strategy:
 
