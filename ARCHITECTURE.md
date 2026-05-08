@@ -122,6 +122,41 @@ Current strategy:
 - Convex workflow code should call the app's provider boundary rather than importing WorkOS, Google,
   or provider token helpers directly.
 
+## YouTube Credential Execution Model
+
+YouTube provider work should run as the requester, inside the current organization.
+
+The organization owns app records such as events, videos, playlist assignments, captions, workflow
+jobs, and connected channel metadata. The user who starts a YouTube workflow owns the provider-side
+execution context for that job. Commands should derive `organizationId` and `requestedByUserId` from
+the authenticated WorkOS identity, write both values onto `workflowJobs`, and never accept either
+value from client arguments.
+
+Workflows should fetch YouTube access through WorkOS Pipes with both values:
+
+```ts
+getConnectedYouTubeAccessToken({
+	userId: job.requestedByUserId,
+	organizationId: job.organizationId
+});
+```
+
+This means org members share the same app data, but provider side effects are attributable to the
+member who requested them. If a member has not connected or authorized YouTube with the needed
+scopes, their workflow should fail with a reconnect or authorization error instead of silently
+falling back to another member's credentials.
+
+This model preserves a useful audit trail:
+
+- who queued the job
+- which organization owned the target record
+- which provider connection was used
+- whether the provider call completed or failed
+
+If the app later supports true org-owned credentials through WorkOS Vault, BYOK, or a service
+account-style provider connection, that should be modeled as an explicit execution mode rather than
+as a replacement for run-as-requester.
+
 ## Deployment
 
 The UI deploys to Cloudflare Workers through SvelteKit's Cloudflare adapter and Wrangler. Convex remains

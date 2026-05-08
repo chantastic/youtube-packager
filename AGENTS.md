@@ -11,6 +11,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the human-facing system overview.
 - Secrets must be accessed through a narrow boundary, never imported directly across feature code.
 - Prefer app-owned Convex environment variables now, while keeping the boundary compatible with future WorkOS Vault tenant secrets.
 - WorkOS Pipes or Connected Apps should own OAuth provider token lifecycle when available.
+- YouTube provider workflows run as the requesting WorkOS user inside the current organization; preserve `requestedByUserId` for auditability instead of falling back to anonymous org-level credentials.
 
 ## Convex Function Categories
 
