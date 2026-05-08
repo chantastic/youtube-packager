@@ -28,6 +28,7 @@ import type * as playlistAssignments from "../playlistAssignments.js";
 import type * as secrets from "../secrets.js";
 import type * as speakers from "../speakers.js";
 import type * as titleAiValidationTypes from "../titleAiValidationTypes.js";
+import type * as titleValidationContext from "../titleValidationContext.js";
 import type * as titleValidationTypes from "../titleValidationTypes.js";
 import type * as videoCaptions from "../videoCaptions.js";
 import type * as videoCommands from "../videoCommands.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   secrets: typeof secrets;
   speakers: typeof speakers;
   titleAiValidationTypes: typeof titleAiValidationTypes;
+  titleValidationContext: typeof titleValidationContext;
   titleValidationTypes: typeof titleValidationTypes;
   videoCaptions: typeof videoCaptions;
   videoCommands: typeof videoCommands;
