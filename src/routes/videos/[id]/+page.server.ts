@@ -112,12 +112,6 @@ export const actions: Actions = {
 		const client = getConvexClientForEvent(event);
 		const videoView = await resolveVideoView(client, event.params.id);
 
-		if (titleOverrideEnabled && !titleOverride) {
-			return fail(400, {
-				metadataError: 'Enter a title override before saving.'
-			});
-		}
-
 		await client.mutation(api.videoCommands.setMetadata, {
 			videoId: videoView.video._id,
 			videoType,
@@ -131,27 +125,8 @@ export const actions: Actions = {
 			disabledTitleValidationIds: disabledTitleValidationIdsFromForm(data)
 		});
 
-		if (titleOverrideEnabled && titleOverride && videoView.video.title !== titleOverride) {
-			const result = await client.mutation(api.youtubeCommands.requestTitleUpdate, {
-				videoId: videoView.video._id,
-				title: titleOverride
-			});
-
-			if (result.error) {
-				return fail(400, {
-					metadataError: result.error
-				});
-			}
-
-			return {
-				metadataMessage: 'Saved packaging and queued YouTube title update.'
-			};
-		}
-
 		return {
-			metadataMessage: titleOverrideEnabled
-				? 'Saved packaging. YouTube title already matches.'
-				: 'Saved packaging.'
+			metadataMessage: 'Saved packaging.'
 		};
 	},
 

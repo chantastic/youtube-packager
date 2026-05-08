@@ -20,14 +20,14 @@
 		type VideoValidation
 	} from '$lib/video-validation';
 	import { titleCheckDefinitions } from '$lib/title-checks';
-	import { CirclePlay, ListVideo, RefreshCw, Save, SquarePen } from 'lucide-svelte';
+	import { CirclePlay, ListVideo, RefreshCw, SquarePen } from 'lucide-svelte';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import WorkflowJobStatus from '$lib/components/WorkflowJobStatus.svelte';
 	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import { workflowJobIsActive, workflowJobLabel } from '$lib/workflow-job';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
 	type AssignmentTitleAlternatives = {
@@ -61,6 +61,8 @@
 				titleUpdateMessage?: string;
 		  };
 
+	type PackagingSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
 	let { data, form }: { data: PageData; form: VideoActionData } = $props();
 	let titleAiChecks = $state<VideoValidation[]>([]);
 	let titleAiChecksError = $state<string | null>(null);
@@ -76,7 +78,8 @@
 	let descriptionError = $state<string | null>(descriptionJobError(currentDescriptionJob()));
 	let descriptionLoading = $state(workflowJobIsActive(currentDescriptionJob()));
 	let copiedDescription = $state(false);
-	let metadataSaved = $state(false);
+	let packagingSaveState = $state<PackagingSaveState>('idle');
+	let packagingSaveError = $state<string | null>(null);
 	let videoRefreshing = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
@@ -91,6 +94,9 @@
 	let speakerPosition = $state('');
 	let speakerCompany = $state('');
 	let descriptionPollTimeout: ReturnType<typeof setTimeout> | null = null;
+	let packagingSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+	let packagingSavedTimeout: ReturnType<typeof setTimeout> | null = null;
+	let packagingSaveSequence = 0;
 
 	$effect(() => {
 		selectedVideoType = currentVideoType();
@@ -133,6 +139,8 @@
 
 		return () => {
 			clearDescriptionJobPoll();
+			if (packagingSaveTimeout) clearTimeout(packagingSaveTimeout);
+			if (packagingSavedTimeout) clearTimeout(packagingSavedTimeout);
 		};
 	});
 
@@ -257,6 +265,104 @@
 			.filter((checkId) => !enabledIds.has(checkId));
 	}
 
+	function packagingSaveLabel() {
+		if (packagingSaveState === 'saving') return 'Saving...';
+		if (packagingSaveState === 'saved') return 'Saved';
+		if (packagingSaveState === 'error') return packagingSaveError ?? 'Save failed';
+
+		return 'Autosaves locally';
+	}
+
+	function packagingSaveClass() {
+		if (packagingSaveState === 'saving') return 'text-blue-700';
+		if (packagingSaveState === 'saved') return 'text-green-700';
+		if (packagingSaveState === 'error') return 'text-amber-700';
+
+		return 'text-gray-500';
+	}
+
+	function packagingFormData() {
+		const formData = new FormData();
+
+		formData.set('videoType', selectedVideoType);
+		if (canCustomizeVideoTitleFormat(selectedVideoType)) {
+			formData.set('videoTitleFormat', videoTitleFormatInput);
+		}
+		if (titleOverrideEnabled) {
+			formData.set('titleOverrideEnabled', 'on');
+			formData.set('titleOverride', titleOverrideInput);
+		}
+
+		for (const checkId of enabledTitleValidationIds) {
+			formData.append('enabledTitleValidationIds', checkId);
+		}
+
+		return formData;
+	}
+
+	function schedulePackagingAutosave(delay = 650) {
+		if (packagingSaveTimeout) {
+			clearTimeout(packagingSaveTimeout);
+		}
+
+		packagingSaveState = 'saving';
+		packagingSaveTimeout = setTimeout(() => {
+			void autosavePackaging();
+		}, delay);
+	}
+
+	async function autosavePackaging() {
+		await tick();
+
+		if (packagingSaveTimeout) {
+			clearTimeout(packagingSaveTimeout);
+			packagingSaveTimeout = null;
+		}
+
+		const sequence = ++packagingSaveSequence;
+		packagingSaveState = 'saving';
+		packagingSaveError = null;
+
+		try {
+			const response = await fetch('?/updateMetadata', {
+				method: 'POST',
+				body: packagingFormData(),
+				headers: {
+					accept: 'application/json',
+					'x-sveltekit-action': 'true'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error(`Save failed with ${response.status}.`);
+			}
+
+			if (sequence !== packagingSaveSequence) {
+				return;
+			}
+
+			await loadTitleAiChecks();
+			titleAlternativesByAssignmentId = {};
+			packagingSaveState = 'saved';
+
+			if (packagingSavedTimeout) {
+				clearTimeout(packagingSavedTimeout);
+			}
+			packagingSavedTimeout = setTimeout(() => {
+				if (packagingSaveState === 'saved') {
+					packagingSaveState = 'idle';
+				}
+			}, 1600);
+		} catch (error) {
+			if (sequence !== packagingSaveSequence) {
+				return;
+			}
+
+			packagingSaveState = 'error';
+			packagingSaveError = error instanceof Error ? error.message : 'Save failed.';
+		}
+	}
+
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
 		return [row.speaker.position, row.speaker.company].filter(Boolean).join(', ');
 	}
@@ -319,30 +425,6 @@
 		const baseTitle = deriveComposedBaseTitle(data.videoView.video.title, video, event);
 
 		return formatComposedVideoTitle(baseTitle, video, event);
-	}
-
-	function afterMetadataUpdate() {
-		return async ({
-			update,
-			result
-		}: {
-			update: () => Promise<void>;
-			result: { type: string };
-		}) => {
-			await update();
-			if (result.type !== 'success') {
-				metadataSaved = false;
-				return;
-			}
-
-			await loadTitleAiChecks();
-			titleAlternativesByAssignmentId = {};
-			metadataSaved = true;
-
-			setTimeout(() => {
-				metadataSaved = false;
-			}, 1600);
-		};
 	}
 
 	function afterVideoRefresh() {
@@ -610,14 +692,7 @@
 						.length} event contexts
 				</p>
 			</div>
-			<button
-				type="submit"
-				form="video-packaging-form"
-				class="inline-flex items-center gap-2 rounded bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
-			>
-				<Save aria-hidden="true" class="h-4 w-4" strokeWidth={2} />
-				{normalizeTitleOverride(selectedTitleOverride()) ? 'Save and Update YouTube' : 'Save'}
-			</button>
+			<p class={`text-sm font-medium ${packagingSaveClass()}`}>{packagingSaveLabel()}</p>
 		</div>
 		<div class="grid lg:grid-cols-[280px_minmax(0,1fr)]">
 			<div class="border-b border-gray-200 bg-gray-50 p-4 lg:border-r lg:border-b-0">
@@ -656,13 +731,7 @@
 					</p>
 				{/if}
 			</div>
-			<form
-				id="video-packaging-form"
-				method="POST"
-				action="?/updateMetadata"
-				use:enhance={afterMetadataUpdate}
-				class="divide-y divide-gray-100"
-			>
+			<div class="divide-y divide-gray-100">
 				<div class="grid gap-4 p-4 md:grid-cols-2">
 					<div>
 						<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
@@ -670,6 +739,7 @@
 							id="videoType"
 							name="videoType"
 							bind:value={selectedVideoType}
+							onchange={() => void autosavePackaging()}
 							class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
 						>
 							{#each videoTypeOptions as option (option.value)}
@@ -686,6 +756,8 @@
 								id="videoTitleFormat"
 								name="videoTitleFormat"
 								bind:value={videoTitleFormatInput}
+								oninput={() => schedulePackagingAutosave()}
+								onblur={() => void autosavePackaging()}
 								placeholder={getDefaultVideoTypeTitleFormat(selectedVideoType)}
 								class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
 							/>
@@ -713,6 +785,7 @@
 								type="checkbox"
 								name="titleOverrideEnabled"
 								bind:checked={titleOverrideEnabled}
+								onchange={() => void autosavePackaging()}
 								class="h-4 w-4 rounded border-gray-300 text-gray-950"
 							/>
 							Title override
@@ -724,6 +797,8 @@
 									id="titleOverride"
 									name="titleOverride"
 									bind:value={titleOverrideInput}
+									oninput={() => schedulePackagingAutosave()}
+									onblur={() => void autosavePackaging()}
 									maxlength={youtubeTitleMaxLength}
 									rows="2"
 									placeholder={data.videoView.video.title}
@@ -747,6 +822,7 @@
 										name="enabledTitleValidationIds"
 										value={check.id}
 										bind:group={enabledTitleValidationIds}
+										onchange={() => void autosavePackaging()}
 										class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
 									/>
 									<span>{check.label}</span>
@@ -801,13 +877,8 @@
 							>
 						</p>
 					{/if}
-					{#if form?.metadataError}
-						<p class="mt-2 text-sm text-amber-700">{form.metadataError}</p>
-					{:else if metadataSaved}
-						<p class="mt-2 text-sm text-green-700">{form?.metadataMessage ?? 'Saved'}</p>
-					{/if}
 				</div>
-			</form>
+			</div>
 			<div class="border-t border-gray-100 px-4 py-4 lg:col-start-2">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
@@ -863,6 +934,26 @@
 											<span class="text-gray-400">({row.event.year})</span>
 										</p>
 										<p class="mt-2 text-sm break-words text-gray-700">{composedTitle(row.event)}</p>
+										<div class="mt-2 flex flex-wrap items-center gap-2">
+											<span class="text-xs text-gray-500"
+												>{composedTitle(row.event).length}/100</span
+											>
+											<form
+												method="POST"
+												action="?/applyTitle"
+												use:enhance={afterTitleApply(composedTitle(row.event))}
+											>
+												<input type="hidden" name="title" value={composedTitle(row.event)} />
+												<button
+													type="submit"
+													disabled={!canApplyTitle(composedTitle(row.event)) ||
+														applyingTitle === composedTitle(row.event)}
+													class="rounded bg-gray-950 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+												>
+													{titleApplyLabel(composedTitle(row.event))}
+												</button>
+											</form>
+										</div>
 									</div>
 									<div class="flex flex-wrap gap-2">
 										<IconButton
