@@ -1,12 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { getConvexClient, getConvexClientForEvent } from '$lib/server/convex';
-import {
-	canCustomizeVideoTitleFormat,
-	isVideoType,
-	type VideoTitleFormatRecord
-} from '$lib/title-format';
+import { canCustomizeVideoTitleFormat, isVideoType } from '$lib/title-format';
 import { isTitleCheckId, titleCheckIds } from '$lib/title-checks';
-import { validateVideoBaseline } from '$lib/video-validation';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
@@ -20,42 +15,6 @@ function optionalVideoType(data: FormData) {
 	const value = optionalString(data, 'videoType');
 
 	return isVideoType(value) ? value : undefined;
-}
-
-function videoTitleRecord(
-	video: {
-		titleOverride?: string;
-		videoTitleFormat?: string;
-		videoType?: VideoTitleFormatRecord['videoType'];
-	},
-	speakers: Array<{
-		speaker: {
-			name: string;
-			company?: string;
-			position?: string;
-		};
-	}>
-): VideoTitleFormatRecord {
-	const speaker = speakers.map((row) => row.speaker.name).join(', ');
-	const company = [
-		...new Set(
-			speakers.map((row) => row.speaker.company).filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-	const position = [
-		...new Set(
-			speakers.map((row) => row.speaker.position).filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-
-	return {
-		speaker: speaker || undefined,
-		company: company || undefined,
-		position: position || undefined,
-		titleOverride: video.titleOverride,
-		videoTitleFormat: video.videoTitleFormat,
-		videoType: video.videoType
-	};
 }
 
 async function resolveVideoRouteTarget(
@@ -106,11 +65,6 @@ export const load: PageServerLoad = async (event) => {
 				task: 'youtubeTitleUpdate'
 			})
 		]);
-	const speakers = videoView.speakers.map((speakerRow) => ({
-		name: speakerRow.speaker.name,
-		company: speakerRow.speaker.company
-	}));
-	const selectedTitleFormat = videoTitleRecord(videoView.video, videoView.speakers);
 
 	return {
 		videoView,
@@ -119,17 +73,7 @@ export const load: PageServerLoad = async (event) => {
 		availableSpeakers,
 		refreshJob,
 		captionJob,
-		titleUpdateJob,
-		assignmentValidationsById: Object.fromEntries(
-			videoView.assignments.map((row) => [
-				row.assignment._id,
-				validateVideoBaseline(videoView.video.title, row.event, {
-					speakers,
-					video: selectedTitleFormat,
-					disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
-				})
-			])
-		)
+		titleUpdateJob
 	};
 };
 
