@@ -62,6 +62,14 @@
 		  };
 
 	type PackagingSaveState = 'idle' | 'saving' | 'saved' | 'error';
+	type TitleStrategy = 'template' | 'custom' | 'override';
+
+	const titleStrategies = [
+		{ id: 'template', label: 'Template', detail: 'Type + event rules' },
+		{ id: 'custom', label: 'Custom Format', detail: 'Token format' },
+		{ id: 'override', label: 'Override', detail: 'Exact title' }
+	] as const satisfies Array<{ id: TitleStrategy; label: string; detail: string }>;
+	const overrideTitleCheckIds = new Set(['hook', 'mechanics']);
 
 	let { data, form }: { data: PageData; form: VideoActionData } = $props();
 	let titleAiChecks = $state<VideoValidation[]>([]);
@@ -83,6 +91,7 @@
 	let videoRefreshing = $state(false);
 	let captionsFetching = $state(false);
 	let applyingTitle = $state<string | null>(null);
+	let selectedTitleStrategy = $state<TitleStrategy>(currentTitleStrategy());
 	let selectedVideoType = $state(currentVideoType());
 	let videoTitleFormatInput = $state(currentVideoTitleFormat());
 	let titleOverrideEnabled = $state(Boolean(currentTitleOverride()));
@@ -99,6 +108,7 @@
 	let packagingSaveSequence = 0;
 
 	$effect(() => {
+		selectedTitleStrategy = currentTitleStrategy();
 		selectedVideoType = currentVideoType();
 		videoTitleFormatInput = currentVideoTitleFormat();
 		titleOverrideEnabled = Boolean(currentTitleOverride());
@@ -108,6 +118,14 @@
 
 	function currentVideoType() {
 		return normalizeVideoType(data.videoView.video.videoType);
+	}
+
+	function currentTitleStrategy(): TitleStrategy {
+		if (normalizeTitleOverride(currentTitleOverride())) {
+			return 'override';
+		}
+
+		return canCustomizeVideoTitleFormat(currentVideoType()) ? 'custom' : 'template';
 	}
 
 	function currentVideoTitleFormat() {
@@ -228,13 +246,15 @@
 	}
 
 	function selectedVideoTitleFormat() {
-		return canCustomizeVideoTitleFormat(selectedVideoType)
+		return selectedTitleStrategy === 'custom' && canCustomizeVideoTitleFormat(selectedVideoType)
 			? videoTitleFormatInput
 			: data.videoView.video.videoTitleFormat;
 	}
 
 	function selectedTitleOverride() {
-		return titleOverrideEnabled ? titleOverrideInput : undefined;
+		return selectedTitleStrategy === 'override' && titleOverrideEnabled
+			? titleOverrideInput
+			: undefined;
 	}
 
 	function titleOverrideLength() {
@@ -258,11 +278,97 @@
 	}
 
 	function selectedDisabledTitleValidationIds() {
-		const enabledIds = new Set(enabledTitleValidationIds);
+		const enabledIds = new Set(effectiveEnabledTitleValidationIds());
 
 		return titleCheckDefinitions
 			.map((check) => check.id)
 			.filter((checkId) => !enabledIds.has(checkId));
+	}
+
+	function effectiveEnabledTitleValidationIds() {
+		const allowedIds =
+			selectedTitleStrategy === 'override'
+				? overrideTitleCheckIds
+				: new Set(titleCheckDefinitions.map((check) => check.id));
+
+		return enabledTitleValidationIds.filter((checkId) => allowedIds.has(checkId));
+	}
+
+	function visibleTitleCheckDefinitions() {
+		return selectedTitleStrategy === 'override'
+			? titleCheckDefinitions.filter((check) => overrideTitleCheckIds.has(check.id))
+			: titleCheckDefinitions;
+	}
+
+	function structuredVideoTypeOptions() {
+		return videoTypeOptions.filter((option) => option.value !== 'custom');
+	}
+
+	function strategyButtonClass(strategy: TitleStrategy) {
+		return selectedTitleStrategy === strategy
+			? 'border-gray-950 bg-gray-950 text-white'
+			: 'border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50';
+	}
+
+	function defaultTitleCheckIdsForStrategy(strategy: TitleStrategy) {
+		return strategy === 'override'
+			? titleCheckDefinitions
+					.filter((check) => overrideTitleCheckIds.has(check.id))
+					.map((check) => check.id)
+			: titleCheckDefinitions.map((check) => check.id);
+	}
+
+	function defaultOverrideTitle() {
+		const event = data.videoView.assignments[0]?.event;
+
+		if (!event) {
+			return data.videoView.video.title;
+		}
+
+		const video = {
+			...videoTitleRecord(),
+			titleOverride: undefined
+		};
+		const baseTitle = deriveComposedBaseTitle(data.videoView.video.title, video, event);
+
+		return formatComposedVideoTitle(baseTitle, video, event);
+	}
+
+	function selectTitleStrategy(strategy: TitleStrategy) {
+		selectedTitleStrategy = strategy;
+		titleAlternativesByAssignmentId = {};
+		titleAlternativesError = null;
+
+		if (strategy === 'override') {
+			titleOverrideEnabled = true;
+			titleOverrideInput = titleOverrideInput.trim() || defaultOverrideTitle();
+			enabledTitleValidationIds = effectiveEnabledTitleValidationIds().length
+				? effectiveEnabledTitleValidationIds()
+				: defaultTitleCheckIdsForStrategy('override');
+		} else {
+			titleOverrideEnabled = false;
+			if (strategy === 'custom') {
+				selectedVideoType = 'custom';
+				videoTitleFormatInput =
+					videoTitleFormatInput.trim() || normalizeComposedVideoTitleFormat(undefined, 'custom');
+			} else if (canCustomizeVideoTitleFormat(selectedVideoType)) {
+				selectedVideoType = 'talk';
+			}
+
+			if (effectiveEnabledTitleValidationIds().length < titleCheckDefinitions.length) {
+				enabledTitleValidationIds = defaultTitleCheckIdsForStrategy(strategy);
+			}
+		}
+
+		void autosavePackaging();
+	}
+
+	function shouldSuggestPanelDiscussion() {
+		return (
+			selectedTitleStrategy === 'template' &&
+			selectedVideoType !== 'panelDiscussion' &&
+			data.videoView.speakers.length > 2
+		);
 	}
 
 	function packagingSaveLabel() {
@@ -285,15 +391,15 @@
 		const formData = new FormData();
 
 		formData.set('videoType', selectedVideoType);
-		if (canCustomizeVideoTitleFormat(selectedVideoType)) {
+		if (selectedTitleStrategy === 'custom' && canCustomizeVideoTitleFormat(selectedVideoType)) {
 			formData.set('videoTitleFormat', videoTitleFormatInput);
 		}
-		if (titleOverrideEnabled) {
+		if (selectedTitleStrategy === 'override' && titleOverrideEnabled) {
 			formData.set('titleOverrideEnabled', 'on');
 			formData.set('titleOverride', titleOverrideInput);
 		}
 
-		for (const checkId of enabledTitleValidationIds) {
+		for (const checkId of effectiveEnabledTitleValidationIds()) {
 			formData.append('enabledTitleValidationIds', checkId);
 		}
 
@@ -733,22 +839,72 @@
 			</div>
 			<div class="divide-y divide-gray-100">
 				<div class="grid gap-4 p-4 md:grid-cols-2">
-					<div>
-						<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
-						<select
-							id="videoType"
-							name="videoType"
-							bind:value={selectedVideoType}
-							onchange={() => void autosavePackaging()}
-							class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-						>
-							{#each videoTypeOptions as option (option.value)}
-								<option value={option.value}>{option.label}</option>
+					<div class="md:col-span-2">
+						<p class="mb-2 text-sm font-medium text-gray-950">Title strategy</p>
+						<div class="grid gap-2 sm:grid-cols-3">
+							{#each titleStrategies as strategy (strategy.id)}
+								<button
+									type="button"
+									onclick={() => selectTitleStrategy(strategy.id)}
+									class={`rounded border px-3 py-2 text-left transition ${strategyButtonClass(strategy.id)}`}
+								>
+									<span class="block text-sm font-semibold">{strategy.label}</span>
+									<span
+										class={`mt-0.5 block text-xs ${selectedTitleStrategy === strategy.id ? 'text-gray-200' : 'text-gray-500'}`}
+										>{strategy.detail}</span
+									>
+								</button>
 							{/each}
-						</select>
+						</div>
 					</div>
-					<div>
-						{#if canCustomizeVideoTitleFormat(selectedVideoType)}
+
+					{#if selectedTitleStrategy === 'template'}
+						<div>
+							<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
+							<select
+								id="videoType"
+								name="videoType"
+								bind:value={selectedVideoType}
+								onchange={() => void autosavePackaging()}
+								class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+							>
+								{#each structuredVideoTypeOptions() as option (option.value)}
+									<option value={option.value}>{option.label}</option>
+								{/each}
+							</select>
+						</div>
+						<div>
+							<p class="mb-1 text-sm text-gray-500">
+								{videoTypeLabelFor(selectedVideoType)} format
+							</p>
+							<p
+								class="rounded border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-800"
+							>
+								{getDefaultVideoTypeTitleFormat(selectedVideoType)}
+							</p>
+						</div>
+						{#if shouldSuggestPanelDiscussion()}
+							<div
+								class="flex flex-wrap items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 md:col-span-2"
+							>
+								<p class="text-sm text-amber-900">
+									{data.videoView.speakers.length} speakers assigned. Panel Discussion may fit this title
+									better.
+								</p>
+								<button
+									type="button"
+									onclick={() => {
+										selectedVideoType = 'panelDiscussion';
+										void autosavePackaging();
+									}}
+									class="rounded border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+								>
+									Use Panel Discussion
+								</button>
+							</div>
+						{/if}
+					{:else if selectedTitleStrategy === 'custom'}
+						<div class="md:col-span-2">
 							<label for="videoTitleFormat" class="mb-1 block text-sm text-gray-500"
 								>Custom title format</label
 							>
@@ -768,67 +924,67 @@
 									</span>
 								{/each}
 							</div>
-						{:else}
-							<p class="mb-1 text-sm text-gray-500">
-								{videoTypeLabelFor(selectedVideoType)} format
-							</p>
-							<p
-								class="rounded border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-800"
+						</div>
+					{:else}
+						<div class="md:col-span-2">
+							<label for="titleOverride" class="mb-1 block text-sm text-gray-500"
+								>Override title</label
 							>
-								{getDefaultVideoTypeTitleFormat(selectedVideoType)}
+							<textarea
+								id="titleOverride"
+								name="titleOverride"
+								bind:value={titleOverrideInput}
+								oninput={() => schedulePackagingAutosave()}
+								onblur={() => void autosavePackaging()}
+								maxlength={youtubeTitleMaxLength}
+								rows="2"
+								placeholder={data.videoView.video.title}
+								class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+							></textarea>
+							<p class="mt-1 text-xs text-gray-500">
+								{titleOverrideLength()}/{youtubeTitleMaxLength}
 							</p>
-						{/if}
-					</div>
+						</div>
+					{/if}
 					<div class="md:col-span-2">
-						<label class="flex items-center gap-2 text-sm font-medium text-gray-900">
-							<input
-								type="checkbox"
-								name="titleOverrideEnabled"
-								bind:checked={titleOverrideEnabled}
-								onchange={() => void autosavePackaging()}
-								class="h-4 w-4 rounded border-gray-300 text-gray-950"
-							/>
-							Title override
-						</label>
-						{#if titleOverrideEnabled}
-							<div class="mt-2">
-								<label for="titleOverride" class="sr-only">Override title</label>
-								<textarea
-									id="titleOverride"
-									name="titleOverride"
-									bind:value={titleOverrideInput}
-									oninput={() => schedulePackagingAutosave()}
-									onblur={() => void autosavePackaging()}
-									maxlength={youtubeTitleMaxLength}
-									rows="2"
-									placeholder={data.videoView.video.title}
-									class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm"
-								></textarea>
-								<p class="mt-1 text-xs text-gray-500">
-									{titleOverrideLength()}/{youtubeTitleMaxLength}
-								</p>
+						<div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+							<div class="flex flex-wrap items-start justify-between gap-3">
+								<div>
+									<p class="text-sm font-medium text-gray-950">Title checks</p>
+									<p class="mt-1 text-xs text-gray-500">
+										{#if selectedTitleStrategy === 'override'}
+											Hook and Mechanics score the exact override title.
+										{:else}
+											Structured checks score the selected template.
+										{/if}
+									</p>
+								</div>
+								<details class="group">
+									<summary
+										class="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-950"
+									>
+										Settings
+									</summary>
+									<div class="mt-3 flex flex-wrap gap-2">
+										{#each visibleTitleCheckDefinitions() as check (check.id)}
+											<label
+												class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
+											>
+												<input
+													type="checkbox"
+													name="enabledTitleValidationIds"
+													value={check.id}
+													bind:group={enabledTitleValidationIds}
+													onchange={() => void autosavePackaging()}
+													class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
+												/>
+												<span>{check.label}</span>
+												<span class="text-xs text-gray-400">{check.kind}</span>
+											</label>
+										{/each}
+									</div>
+								</details>
 							</div>
-						{/if}
-					</div>
-					<div class="md:col-span-2">
-						<p class="mb-2 text-sm text-gray-500">Active title checks</p>
-						<div class="flex flex-wrap gap-2">
-							{#each titleCheckDefinitions as check (check.id)}
-								<label
-									class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
-								>
-									<input
-										type="checkbox"
-										name="enabledTitleValidationIds"
-										value={check.id}
-										bind:group={enabledTitleValidationIds}
-										onchange={() => void autosavePackaging()}
-										class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
-									/>
-									<span>{check.label}</span>
-									<span class="text-xs text-gray-400">{check.kind}</span>
-								</label>
-							{/each}
 						</div>
 						<div class="mt-3">
 							{#if titleAiChecksLoading}
@@ -882,19 +1038,27 @@
 			<div class="border-t border-gray-100 px-4 py-4 lg:col-start-2">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
-						<h3 class="text-sm font-semibold text-gray-950">Title Generation</h3>
-						<p class="mt-1 text-xs text-gray-500">Generate titles from the active title rules.</p>
+						<h3 class="text-sm font-semibold text-gray-950">Title Output</h3>
+						<p class="mt-1 text-xs text-gray-500">
+							{#if selectedTitleStrategy === 'override'}
+								Review the exact override before pushing it to YouTube.
+							{:else}
+								Generate titles from the active title rules.
+							{/if}
+						</p>
 					</div>
-					<button
-						type="button"
-						onclick={loadTitleAlternatives}
-						disabled={titleAlternativesLoading || data.videoView.assignments.length === 0}
-						class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
-					>
-						{titleAlternativesLoading ? 'Generating...' : 'Generate Titles'}
-					</button>
+					{#if selectedTitleStrategy !== 'override'}
+						<button
+							type="button"
+							onclick={loadTitleAlternatives}
+							disabled={titleAlternativesLoading || data.videoView.assignments.length === 0}
+							class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+						>
+							{titleAlternativesLoading ? 'Generating...' : 'Generate Titles'}
+						</button>
+					{/if}
 				</div>
-				{#if titleAlternativesError}
+				{#if selectedTitleStrategy !== 'override' && titleAlternativesError}
 					<p
 						class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
 					>
@@ -988,7 +1152,7 @@
 										<p class="mt-2 text-xs text-gray-500">Expected: {validation.expected}</p>
 									{/if}
 								{/each}
-								{#if alternatives?.alternatives.length}
+								{#if selectedTitleStrategy !== 'override' && alternatives?.alternatives.length}
 									<div class="mt-4 space-y-2">
 										{#each alternatives.alternatives as title (title)}
 											<div class="rounded border border-gray-200 bg-white p-3">
@@ -1020,7 +1184,7 @@
 											</div>
 										{/each}
 									</div>
-								{:else if alternatives?.error}
+								{:else if selectedTitleStrategy !== 'override' && alternatives?.error}
 									<p class="mt-3 text-xs text-amber-700">{alternatives.error}</p>
 								{/if}
 							</article>
