@@ -56,6 +56,12 @@ SvelteKit actions should request work through Convex commands such as `youtubeCo
 Those commands create or reuse a queued job, schedule an internal workflow action, and return immediately.
 Pages should read the latest job status and stored Convex snapshots instead of calling YouTube during page load.
 
+`workflowJobs` is intentionally capped by workflow stream. When a YouTube workflow reaches a
+terminal state, Convex keeps the 10 most recent terminal jobs for the same organization, task, and
+target stream, while preserving queued or running jobs. Event jobs are capped by event, video jobs by
+video, and integration jobs by stable key. This keeps the latest status and a short audit trail
+without letting repeated sync/update actions grow the table forever.
+
 ## Backend Workflow Smoke Tests
 
 Use `convex run --identity` to verify guarded Convex commands and scheduled workflows without a
