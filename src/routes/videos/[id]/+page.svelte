@@ -24,7 +24,9 @@
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import WorkflowJobStatus from '$lib/components/WorkflowJobStatus.svelte';
 	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
+	import { workflowJobIsActive, workflowJobLabel } from '$lib/workflow-job';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -46,7 +48,6 @@
 	};
 
 	type DescriptionJob = NonNullable<PageData['descriptionJob']>;
-	type WorkflowJob = PageData['refreshJob'];
 	type VideoActionData =
 		| ActionData
 		| {
@@ -75,7 +76,7 @@
 		currentDescriptionJob()?.result ?? null
 	);
 	let descriptionError = $state<string | null>(descriptionJobError(currentDescriptionJob()));
-	let descriptionLoading = $state(descriptionJobIsActive(currentDescriptionJob()));
+	let descriptionLoading = $state(workflowJobIsActive(currentDescriptionJob()));
 	let copiedDescription = $state(false);
 	let metadataSaved = $state(false);
 	let videoRefreshing = $state(false);
@@ -118,7 +119,7 @@
 	onMount(() => {
 		void loadTitleAiChecks();
 
-		if (descriptionJobIsActive(descriptionJob)) {
+		if (workflowJobIsActive(descriptionJob)) {
 			scheduleDescriptionJobPoll();
 		}
 
@@ -148,46 +149,8 @@
 		}[status];
 	}
 
-	function descriptionJobIsActive(job: DescriptionJob | null | undefined) {
-		return job?.status === 'queued' || job?.status === 'running';
-	}
-
 	function descriptionJobError(job: DescriptionJob | null | undefined) {
 		return job?.status === 'error' ? (job.error ?? 'Description generation failed.') : null;
-	}
-
-	function descriptionJobLabel(job: DescriptionJob | null | undefined) {
-		if (!job) return 'No description job';
-		if (job.status === 'queued') return 'Queued';
-		if (job.status === 'running') return 'Running';
-		if (job.status === 'complete') return 'Complete';
-		return 'Error';
-	}
-
-	function descriptionJobTone(job: DescriptionJob | null | undefined) {
-		if (!job) return 'border-gray-200 bg-gray-50 text-gray-600';
-		if (job.status === 'complete') return 'border-green-200 bg-green-50 text-green-700';
-		if (job.status === 'error') return 'border-amber-200 bg-amber-50 text-amber-800';
-		return 'border-blue-200 bg-blue-50 text-blue-700';
-	}
-
-	function workflowJobIsActive(job: WorkflowJob | null | undefined) {
-		return job?.status === 'queued' || job?.status === 'running';
-	}
-
-	function workflowJobLabel(job: WorkflowJob | null | undefined) {
-		if (!job) return 'No job';
-		if (job.status === 'queued') return 'Queued';
-		if (job.status === 'running') return 'Running';
-		if (job.status === 'complete') return 'Complete';
-		return 'Error';
-	}
-
-	function workflowJobTone(job: WorkflowJob | null | undefined) {
-		if (!job) return 'border-gray-200 bg-gray-50 text-gray-600';
-		if (job.status === 'complete') return 'border-green-200 bg-green-50 text-green-700';
-		if (job.status === 'error') return 'border-amber-200 bg-amber-50 text-amber-800';
-		return 'border-blue-200 bg-blue-50 text-blue-700';
 	}
 
 	function titleFocusSpeakers() {
@@ -482,7 +445,7 @@
 		descriptionJob = job;
 		generatedDescription = job?.result ?? null;
 		descriptionError = descriptionJobError(job);
-		descriptionLoading = descriptionJobIsActive(job);
+		descriptionLoading = workflowJobIsActive(job);
 
 		if (descriptionLoading) {
 			scheduleDescriptionJobPoll();
@@ -602,7 +565,7 @@
 			descriptionError = 'Description generation is temporarily unavailable.';
 			descriptionLoading = false;
 		} finally {
-			if (!descriptionJobIsActive(descriptionJob)) {
+			if (!workflowJobIsActive(descriptionJob)) {
 				descriptionLoading = false;
 			}
 		}
@@ -688,12 +651,7 @@
 					{form.refreshError}
 				</p>
 			{:else if data.refreshJob}
-				<div class={`mt-3 rounded border px-3 py-2 text-xs ${workflowJobTone(data.refreshJob)}`}>
-					YouTube refresh: {workflowJobLabel(data.refreshJob)}
-					{#if data.refreshJob.error}
-						<span class="block">{data.refreshJob.error}</span>
-					{/if}
-				</div>
+				<WorkflowJobStatus job={data.refreshJob} label="YouTube refresh" class="mt-3" />
 			{:else if form?.refreshMessage}
 				<p
 					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
@@ -927,7 +885,7 @@
 				disabled={descriptionLoading || data.captions.length === 0}
 				class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 			>
-				{descriptionLoading ? descriptionJobLabel(descriptionJob) : 'Generate Description'}
+				{descriptionLoading ? workflowJobLabel(descriptionJob) : 'Generate Description'}
 			</button>
 		</div>
 		<div class="px-4 py-4">
@@ -943,23 +901,14 @@
 					Fetch captions before generating a structured description.
 				</p>
 			{/if}
-			{#if descriptionJob}
-				<div class={`mt-4 rounded border px-3 py-2 text-sm ${descriptionJobTone(descriptionJob)}`}>
-					<div class="flex flex-wrap items-center justify-between gap-2">
-						<p class="font-medium">Description job: {descriptionJobLabel(descriptionJob)}</p>
-						<p class="text-xs opacity-80">
-							{#if descriptionJob.completedAt}
-								Completed {formatDate(descriptionJob.completedAt)}
-							{:else if descriptionJob.startedAt}
-								Started {formatDate(descriptionJob.startedAt)}
-							{:else}
-								Queued {formatDate(descriptionJob.queuedAt)}
-							{/if}
-						</p>
-					</div>
-				</div>
-			{/if}
-			{#if descriptionError}
+			<WorkflowJobStatus
+				job={descriptionJob}
+				label="Description job"
+				class="mt-4"
+				showTimestamp
+				size="md"
+			/>
+			{#if descriptionError && descriptionJob?.status !== 'error'}
 				<p
 					class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
 				>
@@ -1063,18 +1012,13 @@
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				{form.captionError}
 			</p>
-		{:else if data.captionJob && workflowJobIsActive(data.captionJob)}
-			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-				Caption fetch {data.captionJob.status}.
-			</p>
-		{:else if data.captionJob?.status === 'error'}
-			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-				Last caption fetch failed: {data.captionJob.error}
-			</p>
-		{:else if data.captionJob?.status === 'complete'}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				Caption fetch complete.
-			</p>
+		{:else if data.captionJob}
+			<WorkflowJobStatus
+				job={data.captionJob}
+				label="Caption fetch"
+				class="rounded-none border-x-0 border-t-0 px-4 py-3"
+				size="md"
+			/>
 		{:else if form?.captionMessage}
 			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
 				{form.captionMessage}
@@ -1234,18 +1178,13 @@
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				{form.titleUpdateError}
 			</p>
-		{:else if data.titleUpdateJob && workflowJobIsActive(data.titleUpdateJob)}
-			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-				YouTube title update {data.titleUpdateJob.status}.
-			</p>
-		{:else if data.titleUpdateJob?.status === 'error'}
-			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-				Last YouTube title update failed: {data.titleUpdateJob.error}
-			</p>
-		{:else if data.titleUpdateJob?.status === 'complete'}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				YouTube title update complete.
-			</p>
+		{:else if data.titleUpdateJob}
+			<WorkflowJobStatus
+				job={data.titleUpdateJob}
+				label="YouTube title update"
+				class="rounded-none border-x-0 border-t-0 px-4 py-3"
+				size="md"
+			/>
 		{:else if form?.titleUpdateMessage}
 			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
 				{form.titleUpdateMessage}

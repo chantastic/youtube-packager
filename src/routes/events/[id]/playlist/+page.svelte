@@ -30,6 +30,7 @@
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import WorkflowJobStatus from '$lib/components/WorkflowJobStatus.svelte';
 	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
@@ -416,22 +417,8 @@
 				>
 					{form.playlistSyncError}
 				</p>
-			{:else if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
-				<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-					Playlist sync {data.syncJob.status}.
-				</p>
-			{:else if data.syncJob?.status === 'error'}
-				<p
-					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
-				>
-					Last playlist sync failed: {data.syncJob.error}
-				</p>
-			{:else if data.syncJob?.status === 'complete'}
-				<p
-					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
-				>
-					Playlist sync complete.
-				</p>
+			{:else if data.syncJob}
+				<WorkflowJobStatus job={data.syncJob} label="Playlist sync" class="mt-3" size="md" />
 			{:else if form?.playlistSyncMessage}
 				<p
 					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
@@ -692,11 +679,6 @@
 				<div>
 					<h2 class="text-lg font-semibold text-gray-950">No synced playlist data</h2>
 					<p class="mt-1 text-sm text-gray-500">Queue a playlist sync to build the video list.</p>
-					{#if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
-						<p class="mt-2 text-sm text-blue-700">Playlist sync {data.syncJob.status}.</p>
-					{:else if data.syncJob?.status === 'error'}
-						<p class="mt-2 text-sm text-amber-700">Last sync failed: {data.syncJob.error}</p>
-					{/if}
 				</div>
 				<form method="POST" action="?/syncPlaylist" use:enhance={afterPlaylistSync}>
 					<IconButton
@@ -715,22 +697,8 @@
 				>
 					{form.playlistSyncError}
 				</p>
-			{:else if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
-				<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-					Playlist sync {data.syncJob.status}.
-				</p>
-			{:else if data.syncJob?.status === 'error'}
-				<p
-					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
-				>
-					Last playlist sync failed: {data.syncJob.error}
-				</p>
-			{:else if data.syncJob?.status === 'complete'}
-				<p
-					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
-				>
-					Playlist sync complete.
-				</p>
+			{:else if data.syncJob}
+				<WorkflowJobStatus job={data.syncJob} label="Playlist sync" class="mt-3" size="md" />
 			{:else if form?.playlistSyncMessage}
 				<p
 					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"

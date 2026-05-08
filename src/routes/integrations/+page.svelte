@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import WorkflowJobStatus from '$lib/components/WorkflowJobStatus.svelte';
 	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -144,21 +145,13 @@
 						</p>
 					{/if}
 
-					{#if data.channelSyncJob?.status === 'queued' || data.channelSyncJob?.status === 'running'}
-						<div class="mt-4 rounded border border-blue-200 bg-blue-50 p-3">
-							<p class="text-sm font-medium text-blue-800">
-								YouTube channel sync {data.channelSyncJob.status}
-							</p>
-						</div>
-					{:else if data.channelSyncJob?.status === 'error'}
-						<div class="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
-							<p class="text-sm font-medium text-amber-800">YouTube channel sync failed</p>
-							<p class="mt-1 text-xs text-amber-700">{data.channelSyncJob.error}</p>
-						</div>
-					{:else if data.channelSyncJob?.status === 'complete'}
-						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
-							<p class="text-sm font-medium text-green-800">YouTube channel sync complete</p>
-						</div>
+					{#if data.channelSyncJob}
+						<WorkflowJobStatus
+							job={data.channelSyncJob}
+							label="YouTube channel sync"
+							class="mt-4"
+							size="md"
+						/>
 					{:else if syncResult}
 						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
 							<p class="text-sm font-medium text-green-800">YouTube channel sync queued</p>

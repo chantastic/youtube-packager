@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { invalidate } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { workflowJobIsActive, type WorkflowJobLike } from '$lib/workflow-job';
 	import { onDestroy } from 'svelte';
-
-	type WorkflowJobLike = { status?: string | null } | null | undefined;
 
 	type Props = {
 		dependency?: string;
@@ -15,9 +14,7 @@
 	let timeout: ReturnType<typeof setTimeout> | null = null;
 	let pollToken = 0;
 
-	const hasActiveJob = $derived(
-		jobs.some((job) => job?.status === 'queued' || job?.status === 'running')
-	);
+	const hasActiveJob = $derived(jobs.some((job) => workflowJobIsActive(job)));
 
 	$effect(() => {
 		if (!browser) return;
