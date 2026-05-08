@@ -1,17 +1,21 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { eventTypeLabelFor } from '$lib/event-type';
+	import { eventTypeLabelFor, eventTypeOptions } from '$lib/event-type';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import LighthouseScoreButton from '$lib/components/LighthouseScoreButton.svelte';
 	import LighthouseScoreLink from '$lib/components/LighthouseScoreLink.svelte';
+	import ModalDialog from '$lib/components/ModalDialog.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { youtubePlaylistUrl } from '$lib/youtube';
+	import { Plus } from 'lucide-svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let buildingEventId = $state<string | null>(null);
+	let createDialogOpen = $state(false);
+	const currentYear = new Date().getFullYear();
 
 	type EventRow = PageData['events'][number];
 	type ValidationStat = PageData['validationStatsByEventId'][string][number];
@@ -114,11 +118,24 @@
 			};
 		};
 	}
+
+	$effect(() => {
+		if (form?.createError) createDialogOpen = true;
+	});
 </script>
 
 <main class="min-h-screen bg-gray-50">
 	<div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-		<PageHeader eyebrow="YouTube Packager" title="Events" />
+		<PageHeader eyebrow="YouTube Packager" title="Events">
+			<button
+				type="button"
+				class="inline-flex items-center justify-center gap-2 rounded-md bg-gray-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus:ring-2 focus:ring-gray-950 focus:ring-offset-2 focus:outline-none"
+				onclick={() => (createDialogOpen = true)}
+			>
+				<Plus aria-hidden="true" class="h-4 w-4" />
+				New event
+			</button>
+		</PageHeader>
 
 		{#if form?.buildError}
 			<p class="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -233,9 +250,114 @@
 					class="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center"
 				>
 					<h2 class="text-base font-semibold text-gray-950">No events yet</h2>
-					<p class="mt-1 text-sm text-gray-500">Create one from an event detail workflow.</p>
+					<p class="mt-1 text-sm text-gray-500">Add the first event for this organization.</p>
+					<button
+						type="button"
+						class="mt-5 inline-flex items-center justify-center gap-2 rounded-md bg-gray-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus:ring-2 focus:ring-gray-950 focus:ring-offset-2 focus:outline-none"
+						onclick={() => (createDialogOpen = true)}
+					>
+						<Plus aria-hidden="true" class="h-4 w-4" />
+						New event
+					</button>
 				</div>
 			{/if}
 		</section>
 	</div>
+
+	<ModalDialog
+		id="create-event-dialog"
+		open={createDialogOpen}
+		title="New event"
+		description="Create an event shell, then connect its YouTube playlist from the detail page."
+		onClose={() => (createDialogOpen = false)}
+	>
+		<form method="POST" action="?/create" class="space-y-5" use:enhance>
+			{#if form?.createError}
+				<p class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+					{form.createError}
+				</p>
+			{/if}
+
+			<div class="grid gap-4 sm:grid-cols-2">
+				<label class="sm:col-span-2">
+					<span class="text-sm font-medium text-gray-700">Event name</span>
+					<input
+						data-autofocus
+						name="name"
+						required
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+						placeholder="MCP Night"
+					/>
+				</label>
+
+				<label>
+					<span class="text-sm font-medium text-gray-700">Year</span>
+					<input
+						name="year"
+						type="number"
+						required
+						min="2005"
+						max="2100"
+						value={currentYear}
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+					/>
+				</label>
+
+				<label>
+					<span class="text-sm font-medium text-gray-700">Event type</span>
+					<select
+						name="eventType"
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+					>
+						{#each eventTypeOptions as option (option.value)}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+				</label>
+
+				<label class="sm:col-span-2">
+					<span class="text-sm font-medium text-gray-700">Edition title</span>
+					<input
+						name="editionTitle"
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+						placeholder="Holiday Special"
+					/>
+				</label>
+
+				<label class="sm:col-span-2">
+					<span class="text-sm font-medium text-gray-700">YouTube playlist</span>
+					<input
+						name="youtubePlaylistId"
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+						placeholder="https://www.youtube.com/playlist?list=..."
+					/>
+				</label>
+
+				<label class="sm:col-span-2">
+					<span class="text-sm font-medium text-gray-700">Event suffix format</span>
+					<input
+						name="titleFormat"
+						class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950 shadow-sm focus:border-gray-950 focus:ring-1 focus:ring-gray-950 focus:outline-none"
+						placeholder={'| {event_name}'}
+					/>
+				</label>
+			</div>
+
+			<div class="flex justify-end gap-3 border-t border-gray-200 pt-5">
+				<button
+					type="button"
+					class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-950 focus:ring-offset-2 focus:outline-none"
+					onclick={() => (createDialogOpen = false)}
+				>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					class="rounded-md bg-gray-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus:ring-2 focus:ring-gray-950 focus:ring-offset-2 focus:outline-none"
+				>
+					Create event
+				</button>
+			</div>
+		</form>
+	</ModalDialog>
 </main>

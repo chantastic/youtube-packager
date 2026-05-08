@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClientForEvent } from '$lib/server/convex';
 import {
@@ -296,14 +296,31 @@ export const actions: Actions = {
 		const { request } = event;
 		const client = getConvexClientForEvent(event);
 		const data = await request.formData();
-		await client.mutation(api.events.upsert, {
-			name: String(data.get('name')),
+		const name = optionalString(data, 'name')?.trim();
+		const year = Number(data.get('year'));
+
+		if (!name || !Number.isFinite(year) || year < 1) {
+			return fail(400, {
+				createError: 'Event name and year are required.'
+			});
+		}
+
+		const created = await client.mutation(api.events.upsert, {
+			name,
 			editionTitle: optionalString(data, 'editionTitle'),
 			eventType: eventType(data),
-			year: Number(data.get('year')),
+			year,
 			titleFormat: optionalString(data, 'titleFormat'),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))
 		});
+
+		if (!created) {
+			return fail(500, {
+				createError: 'Event could not be created.'
+			});
+		}
+
+		throw redirect(303, `/events/${created._id}`);
 	},
 
 	update: async (event) => {
