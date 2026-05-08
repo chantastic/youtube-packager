@@ -11,8 +11,6 @@ import { getConvexClientForEvent } from '$lib/server/convex';
 import { api } from '../../../convex/_generated/api';
 import type { Actions, PageServerLoad } from './$types';
 
-export const csr = false;
-
 function authContext(event: { locals: App.Locals }): { userId: string; organizationId?: string } {
 	const auth = event.locals.auth;
 
@@ -26,6 +24,8 @@ function authContext(event: { locals: App.Locals }): { userId: string; organizat
 }
 
 export const load: PageServerLoad = async (event) => {
+	event.depends('app:workflow-jobs');
+
 	const auth = authContext(event);
 	const pipesConfigError = workosPipesConfigError();
 	let pipesConnection: Awaited<ReturnType<typeof getWorkOSPipesAccessToken>> | null = null;

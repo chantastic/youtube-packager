@@ -74,6 +74,8 @@ async function resolveVideoRouteTarget(
 }
 
 export const load: PageServerLoad = async (event) => {
+	event.depends('app:workflow-jobs');
+
 	const client = getConvexClientForEvent(event);
 	const routeTarget = await resolveVideoRouteTarget(client, event.params.id);
 	const videoView = routeTarget.videoView;

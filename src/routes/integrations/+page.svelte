@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -49,6 +50,8 @@
 </svelte:head>
 
 <main class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+	<WorkflowJobPoller jobs={[data.channelSyncJob]} />
+
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
 		<div>
 			<a href={resolve('/events')} class="text-sm text-blue-600 hover:underline">Events</a>
@@ -141,14 +144,7 @@
 						</p>
 					{/if}
 
-					{#if syncResult}
-						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
-							<p class="text-sm font-medium text-green-800">YouTube channel sync queued</p>
-							<p class="mt-1 text-xs text-green-700">
-								Queued {new Date(syncResult.checkedAt).toLocaleString()} via {syncResult.source}
-							</p>
-						</div>
-					{:else if data.channelSyncJob?.status === 'queued' || data.channelSyncJob?.status === 'running'}
+					{#if data.channelSyncJob?.status === 'queued' || data.channelSyncJob?.status === 'running'}
 						<div class="mt-4 rounded border border-blue-200 bg-blue-50 p-3">
 							<p class="text-sm font-medium text-blue-800">
 								YouTube channel sync {data.channelSyncJob.status}
@@ -158,6 +154,17 @@
 						<div class="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
 							<p class="text-sm font-medium text-amber-800">YouTube channel sync failed</p>
 							<p class="mt-1 text-xs text-amber-700">{data.channelSyncJob.error}</p>
+						</div>
+					{:else if data.channelSyncJob?.status === 'complete'}
+						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
+							<p class="text-sm font-medium text-green-800">YouTube channel sync complete</p>
+						</div>
+					{:else if syncResult}
+						<div class="mt-4 rounded border border-green-200 bg-green-50 p-3">
+							<p class="text-sm font-medium text-green-800">YouTube channel sync queued</p>
+							<p class="mt-1 text-xs text-green-700">
+								Queued {new Date(syncResult.checkedAt).toLocaleString()} via {syncResult.source}
+							</p>
 						</div>
 					{/if}
 				{/if}

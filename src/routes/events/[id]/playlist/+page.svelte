@@ -30,6 +30,7 @@
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -342,6 +343,8 @@
 </svelte:head>
 
 <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+	<WorkflowJobPoller jobs={[data.syncJob]} />
+
 	<PageHeader
 		backHref="/events"
 		backLabel="Events"
@@ -413,12 +416,6 @@
 				>
 					{form.playlistSyncError}
 				</p>
-			{:else if form?.playlistSyncMessage}
-				<p
-					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
-				>
-					{form.playlistSyncMessage}
-				</p>
 			{:else if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
 				<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
 					Playlist sync {data.syncJob.status}.
@@ -428,6 +425,18 @@
 					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
 				>
 					Last playlist sync failed: {data.syncJob.error}
+				</p>
+			{:else if data.syncJob?.status === 'complete'}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+				>
+					Playlist sync complete.
+				</p>
+			{:else if form?.playlistSyncMessage}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+				>
+					{form.playlistSyncMessage}
 				</p>
 			{/if}
 			<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
@@ -705,6 +714,22 @@
 					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
 				>
 					{form.playlistSyncError}
+				</p>
+			{:else if data.syncJob?.status === 'queued' || data.syncJob?.status === 'running'}
+				<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+					Playlist sync {data.syncJob.status}.
+				</p>
+			{:else if data.syncJob?.status === 'error'}
+				<p
+					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+				>
+					Last playlist sync failed: {data.syncJob.error}
+				</p>
+			{:else if data.syncJob?.status === 'complete'}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+				>
+					Playlist sync complete.
 				</p>
 			{:else if form?.playlistSyncMessage}
 				<p

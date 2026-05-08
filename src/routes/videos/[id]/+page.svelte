@@ -24,6 +24,7 @@
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import WorkflowJobPoller from '$lib/components/WorkflowJobPoller.svelte';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -613,6 +614,8 @@
 </svelte:head>
 
 <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+	<WorkflowJobPoller jobs={[data.refreshJob, data.captionJob, data.titleUpdateJob]} />
+
 	<PageHeader
 		backHref="/events"
 		backLabel="Events"
@@ -684,12 +687,6 @@
 				>
 					{form.refreshError}
 				</p>
-			{:else if form?.refreshMessage}
-				<p
-					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
-				>
-					{form.refreshMessage}
-				</p>
 			{:else if data.refreshJob}
 				<div class={`mt-3 rounded border px-3 py-2 text-xs ${workflowJobTone(data.refreshJob)}`}>
 					YouTube refresh: {workflowJobLabel(data.refreshJob)}
@@ -697,6 +694,12 @@
 						<span class="block">{data.refreshJob.error}</span>
 					{/if}
 				</div>
+			{:else if form?.refreshMessage}
+				<p
+					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
+				>
+					{form.refreshMessage}
+				</p>
 			{/if}
 		</div>
 	</section>
@@ -1060,10 +1063,6 @@
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				{form.captionError}
 			</p>
-		{:else if form?.captionMessage}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				{form.captionMessage}
-			</p>
 		{:else if data.captionJob && workflowJobIsActive(data.captionJob)}
 			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
 				Caption fetch {data.captionJob.status}.
@@ -1071,6 +1070,14 @@
 		{:else if data.captionJob?.status === 'error'}
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				Last caption fetch failed: {data.captionJob.error}
+			</p>
+		{:else if data.captionJob?.status === 'complete'}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				Caption fetch complete.
+			</p>
+		{:else if form?.captionMessage}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				{form.captionMessage}
 			</p>
 		{/if}
 		<div class="px-4 py-4">
@@ -1227,10 +1234,6 @@
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				{form.titleUpdateError}
 			</p>
-		{:else if form?.titleUpdateMessage}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				{form.titleUpdateMessage}
-			</p>
 		{:else if data.titleUpdateJob && workflowJobIsActive(data.titleUpdateJob)}
 			<p class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
 				YouTube title update {data.titleUpdateJob.status}.
@@ -1238,6 +1241,14 @@
 		{:else if data.titleUpdateJob?.status === 'error'}
 			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
 				Last YouTube title update failed: {data.titleUpdateJob.error}
+			</p>
+		{:else if data.titleUpdateJob?.status === 'complete'}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				YouTube title update complete.
+			</p>
+		{:else if form?.titleUpdateMessage}
+			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+				{form.titleUpdateMessage}
 			</p>
 		{/if}
 		{#each data.videoView.assignments as row (row.assignment._id)}

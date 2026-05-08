@@ -175,6 +175,8 @@ function storedPlaylistForEvent(
 }
 
 export const load: PageServerLoad = async (requestEvent) => {
+	requestEvent.depends('app:workflow-jobs');
+
 	const { params, url } = requestEvent;
 	const client = getConvexClientForEvent(requestEvent);
 	const validationFilter = validationFilterFromUrl(url);
