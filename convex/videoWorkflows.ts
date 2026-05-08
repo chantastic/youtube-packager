@@ -31,6 +31,7 @@ import {
 	type DescriptionGenerationInput,
 	type DescriptionGenerationResult
 } from '../src/lib/description-generation';
+import { titleAiValidationInputKey } from '../src/lib/title-ai-validation-key';
 
 const titleAiValidationBatchSize = 20;
 const titleAiValidationMaxTokens = 4096;
@@ -117,10 +118,6 @@ async function titleAiValidationModelConfigHash(provider: LlmProvider) {
 			})
 		)
 	);
-}
-
-function titleAiValidationInputKey(input: TitleAiValidationInput) {
-	return `${input.videoId}:${input.field}:${input.checkId}:${JSON.stringify(input.input)}`;
 }
 
 function cacheKeyString(key: AiValidationCacheKey) {

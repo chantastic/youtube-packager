@@ -9,6 +9,7 @@ import {
 	youtubeTitleFocusLength,
 	type VideoValidation
 } from './video-validation';
+export { titleAiValidationInputKey } from './title-ai-validation-key';
 
 export type TitleAiValidationCheckId = TitleAiCheckId;
 export type TitleAiValidationField = 'title';
@@ -103,10 +104,6 @@ export function buildTitleAiValidationInputs(
 		...(enabledAiCheckIds.includes('hook') ? [hookInput] : []),
 		...(enabledAiCheckIds.includes('mechanics') ? [mechanicsInput] : [])
 	];
-}
-
-export function titleAiValidationInputKey(input: TitleAiValidationInput) {
-	return `${input.videoId}:${input.field}:${input.checkId}:${JSON.stringify(input.input)}`;
 }
 
 export function validationsByCheckId(validations: VideoValidation[]) {

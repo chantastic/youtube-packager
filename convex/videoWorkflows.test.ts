@@ -137,7 +137,7 @@ test('buildTitleAiChecks writes and reuses cached AI title checks', async () => 
 		field: 'title',
 		checkId: 'hook' as const,
 		label: 'Hook',
-		input: { title: 'Overview of Auth', hookText: 'Overview of Auth' }
+		input: { title: 'Overview of Auth — Chan, WorkOS', hookText: 'Overview of Auth' }
 	};
 	const first = await t.action(api.videoWorkflows.buildTitleAiChecks, {
 		inputs: [input]

@@ -140,6 +140,22 @@ describe('title AI validation inputs', () => {
 		expect(titleAiValidationInputKey(first[1])).not.toBe(titleAiValidationInputKey(second[1]));
 	});
 
+	test('input key is safe for Convex object fields', () => {
+		const [input] = buildTitleAiValidationInputs({
+			videoId: 'video-1',
+			title: "Enterprises Don't Want AI — Peter White | HumanX 2026",
+			event: {
+				name: 'HumanX',
+				year: 2026,
+				titleFormat: '{title} | {event_name} {year}'
+			}
+		});
+		const key = titleAiValidationInputKey(input);
+
+		expect(key).not.toContain('—');
+		expect(key).toMatch(/^[\x20-\x7e]+$/);
+	});
+
 	test('indexes validations by check id', () => {
 		expect(
 			validationsByCheckId([
