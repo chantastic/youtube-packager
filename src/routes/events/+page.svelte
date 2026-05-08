@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { eventTypeLabelFor, eventTypeOptions } from '$lib/event-type';
+	import { titleCheckDefinitions } from '$lib/title-checks';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import LighthouseScoreButton from '$lib/components/LighthouseScoreButton.svelte';
 	import LighthouseScoreLink from '$lib/components/LighthouseScoreLink.svelte';
@@ -341,6 +342,29 @@
 						placeholder={'| {event_name}'}
 					/>
 				</label>
+
+				<fieldset class="sm:col-span-2">
+					<legend class="text-sm font-medium text-gray-700">Default title validations</legend>
+					<p class="mt-1 text-xs text-gray-500">
+						Start empty, then enable checks once this event has the metadata needed to score them.
+					</p>
+					<div class="mt-2 flex flex-wrap gap-2">
+						{#each titleCheckDefinitions as check (check.id)}
+							<label
+								class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
+							>
+								<input
+									type="checkbox"
+									name="enabledTitleValidationIds"
+									value={check.id}
+									class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
+								/>
+								<span>{check.label}</span>
+								<span class="text-xs text-gray-400">{check.kind}</span>
+							</label>
+						{/each}
+					</div>
+				</fieldset>
 			</div>
 
 			<div class="flex justify-end gap-3 border-t border-gray-200 pt-5">

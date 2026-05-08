@@ -61,6 +61,7 @@ async function buildEventView(ctx: QueryCtx, event: Doc<'events'>, organizationI
 				baselineValidations: validateVideoBaseline(row.video.title, event, {
 					speakers: speakerContext,
 					video: titleContext,
+					enabledTitleValidationIds: event.enabledTitleValidationIds,
 					disabledTitleValidationIds: row.video.disabledTitleValidationIds
 				}),
 				titleAiInputs: buildTitleAiValidationInputs({
@@ -69,6 +70,7 @@ async function buildEventView(ctx: QueryCtx, event: Doc<'events'>, organizationI
 					event,
 					speakers: speakerContext,
 					video: titleContext,
+					enabledTitleValidationIds: event.enabledTitleValidationIds,
 					disabledTitleValidationIds: row.video.disabledTitleValidationIds
 				})
 			};

@@ -1,5 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import { getConvexClientForEvent } from '$lib/server/convex';
+import { isTitleCheckId } from '$lib/title-checks';
 import { isVideoType, normalizeVideoType } from '$lib/title-format';
 import {
 	youtubePlaylistUrl,
@@ -35,6 +36,13 @@ function validationFilterFromUrl(url: URL) {
 function optionalString(data: FormData, key: string) {
 	const value = data.get(key);
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function enabledTitleValidationIds(data: FormData) {
+	return data
+		.getAll('enabledTitleValidationIds')
+		.filter((value): value is string => typeof value === 'string')
+		.filter(isTitleCheckId);
 }
 
 function titleAiInputsForAssignments(assignments: AssignmentRow[]) {
@@ -190,6 +198,28 @@ export const actions: Actions = {
 
 		return {
 			playlistSyncMessage: 'Queued playlist sync.'
+		};
+	},
+
+	setTitleValidations: async (event) => {
+		const { request } = event;
+		const client = getConvexClientForEvent(event);
+		const eventItem = await client.query(api.eventViews.getDetail, {
+			eventId: event.params.id as Id<'events'>
+		});
+
+		if (!eventItem) {
+			throw error(404, 'Event not found.');
+		}
+
+		const data = await request.formData();
+		await client.mutation(api.eventCommands.setTitleValidations, {
+			eventId: eventItem.event._id,
+			enabledTitleValidationIds: enabledTitleValidationIds(data)
+		});
+
+		return {
+			titleValidationMessage: 'Event title validations updated.'
 		};
 	},
 

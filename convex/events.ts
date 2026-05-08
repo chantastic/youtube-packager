@@ -1,8 +1,18 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { documentBelongsToOrganization, requireOrganizationId } from './authz';
+import {
+	titleValidationCheckIdValidator,
+	type TitleValidationCheckId
+} from './titleValidationTypes';
 
 const eventTypeValidator = v.union(v.literal('conference'), v.literal('interviews'));
+
+function normalizeEnabledTitleValidationIds(enabledTitleValidationIds?: TitleValidationCheckId[]) {
+	const dedupedIds = [...new Set(enabledTitleValidationIds ?? [])];
+
+	return dedupedIds.length ? dedupedIds : undefined;
+}
 
 export const collect = query({
 	args: {},
@@ -35,14 +45,20 @@ export const upsert = mutation({
 		eventType: v.optional(eventTypeValidator),
 		year: v.number(),
 		titleFormat: v.optional(v.string()),
+		enabledTitleValidationIds: v.optional(v.array(titleValidationCheckIdValidator)),
 		youtubePlaylistId: v.optional(v.string())
 	},
-	handler: async (ctx, { id, ...fields }) => {
+	handler: async (ctx, { id, enabledTitleValidationIds, ...fields }) => {
 		const organizationId = await requireOrganizationId(ctx);
+		const normalizedEnabledTitleValidationIds =
+			normalizeEnabledTitleValidationIds(enabledTitleValidationIds);
 		const document = {
 			...fields,
 			organizationId,
-			eventType: fields.eventType ?? 'conference'
+			eventType: fields.eventType ?? 'conference',
+			...(normalizedEnabledTitleValidationIds
+				? { enabledTitleValidationIds: normalizedEnabledTitleValidationIds }
+				: {})
 		};
 
 		if (id) {
@@ -52,7 +68,10 @@ export const upsert = mutation({
 				throw new Error('Event not found.');
 			}
 
-			await ctx.db.patch(id, document);
+			await ctx.db.patch(id, {
+				...document,
+				...(normalizedEnabledTitleValidationIds ? {} : { enabledTitleValidationIds: undefined })
+			});
 			return await ctx.db.get(id);
 		}
 

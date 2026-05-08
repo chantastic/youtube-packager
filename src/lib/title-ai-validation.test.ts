@@ -5,11 +5,14 @@ import {
 	validationsByCheckId
 } from './title-ai-validation';
 
+const enabledAiChecks = ['hook', 'mechanics'];
+
 describe('title AI validation inputs', () => {
 	test('builds hook and mechanics checks when event context is available', () => {
 		const inputs = buildTitleAiValidationInputs({
 			videoId: 'video-1',
 			title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+			enabledTitleValidationIds: enabledAiChecks,
 			event: {
 				name: 'TestConf',
 				year: 2026,
@@ -67,11 +70,26 @@ describe('title AI validation inputs', () => {
 		});
 	});
 
+	test('returns no checks until the event opts in', () => {
+		expect(
+			buildTitleAiValidationInputs({
+				videoId: 'video-1',
+				title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+				event: {
+					name: 'TestConf',
+					year: 2026,
+					titleFormat: '{title} | {event_name} {year}'
+				}
+			})
+		).toEqual([]);
+	});
+
 	test('builds only mechanics when event context is not available', () => {
 		expect(
 			buildTitleAiValidationInputs({
 				videoId: 'video-1',
-				title: 'A Standalone Video Title'
+				title: 'A Standalone Video Title',
+				enabledTitleValidationIds: ['mechanics']
 			})
 		).toEqual([
 			{
@@ -91,6 +109,7 @@ describe('title AI validation inputs', () => {
 			buildTitleAiValidationInputs({
 				videoId: 'video-1',
 				title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+				enabledTitleValidationIds: enabledAiChecks,
 				event: {
 					name: 'TestConf',
 					year: 2026,
@@ -106,6 +125,7 @@ describe('title AI validation inputs', () => {
 			buildTitleAiValidationInputs({
 				videoId: 'video-1',
 				title: 'Build Better Auth — Chan, WorkOS | TestConf 2026',
+				enabledTitleValidationIds: enabledAiChecks,
 				event: {
 					name: 'TestConf',
 					year: 2026,
@@ -120,6 +140,7 @@ describe('title AI validation inputs', () => {
 		const first = buildTitleAiValidationInputs({
 			videoId: 'video-1',
 			title: 'Build Better Auth | TestConf 2026',
+			enabledTitleValidationIds: enabledAiChecks,
 			event: {
 				name: 'TestConf',
 				year: 2026,
@@ -129,6 +150,7 @@ describe('title AI validation inputs', () => {
 		const second = buildTitleAiValidationInputs({
 			videoId: 'video-1',
 			title: 'Ship Better Auth | TestConf 2026',
+			enabledTitleValidationIds: enabledAiChecks,
 			event: {
 				name: 'TestConf',
 				year: 2026,
@@ -144,6 +166,7 @@ describe('title AI validation inputs', () => {
 		const [input] = buildTitleAiValidationInputs({
 			videoId: 'video-1',
 			title: "Enterprises Don't Want AI — Peter White | HumanX 2026",
+			enabledTitleValidationIds: ['hook'],
 			event: {
 				name: 'HumanX',
 				year: 2026,

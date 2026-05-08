@@ -38,6 +38,7 @@ export default defineSchema({
 		eventType: v.optional(v.union(v.literal('conference'), v.literal('interviews'))),
 		year: v.optional(v.number()),
 		titleFormat: v.optional(v.string()),
+		enabledTitleValidationIds: v.optional(v.array(titleValidationCheckIdValidator)),
 		youtubePlaylistId: v.optional(v.string())
 	}).index('by_organizationId', ['organizationId']),
 	videos: defineTable({

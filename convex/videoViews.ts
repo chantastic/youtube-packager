@@ -117,6 +117,7 @@ async function buildVideoView(ctx: QueryCtx, video: Doc<'videos'>, organizationI
 		baselineValidations: validateVideoBaseline(video.title, row.event, {
 			speakers: speakerContext,
 			video: titleContext,
+			enabledTitleValidationIds: row.event.enabledTitleValidationIds,
 			disabledTitleValidationIds: video.disabledTitleValidationIds
 		}),
 		titleAiInputs: buildTitleAiValidationInputs({
@@ -125,6 +126,7 @@ async function buildVideoView(ctx: QueryCtx, video: Doc<'videos'>, organizationI
 			event: row.event,
 			speakers: speakerContext,
 			video: titleContext,
+			enabledTitleValidationIds: row.event.enabledTitleValidationIds,
 			disabledTitleValidationIds: video.disabledTitleValidationIds
 		})
 	}));
@@ -156,6 +158,7 @@ function primaryTitleAiInputs(
 			title: video.title,
 			speakers: speakerContext,
 			video: titleContext,
+			enabledTitleValidationIds: [],
 			disabledTitleValidationIds: video.disabledTitleValidationIds
 		})
 	);

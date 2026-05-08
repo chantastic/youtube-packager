@@ -18,6 +18,7 @@ import type * as auth from "../auth.js";
 import type * as authViews from "../authViews.js";
 import type * as authz from "../authz.js";
 import type * as descriptionGenerationTypes from "../descriptionGenerationTypes.js";
+import type * as eventCommands from "../eventCommands.js";
 import type * as eventPlaylistStats from "../eventPlaylistStats.js";
 import type * as eventViews from "../eventViews.js";
 import type * as events from "../events.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   authViews: typeof authViews;
   authz: typeof authz;
   descriptionGenerationTypes: typeof descriptionGenerationTypes;
+  eventCommands: typeof eventCommands;
   eventPlaylistStats: typeof eventPlaylistStats;
   eventViews: typeof eventViews;
   events: typeof events;

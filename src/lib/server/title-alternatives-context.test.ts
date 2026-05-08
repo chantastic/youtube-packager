@@ -34,7 +34,8 @@ const videoView = {
 			event: {
 				name: 'MCP Night',
 				year: 2026,
-				titleFormat: '{title} | {event_name} {year}'
+				titleFormat: '{title} | {event_name} {year}',
+				enabledTitleValidationIds: ['hook', 'profile', 'event', 'format', 'mechanics']
 			}
 		}
 	]

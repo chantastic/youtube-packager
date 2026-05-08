@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { getConvexClientForEvent } from '$lib/server/convex';
 import { resolveCanonicalVideoView, resolveVideoView } from '$lib/server/video-view';
 import { canCustomizeVideoTitleFormat, isVideoType } from '$lib/title-format';
-import { isTitleCheckId, titleCheckIds } from '$lib/title-checks';
+import { isTitleCheckId } from '$lib/title-checks';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { Actions, PageServerLoad } from './$types';
@@ -19,14 +19,10 @@ function optionalVideoType(data: FormData) {
 }
 
 function disabledTitleValidationIdsFromForm(data: FormData) {
-	const enabledTitleValidationIds = new Set(
-		data
-			.getAll('enabledTitleValidationIds')
-			.filter((value): value is string => typeof value === 'string')
-			.filter(isTitleCheckId)
-	);
-
-	return titleCheckIds.filter((checkId) => !enabledTitleValidationIds.has(checkId));
+	return data
+		.getAll('disabledTitleValidationIds')
+		.filter((value): value is string => typeof value === 'string')
+		.filter(isTitleCheckId);
 }
 
 export const load: PageServerLoad = async (event) => {

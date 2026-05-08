@@ -12,11 +12,8 @@
 		previewVideoTitle,
 		videoTypeOptions
 	} from '$lib/title-format';
-	import {
-		filterDisabledTitleValidations,
-		youtubeTitleFocusLength,
-		type VideoValidation
-	} from '$lib/video-validation';
+	import { titleCheckDefinitions } from '$lib/title-checks';
+	import { youtubeTitleFocusLength, type VideoValidation } from '$lib/video-validation';
 	import {
 		Check,
 		CirclePlay,
@@ -45,6 +42,8 @@
 	let titleAiChecksError = $derived(loadedTitleAiChecksError ?? data.titleAiChecksError);
 	let titleAiChecksLoading = $state(false);
 	let updatingVideoType = $state<string | null>(null);
+	let updatingEventValidations = $state(false);
+	let eventEnabledTitleValidationIds = $derived(data.event.enabledTitleValidationIds ?? []);
 	let syncingPlaylist = $state(false);
 
 	onMount(() => {
@@ -126,10 +125,7 @@
 	}
 
 	function titleAiChecksForVideo(videoId: string) {
-		return filterDisabledTitleValidations(
-			titleAiChecksByVideoId[videoId] ?? [],
-			assignmentRowFor(videoId)?.video.disabledTitleValidationIds
-		);
+		return titleAiChecksByVideoId[videoId] ?? [];
 	}
 
 	function validationsForVideo(videoId: string) {
@@ -240,11 +236,24 @@
 	}
 
 	function submitParentForm(event: Event) {
-		const select = event.currentTarget;
+		const control = event.currentTarget;
 
-		if (select instanceof HTMLSelectElement) {
-			select.form?.requestSubmit();
+		if (control instanceof HTMLSelectElement || control instanceof HTMLInputElement) {
+			control.form?.requestSubmit();
 		}
+	}
+
+	function afterEventTitleValidationsUpdate() {
+		updatingEventValidations = true;
+
+		return async ({ update }: { update: () => Promise<void> }) => {
+			try {
+				await update();
+			} finally {
+				updatingEventValidations = false;
+				void loadTitleAiChecks();
+			}
+		};
 	}
 
 	function afterVideoTypeUpdate(videoId: string) {
@@ -436,6 +445,47 @@
 					<p class="mt-1 text-xs text-amber-700">{form.videoTypeError}</p>
 				{/if}
 			</div>
+			<form
+				method="POST"
+				action="?/setTitleValidations"
+				use:enhance={afterEventTitleValidationsUpdate}
+				class="mt-4 rounded border border-gray-200 bg-gray-50 p-3"
+			>
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<p class="text-xs font-medium text-gray-500 uppercase">Event title validations</p>
+						<p class="mt-1 text-sm text-gray-700">
+							Choose the checks this event should apply to its videos.
+						</p>
+					</div>
+					{#if updatingEventValidations}
+						<p class="text-xs font-medium text-blue-700">Saving...</p>
+					{:else if form?.titleValidationMessage}
+						<p class="text-xs font-medium text-green-700">{form.titleValidationMessage}</p>
+					{:else if eventEnabledTitleValidationIds.length === 0}
+						<p class="text-xs font-medium text-gray-500">No checks enabled</p>
+					{/if}
+				</div>
+				<div class="mt-3 flex flex-wrap gap-2">
+					{#each titleCheckDefinitions as check (check.id)}
+						<label
+							class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
+						>
+							<input
+								type="checkbox"
+								name="enabledTitleValidationIds"
+								value={check.id}
+								bind:group={eventEnabledTitleValidationIds}
+								onchange={submitParentForm}
+								disabled={updatingEventValidations}
+								class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950 disabled:cursor-wait disabled:opacity-60"
+							/>
+							<span>{check.label}</span>
+							<span class="text-xs text-gray-400">{check.kind}</span>
+						</label>
+					{/each}
+				</div>
+			</form>
 		</section>
 
 		<section class="overflow-hidden rounded-lg border border-gray-200 bg-white">

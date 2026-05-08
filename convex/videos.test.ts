@@ -572,9 +572,17 @@ test('a video can have assignments in multiple playlists', async () => {
 		issuer: 'https://api.workos.com',
 		org_id: 'org_test'
 	});
-	const firstEvent = await t.mutation(api.events.upsert, { name: 'FirstConf', year: 2026 });
+	const firstEvent = await t.mutation(api.events.upsert, {
+		name: 'FirstConf',
+		year: 2026,
+		enabledTitleValidationIds: ['hook', 'profile', 'event', 'format', 'mechanics']
+	});
 	const firstEventId = firstEvent!._id;
-	const secondEvent = await t.mutation(api.events.upsert, { name: 'SecondConf', year: 2026 });
+	const secondEvent = await t.mutation(api.events.upsert, {
+		name: 'SecondConf',
+		year: 2026,
+		enabledTitleValidationIds: ['hook', 'profile', 'event', 'format', 'mechanics']
+	});
 	const secondEventId = secondEvent!._id;
 
 	await t.mutation(internal.videoCommands.recordPlaylistSnapshotByEventIdInternal, {

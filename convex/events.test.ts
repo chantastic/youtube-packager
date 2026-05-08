@@ -117,6 +117,46 @@ test('create with event type', async () => {
 	});
 });
 
+test('setTitleValidations stores event-level opt-in checks', async () => {
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
+	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
+
+	await t.mutation(api.eventCommands.setTitleValidations, {
+		eventId: event!._id,
+		enabledTitleValidationIds: ['event', 'format', 'event']
+	});
+
+	const updated = await t.query(api.events.find, { id: event!._id });
+	expect(updated?.enabledTitleValidationIds).toEqual(['event', 'format']);
+});
+
+test('setTitleValidations clears event-level checks', async () => {
+	const t = convexTest(schema, modules).withIdentity({
+		subject: 'user_test',
+		tokenIdentifier: 'user_test',
+		issuer: 'https://api.workos.com',
+		org_id: 'org_test'
+	});
+	const event = await t.mutation(api.events.upsert, {
+		name: 'TestConf',
+		year: 2026,
+		enabledTitleValidationIds: ['hook', 'mechanics']
+	});
+
+	await t.mutation(api.eventCommands.setTitleValidations, {
+		eventId: event!._id,
+		enabledTitleValidationIds: []
+	});
+
+	const updated = await t.query(api.events.find, { id: event!._id });
+	expect(updated?.enabledTitleValidationIds).toBeUndefined();
+});
+
 test('create without titleFormat stores undefined', async () => {
 	const t = convexTest(schema, modules).withIdentity({
 		subject: 'user_test',

@@ -99,6 +99,7 @@ export function prepareTitleAlternativesValidationContext(
 				event: row.event,
 				speakers: validationSpeakers,
 				video: videoRecord,
+				enabledTitleValidationIds: row.event.enabledTitleValidationIds,
 				disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 			});
 		const inputKeys = inputs.map(titleAiValidationInputKey);
@@ -145,6 +146,7 @@ export function buildTitleAlternativesInput(
 					validateVideoBaseline(videoView.video.title, row.event, {
 						speakers: context.validationSpeakers,
 						video: context.videoRecord,
+						enabledTitleValidationIds: row.event.enabledTitleValidationIds,
 						disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
 					})),
 				...(context.aiInputKeysByAssignmentId.get(row.assignment._id) ?? [])

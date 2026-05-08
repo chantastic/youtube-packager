@@ -5,7 +5,7 @@ import {
 } from './title-format';
 import { titleAiCheckIds, titleCheckLabel, type TitleAiCheckId } from './title-checks';
 import {
-	titleValidationIsDisabled,
+	titleValidationIsEnabled,
 	youtubeTitleFocusLength,
 	type VideoValidation
 } from './video-validation';
@@ -32,6 +32,7 @@ export type TitleAiValidationContext = {
 		position?: string;
 	}>;
 	video?: VideoTitleFormatRecord;
+	enabledTitleValidationIds?: string[];
 	disabledTitleValidationIds?: string[];
 };
 
@@ -50,8 +51,11 @@ export function titleAiValidationLabel(checkId: TitleAiValidationCheckId) {
 export function buildTitleAiValidationInputs(
 	context: TitleAiValidationContext
 ): TitleAiValidationInput[] {
-	const enabledAiCheckIds = titleAiCheckIds.filter(
-		(id) => !titleValidationIsDisabled(id, context.disabledTitleValidationIds)
+	const enabledAiCheckIds = titleAiCheckIds.filter((id) =>
+		titleValidationIsEnabled(id, {
+			enabledTitleValidationIds: context.enabledTitleValidationIds,
+			disabledTitleValidationIds: context.disabledTitleValidationIds
+		})
 	);
 	const mechanicsInput: TitleAiValidationInput = {
 		videoId: context.videoId,

@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClientForEvent } from '$lib/server/convex';
 import { titleAiValidationInputKey, type TitleAiValidationInput } from '$lib/title-ai-validation';
+import { isTitleCheckId } from '$lib/title-checks';
 import { defaultEventType, isEventType } from '$lib/event-type';
 import {
 	pendingVideoValidation,
@@ -44,6 +45,13 @@ function eventType(data: FormData) {
 	const value = optionalString(data, 'eventType');
 
 	return isEventType(value) ? value : defaultEventType;
+}
+
+function enabledTitleValidationIds(data: FormData) {
+	return data
+		.getAll('enabledTitleValidationIds')
+		.filter((value): value is string => typeof value === 'string')
+		.filter(isTitleCheckId);
 }
 
 function titleAiInputsForEventItems(items: EventListItem[]) {
@@ -182,6 +190,7 @@ export const actions: Actions = {
 			eventType: eventType(data),
 			year,
 			titleFormat: optionalString(data, 'titleFormat'),
+			enabledTitleValidationIds: enabledTitleValidationIds(data),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))
 		});
 
@@ -205,6 +214,7 @@ export const actions: Actions = {
 			eventType: eventType(data),
 			year: Number(data.get('year')),
 			titleFormat: optionalString(data, 'titleFormat'),
+			enabledTitleValidationIds: enabledTitleValidationIds(data),
 			youtubePlaylistId: extractYouTubePlaylistId(optionalString(data, 'youtubePlaylistId'))
 		});
 	},

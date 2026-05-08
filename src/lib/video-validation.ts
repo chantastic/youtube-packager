@@ -8,7 +8,12 @@ import {
 	type TitleFormatEvent,
 	type VideoTitleFormatRecord
 } from './title-format';
-import { titleCheckLabel, titleCheckOrder, type TitleCheckId } from './title-checks';
+import {
+	isTitleCheckId,
+	titleCheckLabel,
+	titleCheckOrder,
+	type TitleCheckId
+} from './title-checks';
 
 export type ValidationStatus = 'pass' | 'fail' | 'info' | 'pending';
 
@@ -44,6 +49,7 @@ type TitleFocusContext = {
 
 type VideoBaselineContext = TitleFocusContext & {
 	video?: VideoTitleFormatRecord;
+	enabledTitleValidationIds?: string[];
 	disabledTitleValidationIds?: string[];
 };
 
@@ -289,7 +295,7 @@ export function validateVideoBaseline(
 			validateTitleEventSuffix(title, event),
 			...(context.video ? [validateSelectedTitleFormat(title, event, context.video)] : [])
 		],
-		context.disabledTitleValidationIds
+		context
 	);
 }
 
@@ -316,17 +322,69 @@ export function titleValidationIsDisabled(id: string, disabledTitleValidationIds
 	return Boolean(disabledTitleValidationIds?.includes(id));
 }
 
+export function titleValidationIsEnabled(
+	id: string,
+	{
+		enabledTitleValidationIds,
+		disabledTitleValidationIds
+	}: {
+		enabledTitleValidationIds?: string[];
+		disabledTitleValidationIds?: string[];
+	}
+) {
+	if (!isTitleCheckId(id)) {
+		return false;
+	}
+
+	const enabledIds = new Set((enabledTitleValidationIds ?? []).filter(isTitleCheckId));
+
+	return enabledIds.has(id) && !titleValidationIsDisabled(id, disabledTitleValidationIds);
+}
+
 export function filterDisabledTitleValidations<T extends { id: string }>(
 	validations: T[],
-	disabledTitleValidationIds?: string[]
+	selection?:
+		| string[]
+		| {
+				enabledTitleValidationIds?: string[];
+				disabledTitleValidationIds?: string[];
+		  }
 ) {
-	if (!disabledTitleValidationIds?.length) {
+	if (selection === undefined) {
 		return validations;
 	}
 
-	const disabledIds = new Set(disabledTitleValidationIds);
+	if (Array.isArray(selection)) {
+		if (!selection.length) {
+			return validations;
+		}
 
-	return validations.filter((validation) => !disabledIds.has(validation.id));
+		const disabledIds = new Set(selection);
+
+		return validations.filter((validation) => !disabledIds.has(validation.id));
+	}
+
+	return validations.filter((validation) =>
+		titleValidationIsEnabled(validation.id, {
+			enabledTitleValidationIds: selection?.enabledTitleValidationIds,
+			disabledTitleValidationIds: selection?.disabledTitleValidationIds
+		})
+	);
+}
+
+export function activeTitleValidationIds({
+	enabledTitleValidationIds,
+	disabledTitleValidationIds
+}: {
+	enabledTitleValidationIds?: string[];
+	disabledTitleValidationIds?: string[];
+}) {
+	return titleCheckOrder.filter((checkId) =>
+		titleValidationIsEnabled(checkId, {
+			enabledTitleValidationIds,
+			disabledTitleValidationIds
+		})
+	);
 }
 
 export function summarizeVideoValidations(validationsByVideo: VideoValidation[][]) {

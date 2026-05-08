@@ -31,6 +31,7 @@ async function seedEventViewData(t: ReturnType<typeof convexTest>) {
 	const event = await t.mutation(api.events.upsert, {
 		name: 'MCP Night',
 		year: 2026,
+		enabledTitleValidationIds: ['hook', 'profile', 'event', 'format', 'mechanics'],
 		youtubePlaylistId: 'PL123'
 	});
 

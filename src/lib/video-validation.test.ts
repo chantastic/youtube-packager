@@ -13,6 +13,7 @@ const event = {
 	year: 2026,
 	titleFormat: '{title} | {event_name} {year}'
 };
+const enabledStaticChecks = ['profile', 'event', 'format'];
 
 describe('video validation', () => {
 	test('passes when title includes the rendered event suffix', () => {
@@ -171,6 +172,7 @@ describe('video validation', () => {
 			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
 			event,
 			{
+				enabledTitleValidationIds: enabledStaticChecks,
 				speakers: [{ name: 'Chan', company: 'WorkOS' }],
 				video: {
 					speaker: 'Chan',
@@ -188,6 +190,7 @@ describe('video validation', () => {
 			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
 			event,
 			{
+				enabledTitleValidationIds: enabledStaticChecks,
 				speakers: [{ name: 'Chan', company: 'WorkOS' }],
 				video: {
 					speaker: 'Chan',
@@ -206,6 +209,7 @@ describe('video validation', () => {
 			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
 			event,
 			{
+				enabledTitleValidationIds: enabledStaticChecks,
 				speakers: [{ name: 'Chan', company: 'WorkOS' }],
 				video: {
 					speaker: 'Chan',
@@ -222,14 +226,34 @@ describe('video validation', () => {
 		]);
 	});
 
+	test('baseline validation returns no checks until the event opts in', () => {
+		const validations = validateVideoBaseline(
+			'Build Better Auth — Chan, WorkOS | RenderConf 2026',
+			event,
+			{
+				speakers: [{ name: 'Chan', company: 'WorkOS' }],
+				video: {
+					speaker: 'Chan',
+					company: 'WorkOS',
+					videoType: 'talk'
+				}
+			}
+		);
+
+		expect(validations).toEqual([]);
+	});
+
 	test('baseline validation omits profile when there is no video context', () => {
-		const validations = validateVideoBaseline('Build Better Auth | RenderConf 2026', event);
+		const validations = validateVideoBaseline('Build Better Auth | RenderConf 2026', event, {
+			enabledTitleValidationIds: ['event']
+		});
 
 		expect(validations.map((validation) => validation.id)).toEqual(['event']);
 	});
 
 	test('baseline validation uses overrides to opt out of profile, event, and format checks', () => {
 		const validations = validateVideoBaseline('Build Agent Auth Without the Glue Code', event, {
+			enabledTitleValidationIds: enabledStaticChecks,
 			video: {
 				titleOverride: 'Build Agent Auth Without the Glue Code',
 				speaker: 'Chan',

@@ -65,8 +65,8 @@
 	type TitleStrategy = 'template' | 'custom' | 'override';
 
 	const titleStrategies = [
-		{ id: 'template', label: 'Template', detail: 'Type + event rules' },
-		{ id: 'custom', label: 'Custom Format', detail: 'Token format' },
+		{ id: 'template', label: 'Event Format', detail: 'Choose a format' },
+		{ id: 'custom', label: 'Custom Format', detail: 'One-off token format' },
 		{ id: 'override', label: 'Override', detail: 'Exact title' }
 	] as const satisfies Array<{ id: TitleStrategy; label: string; detail: string }>;
 	const overrideTitleCheckIds = new Set(['hook', 'mechanics']);
@@ -96,7 +96,7 @@
 	let videoTitleFormatInput = $state(currentVideoTitleFormat());
 	let titleOverrideEnabled = $state(Boolean(currentTitleOverride()));
 	let titleOverrideInput = $state(currentTitleOverride());
-	let enabledTitleValidationIds = $state<string[]>(currentEnabledTitleValidationIds());
+	let disabledTitleValidationIds = $state<string[]>(currentDisabledTitleValidationIds());
 	let speakerSelection = $state('');
 	let selectedSpeakerId = $state('');
 	let speakerName = $state('');
@@ -113,7 +113,7 @@
 		videoTitleFormatInput = currentVideoTitleFormat();
 		titleOverrideEnabled = Boolean(currentTitleOverride());
 		titleOverrideInput = currentTitleOverride();
-		enabledTitleValidationIds = currentEnabledTitleValidationIds();
+		disabledTitleValidationIds = currentDisabledTitleValidationIds();
 	});
 
 	function currentVideoType() {
@@ -136,12 +136,8 @@
 		return data.videoView.video.titleOverride ?? '';
 	}
 
-	function currentEnabledTitleValidationIds() {
-		const disabledIds = new Set(data.videoView.video.disabledTitleValidationIds ?? []);
-
-		return titleCheckDefinitions
-			.filter((check) => !disabledIds.has(check.id))
-			.map((check) => check.id);
+	function currentDisabledTitleValidationIds() {
+		return data.videoView.video.disabledTitleValidationIds ?? [];
 	}
 
 	function currentDescriptionJob() {
@@ -269,6 +265,7 @@
 		return validateVideoBaseline(data.videoView.video.title, event, {
 			speakers: titleFocusSpeakers(),
 			video: videoTitleRecord(),
+			enabledTitleValidationIds: event.enabledTitleValidationIds,
 			disabledTitleValidationIds: selectedDisabledTitleValidationIds()
 		});
 	}
@@ -278,26 +275,32 @@
 	}
 
 	function selectedDisabledTitleValidationIds() {
-		const enabledIds = new Set(effectiveEnabledTitleValidationIds());
-
-		return titleCheckDefinitions
-			.map((check) => check.id)
-			.filter((checkId) => !enabledIds.has(checkId));
-	}
-
-	function effectiveEnabledTitleValidationIds() {
-		const allowedIds =
-			selectedTitleStrategy === 'override'
-				? overrideTitleCheckIds
-				: new Set(titleCheckDefinitions.map((check) => check.id));
-
-		return enabledTitleValidationIds.filter((checkId) => allowedIds.has(checkId));
+		return disabledTitleValidationIds;
 	}
 
 	function visibleTitleCheckDefinitions() {
+		const inheritedIds = new Set(inheritedTitleValidationIds());
+		const visibleChecks = titleCheckDefinitions.filter((check) => inheritedIds.has(check.id));
+
 		return selectedTitleStrategy === 'override'
-			? titleCheckDefinitions.filter((check) => overrideTitleCheckIds.has(check.id))
-			: titleCheckDefinitions;
+			? visibleChecks.filter((check) => overrideTitleCheckIds.has(check.id))
+			: visibleChecks;
+	}
+
+	function inheritedTitleValidationIds() {
+		return [
+			...new Set(
+				data.videoView.assignments.flatMap((row) => row.event.enabledTitleValidationIds ?? [])
+			)
+		];
+	}
+
+	function inheritedTitleValidationLabel() {
+		const count = inheritedTitleValidationIds().length;
+
+		if (count === 0) return 'No event checks enabled';
+
+		return `${count} inherited from ${data.videoView.assignments.length} event context${data.videoView.assignments.length === 1 ? '' : 's'}`;
 	}
 
 	function structuredVideoTypeOptions() {
@@ -308,14 +311,6 @@
 		return selectedTitleStrategy === strategy
 			? 'border-gray-950 bg-gray-950 text-white'
 			: 'border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50';
-	}
-
-	function defaultTitleCheckIdsForStrategy(strategy: TitleStrategy) {
-		return strategy === 'override'
-			? titleCheckDefinitions
-					.filter((check) => overrideTitleCheckIds.has(check.id))
-					.map((check) => check.id)
-			: titleCheckDefinitions.map((check) => check.id);
 	}
 
 	function defaultOverrideTitle() {
@@ -342,9 +337,6 @@
 		if (strategy === 'override') {
 			titleOverrideEnabled = true;
 			titleOverrideInput = titleOverrideInput.trim() || defaultOverrideTitle();
-			enabledTitleValidationIds = effectiveEnabledTitleValidationIds().length
-				? effectiveEnabledTitleValidationIds()
-				: defaultTitleCheckIdsForStrategy('override');
 		} else {
 			titleOverrideEnabled = false;
 			if (strategy === 'custom') {
@@ -353,10 +345,6 @@
 					videoTitleFormatInput.trim() || normalizeComposedVideoTitleFormat(undefined, 'custom');
 			} else if (canCustomizeVideoTitleFormat(selectedVideoType)) {
 				selectedVideoType = 'talk';
-			}
-
-			if (effectiveEnabledTitleValidationIds().length < titleCheckDefinitions.length) {
-				enabledTitleValidationIds = defaultTitleCheckIdsForStrategy(strategy);
 			}
 		}
 
@@ -399,8 +387,8 @@
 			formData.set('titleOverride', titleOverrideInput);
 		}
 
-		for (const checkId of effectiveEnabledTitleValidationIds()) {
-			formData.append('enabledTitleValidationIds', checkId);
+		for (const checkId of disabledTitleValidationIds) {
+			formData.append('disabledTitleValidationIds', checkId);
 		}
 
 		return formData;
@@ -953,37 +941,39 @@
 									<p class="text-sm font-medium text-gray-950">Title checks</p>
 									<p class="mt-1 text-xs text-gray-500">
 										{#if selectedTitleStrategy === 'override'}
-											Hook and Mechanics score the exact override title.
+											Override can only inherit Hook and Mechanics.
 										{:else}
-											Structured checks score the selected template.
+											{inheritedTitleValidationLabel()}.
 										{/if}
 									</p>
 								</div>
-								<details class="group">
-									<summary
-										class="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-950"
-									>
-										Settings
-									</summary>
-									<div class="mt-3 flex flex-wrap gap-2">
-										{#each visibleTitleCheckDefinitions() as check (check.id)}
-											<label
-												class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
-											>
-												<input
-													type="checkbox"
-													name="enabledTitleValidationIds"
-													value={check.id}
-													bind:group={enabledTitleValidationIds}
-													onchange={() => void autosavePackaging()}
-													class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
-												/>
-												<span>{check.label}</span>
-												<span class="text-xs text-gray-400">{check.kind}</span>
-											</label>
-										{/each}
-									</div>
-								</details>
+								{#if visibleTitleCheckDefinitions().length}
+									<details class="group">
+										<summary
+											class="cursor-pointer text-xs font-medium text-gray-600 hover:text-gray-950"
+										>
+											Video opt-outs
+										</summary>
+										<div class="mt-3 flex flex-wrap gap-2">
+											{#each visibleTitleCheckDefinitions() as check (check.id)}
+												<label
+													class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
+												>
+													<input
+														type="checkbox"
+														name="disabledTitleValidationIds"
+														value={check.id}
+														bind:group={disabledTitleValidationIds}
+														onchange={() => void autosavePackaging()}
+														class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
+													/>
+													<span>Ignore {check.label}</span>
+													<span class="text-xs text-gray-400">{check.kind}</span>
+												</label>
+											{/each}
+										</div>
+									</details>
+								{/if}
 							</div>
 						</div>
 						<div class="mt-3">

@@ -3,6 +3,7 @@ export type TitleFormatEvent = {
 	editionTitle?: string;
 	year?: number;
 	titleFormat?: string;
+	enabledTitleValidationIds?: string[];
 };
 
 export type VideoTitleFormatRecord = {
