@@ -42,8 +42,6 @@ async function seedEventViewData(t: ReturnType<typeof convexTest>) {
 			title: 'MCP Night playlist',
 			channelTitle: 'WorkOS',
 			itemCount: 1,
-			validationContextKey: 'mcp-night-2026',
-			validationStats: [],
 			videos: [playlistVideo()]
 		}
 	});

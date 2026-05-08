@@ -133,7 +133,7 @@ export default defineSchema({
 		playlistItemCount: v.optional(v.number()),
 		validationContextKey: v.optional(v.string()),
 		videoCount: v.number(),
-		validationStats: v.array(validationStatValidator),
+		validationStats: v.optional(v.array(validationStatValidator)),
 		lastFetchedAt: v.number()
 	}).index('by_organizationId_and_eventId', ['organizationId', 'eventId']),
 	aiValidationChecks: defineTable({

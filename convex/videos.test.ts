@@ -51,16 +51,6 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 			title: 'TestConf videos',
 			channelTitle: 'Test Channel',
 			itemCount: 2,
-			validationContextKey: 'testconf-2026',
-			validationStats: [
-				{
-					id: 'event',
-					label: 'Event',
-					passCount: 1,
-					failCount: 1,
-					infoCount: 0
-				}
-			],
 			videos: [
 				video({
 					playlistItemId: 'playlist-item-2',
@@ -123,16 +113,7 @@ test('syncPlaylistForEvent stores top-level videos, assignments, and event stats
 		playlistTitle: 'TestConf videos',
 		playlistChannelTitle: 'Test Channel',
 		playlistItemCount: 2,
-		validationContextKey: 'testconf-2026',
-		videoCount: 2,
-		validationStats: [
-			{
-				id: 'event',
-				passCount: 1,
-				failCount: 1,
-				infoCount: 0
-			}
-		]
+		videoCount: 2
 	});
 });
 
@@ -151,8 +132,6 @@ test('video view resolves both canonical ids and YouTube video ids', async () =>
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'youtube-video-id' })]
 		}
 	});
@@ -192,8 +171,6 @@ test('event type sets the default video type for ingested videos', async () => {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'customer-chats-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'interview-1', title: 'Customer interview' })]
 		}
 	});
@@ -223,8 +200,6 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [
 				video({ playlistItemId: 'playlist-item-1', youtubeVideoId: 'video-1', position: 0 }),
 				video({ playlistItemId: 'playlist-item-2', youtubeVideoId: 'video-2', position: 1 })
@@ -236,8 +211,6 @@ test('syncPlaylistForEvent replaces stale assignments without duplicating videos
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [
 				video({
 					playlistItemId: 'playlist-item-2',
@@ -282,8 +255,6 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
@@ -312,8 +283,6 @@ test('speaker assignments and video title format survive playlist syncs', async 
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Updated title' })]
 		}
 	});
@@ -356,8 +325,6 @@ test('video title override can be cleared', async () => {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
@@ -396,8 +363,6 @@ test('disabled title validations can be cleared', async () => {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Original title' })]
 		}
 	});
@@ -436,8 +401,6 @@ test('existing speakers can be assigned to another video', async () => {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [
 				video({ youtubeVideoId: 'video-1', title: 'First talk' }),
 				video({ youtubeVideoId: 'video-2', title: 'Second talk' })
@@ -493,8 +456,6 @@ test('video title can be updated after a YouTube metadata write', async () => {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
@@ -530,8 +491,6 @@ test('video can be refreshed from YouTube without clearing app metadata', async 
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
@@ -587,8 +546,6 @@ test('video refresh rejects snapshots for a different YouTube video', async () =
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'video-1', title: 'Old title' })]
 		}
 	});
@@ -625,8 +582,6 @@ test('a video can have assignments in multiple playlists', async () => {
 		eventId: firstEventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'firstconf-2026',
-			validationStats: [],
 			videos: [video({ youtubeVideoId: 'shared-video' })]
 		}
 	});
@@ -635,8 +590,6 @@ test('a video can have assignments in multiple playlists', async () => {
 		eventId: secondEventId,
 		playlist: {
 			playlistId: 'PL456',
-			validationContextKey: 'secondconf-2026',
-			validationStats: [],
 			videos: [
 				video({
 					playlistItemId: 'playlist-item-99',

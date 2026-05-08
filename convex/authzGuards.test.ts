@@ -50,16 +50,6 @@ async function seedOrgScopedVideo(t: ReturnType<typeof convexTest>) {
 		eventId: event!._id,
 		playlist: {
 			playlistId: 'PL_ORG_A',
-			validationContextKey: 'org-a-conf-2026',
-			validationStats: [
-				{
-					id: 'event',
-					label: 'Event',
-					passCount: 1,
-					failCount: 0,
-					infoCount: 0
-				}
-			],
 			videos: [playlistVideo()]
 		}
 	});

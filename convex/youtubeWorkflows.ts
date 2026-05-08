@@ -16,11 +16,6 @@ import {
 	type PublicVideoData,
 	type YouTubeCaptionTrack
 } from '../src/lib/server/youtube-data-api';
-import {
-	summarizeVideoValidations,
-	validateVideoBaseline,
-	videoValidationContextKey
-} from '../src/lib/video-validation';
 import { getConnectedYouTubeAccessToken, WorkOSPipesProviderError } from './workosPipesProvider';
 import type { Id } from './_generated/dataModel';
 import type { ActionCtx } from './_generated/server';
@@ -57,9 +52,6 @@ export const syncPlaylistForJob = internalAction({
 			}
 
 			const playlist = await getYouTubePlaylistData(playlistId, accessToken);
-			const validationStats = summarizeVideoValidations(
-				playlist.videos.map((video) => validateVideoBaseline(video.title, context.event))
-			);
 
 			await ctx.runMutation(internal.videoCommands.recordPlaylistSnapshotByEventIdInternal, {
 				organizationId: context.job.organizationId,
@@ -70,8 +62,6 @@ export const syncPlaylistForJob = internalAction({
 					...(playlist.title !== undefined ? { title: playlist.title } : {}),
 					...(playlist.channelTitle !== undefined ? { channelTitle: playlist.channelTitle } : {}),
 					...(playlist.itemCount !== undefined ? { itemCount: playlist.itemCount } : {}),
-					validationContextKey: videoValidationContextKey(context.event),
-					validationStats,
 					videos: playlist.videos.map((video) => ({
 						playlistItemId: video.playlistItemId,
 						youtubeVideoId: video.videoId,

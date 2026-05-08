@@ -43,8 +43,6 @@ async function createVideo(t: ReturnType<typeof convexTest>) {
 		eventId,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'mcp-night-2026',
-			validationStats: [],
 			videos: [playlistVideo()]
 		}
 	});

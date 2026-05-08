@@ -3,8 +3,7 @@ import { internalMutation, mutation } from './_generated/server';
 import { requireDocumentInOrganization, requireOrganizationId } from './authz';
 import { upsertYoutubeChannel } from './youtubeChannelCommands';
 import { titleValidationCheckIdValidator } from './titleValidationTypes';
-import { validationStatValidator } from './videoValidationTypes';
-import type { Doc, Id } from './_generated/dataModel';
+import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 
 const playlistVideoSnapshotValidator = v.object({
@@ -29,8 +28,6 @@ const playlistSnapshotValidator = v.object({
 	title: v.optional(v.string()),
 	channelTitle: v.optional(v.string()),
 	itemCount: v.optional(v.number()),
-	validationContextKey: v.string(),
-	validationStats: v.array(validationStatValidator),
 	videos: v.array(playlistVideoSnapshotValidator)
 });
 
@@ -253,8 +250,6 @@ async function recordPlaylistSnapshotByEventIdHandler(
 		title?: string;
 		channelTitle?: string;
 		itemCount?: number;
-		validationContextKey: string;
-		validationStats: Doc<'eventPlaylistStats'>['validationStats'];
 		videos: Array<{
 			playlistItemId: string;
 			youtubeVideoId: string;
@@ -305,9 +300,7 @@ async function recordPlaylistSnapshotByEventIdHandler(
 			: {}),
 		eventId,
 		playlistId: playlist.playlistId,
-		validationContextKey: playlist.validationContextKey,
 		videoCount: videos.length,
-		validationStats: playlist.validationStats,
 		lastFetchedAt,
 		...(playlist.title !== undefined ? { playlistTitle: playlist.title } : {}),
 		...(playlist.channelTitle !== undefined ? { playlistChannelTitle: playlist.channelTitle } : {}),

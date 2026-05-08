@@ -28,8 +28,6 @@ async function seedVideo(t: ReturnType<typeof convexTest>) {
 		eventId: event!._id,
 		playlist: {
 			playlistId: 'PL123',
-			validationContextKey: 'testconf-2026',
-			validationStats: [],
 			videos: [video()]
 		}
 	});
