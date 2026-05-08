@@ -1,16 +1,11 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { extractYouTubePlaylistId } from '$lib/youtube';
 import { getConvexClientForEvent } from '$lib/server/convex';
-import {
-	buildTitleAiValidationInputs,
-	titleAiValidationInputKey,
-	type TitleAiValidationInput
-} from '$lib/title-ai-validation';
+import { titleAiValidationInputKey, type TitleAiValidationInput } from '$lib/title-ai-validation';
 import { defaultEventType, isEventType } from '$lib/event-type';
 import {
 	pendingVideoValidation,
 	summarizeVideoValidations,
-	validateVideoBaseline,
 	type VideoValidation
 } from '$lib/video-validation';
 import { api } from '../../../convex/_generated/api';
@@ -18,8 +13,8 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../../convex/_generated/dataModel';
 import type { PageServerLoad, Actions } from './$types';
 
-type AssignmentRow = FunctionReturnType<typeof api.playlistAssignmentViews.getForEvent>[number];
-type EventRow = FunctionReturnType<typeof api.events.collect>[number];
+type EventListItem = FunctionReturnType<typeof api.eventViews.getList>[number];
+type EventVideoRow = EventListItem['videos'][number];
 type CachedTitleAiChecks = {
 	validationsByInputKey: Record<string, VideoValidation>;
 	cache: {
@@ -51,73 +46,25 @@ function eventType(data: FormData) {
 	return isEventType(value) ? value : defaultEventType;
 }
 
-function videoRecordForValidation(row: AssignmentRow) {
-	const speaker = row.speakers.map((speakerRow) => speakerRow.speaker.name).join(', ');
-	const company = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.company)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-	const position = [
-		...new Set(
-			row.speakers
-				.map((speakerRow) => speakerRow.speaker.position)
-				.filter((value): value is string => Boolean(value))
-		)
-	].join(', ');
-
-	return {
-		speaker: speaker || undefined,
-		company: company || undefined,
-		position: position || undefined,
-		titleOverride: row.video.titleOverride,
-		videoTitleFormat: row.video.videoTitleFormat,
-		videoType: row.video.videoType
-	};
-}
-
-function speakerRecordsForValidation(row: AssignmentRow) {
-	return row.speakers.map((speakerRow) => ({
-		name: speakerRow.speaker.name,
-		company: speakerRow.speaker.company,
-		position: speakerRow.speaker.position
-	}));
-}
-
-function titleAiInputsForAssignments(assignments: AssignmentRow[], event: EventRow) {
+function titleAiInputsForEventItems(items: EventListItem[]) {
 	const inputsByKey = new Map<string, TitleAiValidationInput>();
 
-	for (const row of assignments) {
-		for (const input of buildTitleAiValidationInputs({
-			videoId: row.video._id,
-			title: row.video.title,
-			event,
-			speakers: speakerRecordsForValidation(row),
-			video: videoRecordForValidation(row),
-			disabledTitleValidationIds: row.video.disabledTitleValidationIds
-		})) {
-			inputsByKey.set(titleAiValidationInputKey(input), input);
+	for (const item of items) {
+		for (const video of item.videos) {
+			for (const input of video.titleAiInputs) {
+				inputsByKey.set(titleAiValidationInputKey(input), input);
+			}
 		}
 	}
 
 	return [...inputsByKey.values()];
 }
 
-function cachedAiValidationsForRow(
-	row: AssignmentRow,
-	event: EventRow,
+function cachedAiValidationsForVideo(
+	video: EventVideoRow,
 	cachedTitleAiChecks: CachedTitleAiChecks | null
 ) {
-	return buildTitleAiValidationInputs({
-		videoId: row.video._id,
-		title: row.video.title,
-		event,
-		speakers: speakerRecordsForValidation(row),
-		video: videoRecordForValidation(row),
-		disabledTitleValidationIds: row.video.disabledTitleValidationIds
-	}).map((input) => {
+	return video.titleAiInputs.map((input) => {
 		const validation = cachedTitleAiChecks?.validationsByInputKey[titleAiValidationInputKey(input)];
 
 		return validation ?? pendingVideoValidation(input.checkId, input.label);
@@ -145,26 +92,9 @@ async function buildAiValidationCache(
 
 export const load: PageServerLoad = async (event) => {
 	const client = getConvexClientForEvent(event);
-	const events = await client.query(api.events.collect);
-	const assignmentsByEventEntries = await Promise.all(
-		events.map(async (event) => {
-			if (!event.youtubePlaylistId) {
-				return [event._id, [] as AssignmentRow[]] as const;
-			}
-
-			const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
-				eventId: event._id
-			});
-
-			return [event._id, assignments] as const;
-		})
-	);
-	const assignmentsByEventId = new Map(assignmentsByEventEntries);
-	const titleAiInputs = assignmentsByEventEntries.flatMap(([eventId, rows]) => {
-		const event = events.find((candidate) => candidate._id === eventId);
-
-		return event ? titleAiInputsForAssignments(rows, event) : [];
-	});
+	const eventItems = await client.query(api.eventViews.getList);
+	const events = eventItems.map((item) => item.event);
+	const titleAiInputs = titleAiInputsForEventItems(eventItems);
 	const aiCache =
 		titleAiInputs.length > 0
 			? await client.action(api.videoWorkflows.collectCachedTitleAiChecks, {
@@ -172,24 +102,18 @@ export const load: PageServerLoad = async (event) => {
 				})
 			: null;
 
-	const validationStats = events.flatMap((event) => {
-		const assignments = assignmentsByEventId.get(event._id) ?? [];
-
-		if (!event.youtubePlaylistId || !assignments.length) {
+	const validationStats = eventItems.flatMap((item) => {
+		if (!item.event.youtubePlaylistId || !item.videos.length) {
 			return [];
 		}
 
 		return [
 			[
-				event._id,
+				item.event._id,
 				summarizeVideoValidations(
-					assignments.map((row) => [
-						...validateVideoBaseline(row.video.title, event, {
-							speakers: speakerRecordsForValidation(row),
-							video: videoRecordForValidation(row),
-							disabledTitleValidationIds: row.video.disabledTitleValidationIds
-						}),
-						...cachedAiValidationsForRow(row, event, aiCache)
+					item.videos.map((video) => [
+						...video.baselineValidations,
+						...cachedAiValidationsForVideo(video, aiCache)
 					])
 				)
 			] as const
@@ -197,16 +121,14 @@ export const load: PageServerLoad = async (event) => {
 	});
 	const validationBuildState: Array<readonly [Id<'events'>, ValidationBuildState]> = [];
 
-	for (const event of events) {
-		if (!event.youtubePlaylistId) {
+	for (const item of eventItems) {
+		if (!item.event.youtubePlaylistId) {
 			continue;
 		}
 
-		const assignments = assignmentsByEventId.get(event._id) ?? [];
-
-		if (!assignments.length) {
+		if (!item.videos.length) {
 			validationBuildState.push([
-				event._id,
+				item.event._id,
 				{
 					kind: 'playlist',
 					label: 'Build validations'
@@ -215,16 +137,16 @@ export const load: PageServerLoad = async (event) => {
 			continue;
 		}
 
-		const missingAiCount = titleAiInputsForAssignments(assignments, event).filter(
-			(input) => !aiCache?.validationsByInputKey[titleAiValidationInputKey(input)]
-		).length;
+		const missingAiCount = item.videos
+			.flatMap((video) => video.titleAiInputs)
+			.filter((input) => !aiCache?.validationsByInputKey[titleAiValidationInputKey(input)]).length;
 
 		if (missingAiCount === 0) {
 			continue;
 		}
 
 		validationBuildState.push([
-			event._id,
+			item.event._id,
 			{
 				kind: 'ai',
 				label: 'Build AI checks',
@@ -308,21 +230,27 @@ export const actions: Actions = {
 		}
 
 		const client = getConvexClientForEvent(requestEvent);
-		const event = await client.query(api.events.find, {
-			id: eventId as Id<'events'>
+		const eventItem = await client.query(api.eventViews.getDetail, {
+			eventId: eventId as Id<'events'>
 		});
 
-		if (!event?.youtubePlaylistId) {
+		if (!eventItem) {
+			return fail(404, {
+				buildEventId: eventId,
+				buildError: 'Event not found.'
+			});
+		}
+
+		const foundEvent = eventItem.event;
+
+		if (!foundEvent?.youtubePlaylistId) {
 			return fail(400, {
 				buildEventId: eventId,
 				buildError: 'Link a playlist before building validations.'
 			});
 		}
 
-		const assignments = await client.query(api.playlistAssignmentViews.getForEvent, {
-			eventId: event._id
-		});
-		const titleAiInputs = titleAiInputsForAssignments(assignments, event);
+		const titleAiInputs = eventItem.videos.flatMap((video) => video.titleAiInputs);
 		const cachedTitleAiChecks =
 			titleAiInputs.length > 0
 				? await client.action(api.videoWorkflows.collectCachedTitleAiChecks, {
@@ -333,18 +261,18 @@ export const actions: Actions = {
 			(input) => !cachedTitleAiChecks?.validationsByInputKey[titleAiValidationInputKey(input)]
 		);
 
-		if (assignments.length > 0 && missingAiInputs.length > 0) {
+		if (eventItem.videos.length > 0 && missingAiInputs.length > 0) {
 			const aiChecks = await buildAiValidationCache(client, missingAiInputs);
 
 			return {
-				buildEventId: event._id,
+				buildEventId: foundEvent._id,
 				buildMessage: `Built AI title validations for ${aiChecks.checked}/${aiChecks.total}.`,
 				buildWarning: aiChecks.error
 			};
 		}
 
 		const result = await client.mutation(api.youtubeCommands.requestPlaylistSync, {
-			eventId: event._id
+			eventId: foundEvent._id
 		});
 
 		if (result.error) {
@@ -355,8 +283,8 @@ export const actions: Actions = {
 		}
 
 		return {
-			buildEventId: event._id,
-			buildMessage: `Queued playlist sync for ${event.name}.`
+			buildEventId: foundEvent._id,
+			buildMessage: `Queued playlist sync for ${foundEvent.name}.`
 		};
 	}
 };

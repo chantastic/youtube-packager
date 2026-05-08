@@ -1,7 +1,8 @@
 import { v } from 'convex/values';
 import { query } from './_generated/server';
 import { documentBelongsToOrganization, requireOrganizationId } from './authz';
-import type { Doc } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
+import type { QueryCtx } from './_generated/server';
 
 export const getForEvent = query({
 	args: {
@@ -15,47 +16,55 @@ export const getForEvent = query({
 			return [];
 		}
 
-		const assignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_organizationId_and_eventId', (q) =>
-				q.eq('organizationId', organizationId).eq('eventId', eventId)
-			)
-			.take(500);
-		const rows: Array<{
-			assignment: Doc<'playlistAssignments'>;
-			video: Doc<'videos'>;
-			speakers: Array<{
-				assignment: Doc<'videoSpeakers'>;
-				speaker: Doc<'speakers'>;
-			}>;
-		}> = [];
-
-		for (const assignment of assignments.sort((a, b) => a.position - b.position)) {
-			const video = await ctx.db.get(assignment.videoId);
-
-			if (documentBelongsToOrganization(video, organizationId)) {
-				const speakerAssignments = await ctx.db
-					.query('videoSpeakers')
-					.withIndex('by_organizationId_and_videoId', (q) =>
-						q.eq('organizationId', organizationId).eq('videoId', video._id)
-					)
-					.take(100);
-				const speakers = [];
-
-				for (const speakerAssignment of speakerAssignments.sort(
-					(a, b) => a.position - b.position
-				)) {
-					const speaker = await ctx.db.get(speakerAssignment.speakerId);
-
-					if (documentBelongsToOrganization(speaker, organizationId)) {
-						speakers.push({ assignment: speakerAssignment, speaker });
-					}
-				}
-
-				rows.push({ assignment, video, speakers });
-			}
-		}
-
-		return rows;
+		return await getPlaylistAssignmentRowsForEvent(ctx, eventId, organizationId);
 	}
 });
+
+export type PlaylistAssignmentRow = {
+	assignment: Doc<'playlistAssignments'>;
+	video: Doc<'videos'>;
+	speakers: Array<{
+		assignment: Doc<'videoSpeakers'>;
+		speaker: Doc<'speakers'>;
+	}>;
+};
+
+export async function getPlaylistAssignmentRowsForEvent(
+	ctx: QueryCtx,
+	eventId: Id<'events'>,
+	organizationId: string
+) {
+	const assignments = await ctx.db
+		.query('playlistAssignments')
+		.withIndex('by_organizationId_and_eventId', (q) =>
+			q.eq('organizationId', organizationId).eq('eventId', eventId)
+		)
+		.take(500);
+	const rows: PlaylistAssignmentRow[] = [];
+
+	for (const assignment of assignments.sort((a, b) => a.position - b.position)) {
+		const video = await ctx.db.get(assignment.videoId);
+
+		if (documentBelongsToOrganization(video, organizationId)) {
+			const speakerAssignments = await ctx.db
+				.query('videoSpeakers')
+				.withIndex('by_organizationId_and_videoId', (q) =>
+					q.eq('organizationId', organizationId).eq('videoId', video._id)
+				)
+				.take(100);
+			const speakers = [];
+
+			for (const speakerAssignment of speakerAssignments.sort((a, b) => a.position - b.position)) {
+				const speaker = await ctx.db.get(speakerAssignment.speakerId);
+
+				if (documentBelongsToOrganization(speaker, organizationId)) {
+					speakers.push({ assignment: speakerAssignment, speaker });
+				}
+			}
+
+			rows.push({ assignment, video, speakers });
+		}
+	}
+
+	return rows;
+}

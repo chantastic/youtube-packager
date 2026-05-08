@@ -148,7 +148,9 @@ test("org-scoped views do not expose another organization's event or video graph
 	const orgB = t.withIdentity(identityForOrg('org_b'));
 
 	await expect(orgB.query(api.events.collect, {})).resolves.toEqual([]);
+	await expect(orgB.query(api.eventViews.getList, {})).resolves.toEqual([]);
 	await expect(orgB.query(api.events.find, { id: event._id })).resolves.toBeNull();
+	await expect(orgB.query(api.eventViews.getDetail, { eventId: event._id })).resolves.toBeNull();
 	await expect(orgB.query(api.videos.find, { id: video._id })).resolves.toBeNull();
 	await expect(
 		orgB.query(api.videos.findByYoutubeVideoId, {
