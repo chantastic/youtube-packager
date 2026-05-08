@@ -82,20 +82,6 @@ export const setMetadata = mutation({
 	}
 });
 
-export const recordTitle = mutation({
-	args: {
-		videoId: v.id('videos'),
-		title: v.string()
-	},
-	handler: async (ctx, { videoId, title }) => {
-		const organizationId = await requireOrganizationId(ctx);
-		const video = await getVideoOrThrow(ctx, videoId, organizationId);
-		await ctx.db.patch(video._id, { organizationId, title });
-
-		return await ctx.db.get(video._id);
-	}
-});
-
 export const recordTitleInternal = internalMutation({
 	args: {
 		organizationId: v.string(),
@@ -126,15 +112,6 @@ export const setDisabledTitleValidations = mutation({
 		});
 
 		return await ctx.db.get(video._id);
-	}
-});
-
-export const recordYoutubeSnapshot = mutation({
-	args: youtubeVideoSnapshotArgs,
-	handler: async (ctx, args) => {
-		const organizationId = await requireOrganizationId(ctx);
-
-		return await recordYoutubeSnapshotHandler(ctx, args, organizationId);
 	}
 });
 
@@ -214,18 +191,6 @@ export const removeSpeaker = mutation({
 		}
 
 		return null;
-	}
-});
-
-export const recordPlaylistSnapshotByEventId = mutation({
-	args: {
-		eventId: v.id('events'),
-		playlist: playlistSnapshotValidator
-	},
-	handler: async (ctx, { eventId, playlist }) => {
-		const organizationId = await requireOrganizationId(ctx);
-
-		return await recordPlaylistSnapshotByEventIdHandler(ctx, eventId, playlist, organizationId);
 	}
 });
 

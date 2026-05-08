@@ -1,28 +1,12 @@
 import { v } from 'convex/values';
-import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 import {
-	aiValidationCacheKeyInputValidator,
 	aiValidationCacheKeyValidator,
-	aiValidationCheckWriteInputValidator,
 	aiValidationCheckWriteValidator,
-	type AiValidationCacheKeyInput,
 	type AiValidationCacheKey,
-	type AiValidationCheckWriteInput,
 	type AiValidationCheckWrite
 } from './aiValidationCheckTypes';
-import { requireOrganizationId } from './authz';
 import type { MutationCtx, QueryCtx } from './_generated/server';
-
-export const collectByCacheKey = query({
-	args: {
-		keys: v.array(aiValidationCacheKeyInputValidator)
-	},
-	handler: async (ctx, { keys }) => {
-		const organizationId = await requireOrganizationId(ctx);
-
-		return await collectByCacheKeyHandler(ctx, addOrganizationToCacheKeys(keys, organizationId));
-	}
-});
 
 export const collectByCacheKeyInternal = internalQuery({
 	args: {
@@ -30,17 +14,6 @@ export const collectByCacheKeyInternal = internalQuery({
 	},
 	handler: async (ctx, { keys }) => {
 		return await collectByCacheKeyHandler(ctx, keys);
-	}
-});
-
-export const upsertMany = mutation({
-	args: {
-		checks: v.array(aiValidationCheckWriteInputValidator)
-	},
-	handler: async (ctx, { checks }) => {
-		const organizationId = await requireOrganizationId(ctx);
-
-		return await upsertManyHandler(ctx, addOrganizationToChecks(checks, organizationId));
 	}
 });
 
@@ -52,14 +25,6 @@ export const upsertManyInternal = internalMutation({
 		return await upsertManyHandler(ctx, checks);
 	}
 });
-
-function addOrganizationToCacheKeys(keys: AiValidationCacheKeyInput[], organizationId: string) {
-	return keys.map((key) => ({ ...key, organizationId }));
-}
-
-function addOrganizationToChecks(checks: AiValidationCheckWriteInput[], organizationId: string) {
-	return checks.map((check) => ({ ...check, organizationId }));
-}
 
 async function collectByCacheKeyHandler(ctx: QueryCtx, keys: AiValidationCacheKey[]) {
 	const checks = [];

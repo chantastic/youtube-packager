@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
-import { api } from './_generated/api';
+import { internal } from './_generated/api';
 import schema from './schema';
 
 const modules = import.meta.glob('./**/*.ts');
 
 const cacheKey = {
+	organizationId: 'org_test',
 	videoId: 'video-1',
 	field: 'title',
 	checkId: 'hook',
@@ -36,11 +37,11 @@ test('upsertMany stores and getMany retrieves AI validation checks', async () =>
 		org_id: 'org_test'
 	});
 
-	await t.mutation(api.aiValidationChecks.upsertMany, {
+	await t.mutation(internal.aiValidationChecks.upsertManyInternal, {
 		checks: [check]
 	});
 
-	const checks = await t.query(api.aiValidationChecks.collectByCacheKey, {
+	const checks = await t.query(internal.aiValidationChecks.collectByCacheKeyInternal, {
 		keys: [cacheKey]
 	});
 
@@ -56,10 +57,10 @@ test('upsertMany replaces existing AI validation checks', async () => {
 		org_id: 'org_test'
 	});
 
-	await t.mutation(api.aiValidationChecks.upsertMany, {
+	await t.mutation(internal.aiValidationChecks.upsertManyInternal, {
 		checks: [check]
 	});
-	await t.mutation(api.aiValidationChecks.upsertMany, {
+	await t.mutation(internal.aiValidationChecks.upsertManyInternal, {
 		checks: [
 			{
 				...check,
@@ -74,7 +75,7 @@ test('upsertMany replaces existing AI validation checks', async () => {
 		]
 	});
 
-	const checks = await t.query(api.aiValidationChecks.collectByCacheKey, {
+	const checks = await t.query(internal.aiValidationChecks.collectByCacheKeyInternal, {
 		keys: [cacheKey]
 	});
 

@@ -23,7 +23,8 @@ function video(overrides: { youtubeVideoId?: string; title?: string } = {}) {
 async function seedVideo(t: ReturnType<typeof convexTest>) {
 	const event = await t.mutation(api.events.upsert, { name: 'TestConf', year: 2026 });
 
-	await t.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
+	await t.mutation(internal.videoCommands.recordPlaylistSnapshotByEventIdInternal, {
+		organizationId: 'org_test',
 		eventId: event!._id,
 		playlist: {
 			playlistId: 'PL123',

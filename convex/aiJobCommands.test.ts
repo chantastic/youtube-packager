@@ -38,7 +38,8 @@ async function createVideo(t: ReturnType<typeof convexTest>) {
 	});
 	const eventId = event!._id;
 
-	await t.mutation(api.videoCommands.recordPlaylistSnapshotByEventId, {
+	await t.mutation(internal.videoCommands.recordPlaylistSnapshotByEventIdInternal, {
+		organizationId: 'org_test',
 		eventId,
 		playlist: {
 			playlistId: 'PL123',

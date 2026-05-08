@@ -1,6 +1,5 @@
 import { v } from 'convex/values';
-import { internalMutation, mutation } from './_generated/server';
-import { requireOrganizationId } from './authz';
+import { internalMutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 
 const youtubeChannelValidator = v.object({
@@ -9,17 +8,6 @@ const youtubeChannelValidator = v.object({
 	handle: v.optional(v.string()),
 	thumbnailUrl: v.optional(v.string()),
 	uploadsPlaylistId: v.optional(v.string())
-});
-
-export const recordAuthorizedChannels = mutation({
-	args: {
-		channels: v.array(youtubeChannelValidator)
-	},
-	handler: async (ctx, { channels }) => {
-		const organizationId = await requireOrganizationId(ctx);
-
-		return await recordAuthorizedChannelsHandler(ctx, organizationId, channels);
-	}
 });
 
 export const recordAuthorizedChannelsInternal = internalMutation({
