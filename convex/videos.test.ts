@@ -666,4 +666,28 @@ test('a video can have assignments in multiple playlists', async () => {
 		'FirstConf',
 		'SecondConf'
 	]);
+	expect(videoView?.titleAiInputs.map((input) => input.checkId).sort()).toEqual([
+		'hook',
+		'mechanics'
+	]);
+	expect(
+		videoView?.assignments
+			.map((row) => ({
+				eventName: row.event.name,
+				baselineChecks: row.baselineValidations.map((validation) => validation.id).sort(),
+				aiChecks: row.titleAiInputs.map((input) => input.checkId).sort()
+			}))
+			.sort((a, b) => a.eventName.localeCompare(b.eventName))
+	).toEqual([
+		{
+			eventName: 'FirstConf',
+			baselineChecks: ['event', 'format', 'profile'],
+			aiChecks: ['hook', 'mechanics']
+		},
+		{
+			eventName: 'SecondConf',
+			baselineChecks: ['event', 'format', 'profile'],
+			aiChecks: ['hook', 'mechanics']
+		}
+	]);
 });

@@ -21,6 +21,7 @@ export type TitleAlternativesVideoView = {
 		videoTitleFormat?: string;
 		videoType?: VideoTitleFormatRecord['videoType'];
 	};
+	titleContext?: VideoTitleFormatRecord;
 	speakers: Array<{
 		speaker: {
 			name: string;
@@ -33,6 +34,8 @@ export type TitleAlternativesVideoView = {
 			_id: string;
 		};
 		event: TitleFormatEvent;
+		baselineValidations?: VideoValidation[];
+		titleAiInputs?: TitleAiValidationInput[];
 	}>;
 };
 
@@ -75,7 +78,7 @@ export function prepareTitleAlternativesValidationContext(
 		company: row.speaker.company,
 		position: row.speaker.position
 	}));
-	const videoRecord: VideoTitleFormatRecord = {
+	const videoRecord: VideoTitleFormatRecord = videoView.titleContext ?? {
 		speaker: speakerNames || undefined,
 		company: uniquePresent(videoView.speakers.map((row) => row.speaker.company)) || undefined,
 		position: uniquePresent(videoView.speakers.map((row) => row.speaker.position)) || undefined,
@@ -88,14 +91,16 @@ export function prepareTitleAlternativesValidationContext(
 	const aiInputKeysByAssignmentId = new Map<string, string[]>();
 
 	for (const row of videoView.assignments) {
-		const inputs = buildTitleAiValidationInputs({
-			videoId: videoView.video._id,
-			title: videoView.video.title,
-			event: row.event,
-			speakers: validationSpeakers,
-			video: videoRecord,
-			disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
-		});
+		const inputs =
+			row.titleAiInputs ??
+			buildTitleAiValidationInputs({
+				videoId: videoView.video._id,
+				title: videoView.video.title,
+				event: row.event,
+				speakers: validationSpeakers,
+				video: videoRecord,
+				disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
+			});
 		const inputKeys = inputs.map(titleAiValidationInputKey);
 
 		aiInputKeysByAssignmentId.set(row.assignment._id, inputKeys);
@@ -136,11 +141,12 @@ export function buildTitleAlternativesInput(
 			assignmentId: row.assignment._id,
 			event: row.event,
 			titleValidations: [
-				...validateVideoBaseline(videoView.video.title, row.event, {
-					speakers: context.validationSpeakers,
-					video: context.videoRecord,
-					disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
-				}),
+				...(row.baselineValidations ??
+					validateVideoBaseline(videoView.video.title, row.event, {
+						speakers: context.validationSpeakers,
+						video: context.videoRecord,
+						disabledTitleValidationIds: videoView.video.disabledTitleValidationIds
+					})),
 				...(context.aiInputKeysByAssignmentId.get(row.assignment._id) ?? [])
 					.map((inputKey) => aiValidationsByInputKey.get(inputKey))
 					.filter((validation): validation is VideoValidation => Boolean(validation))

@@ -1,6 +1,12 @@
 import { v } from 'convex/values';
 import { query } from './_generated/server';
 import { documentBelongsToOrganization, requireOrganizationId } from './authz';
+import {
+	buildTitleAiValidationInputs,
+	type TitleAiValidationInput
+} from '../src/lib/title-ai-validation';
+import type { VideoTitleFormatRecord } from '../src/lib/title-format';
+import { validateVideoBaseline } from '../src/lib/video-validation';
 import type { Doc } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
 
@@ -103,9 +109,93 @@ async function buildVideoView(ctx: QueryCtx, video: Doc<'videos'>, organizationI
 		}
 	}
 
+	const titleContext = videoRecordForValidation(video, speakers);
+	const speakerContext = speakerRecordsForValidation(speakers);
+	const assignmentsWithValidations = assignmentsWithEvents.map((row) => ({
+		...row,
+		baselineValidations: validateVideoBaseline(video.title, row.event, {
+			speakers: speakerContext,
+			video: titleContext,
+			disabledTitleValidationIds: video.disabledTitleValidationIds
+		}),
+		titleAiInputs: buildTitleAiValidationInputs({
+			videoId: video._id,
+			title: video.title,
+			event: row.event,
+			speakers: speakerContext,
+			video: titleContext,
+			disabledTitleValidationIds: video.disabledTitleValidationIds
+		})
+	}));
+
 	return {
 		video,
+		titleContext,
+		titleAiInputs: primaryTitleAiInputs(
+			video,
+			titleContext,
+			speakerContext,
+			assignmentsWithValidations
+		),
 		speakers,
-		assignments: assignmentsWithEvents
+		assignments: assignmentsWithValidations
+	};
+}
+
+function primaryTitleAiInputs(
+	video: Doc<'videos'>,
+	titleContext: VideoTitleFormatRecord,
+	speakerContext: Array<{ name: string; company?: string; position?: string }>,
+	assignments: Array<{ titleAiInputs: TitleAiValidationInput[] }>
+) {
+	return (
+		assignments[0]?.titleAiInputs ??
+		buildTitleAiValidationInputs({
+			videoId: video._id,
+			title: video.title,
+			speakers: speakerContext,
+			video: titleContext,
+			disabledTitleValidationIds: video.disabledTitleValidationIds
+		})
+	);
+}
+
+function speakerRecordsForValidation(
+	speakers: Array<{
+		speaker: Doc<'speakers'>;
+	}>
+) {
+	return speakers.map((row) => ({
+		name: row.speaker.name,
+		...(row.speaker.company !== undefined ? { company: row.speaker.company } : {}),
+		...(row.speaker.position !== undefined ? { position: row.speaker.position } : {})
+	}));
+}
+
+function videoRecordForValidation(
+	video: Doc<'videos'>,
+	speakers: Array<{
+		speaker: Doc<'speakers'>;
+	}>
+): VideoTitleFormatRecord {
+	const speaker = speakers.map((row) => row.speaker.name).join(', ');
+	const company = [
+		...new Set(
+			speakers.map((row) => row.speaker.company).filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+	const position = [
+		...new Set(
+			speakers.map((row) => row.speaker.position).filter((value): value is string => Boolean(value))
+		)
+	].join(', ');
+
+	return {
+		speaker: speaker || undefined,
+		company: company || undefined,
+		position: position || undefined,
+		titleOverride: video.titleOverride,
+		videoTitleFormat: video.videoTitleFormat,
+		videoType: video.videoType
 	};
 }
