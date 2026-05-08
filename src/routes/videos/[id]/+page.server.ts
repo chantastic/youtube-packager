@@ -1,5 +1,6 @@
-import { error, fail, redirect } from '@sveltejs/kit';
-import { getConvexClient, getConvexClientForEvent } from '$lib/server/convex';
+import { fail } from '@sveltejs/kit';
+import { getConvexClientForEvent } from '$lib/server/convex';
+import { resolveCanonicalVideoView, resolveVideoView } from '$lib/server/video-view';
 import { canCustomizeVideoTitleFormat, isVideoType } from '$lib/title-format';
 import { isTitleCheckId, titleCheckIds } from '$lib/title-checks';
 import { api } from '../../../../convex/_generated/api';
@@ -17,31 +18,11 @@ function optionalVideoType(data: FormData) {
 	return isVideoType(value) ? value : undefined;
 }
 
-async function resolveVideoRouteTarget(
-	client: ReturnType<typeof getConvexClient>,
-	routeParam: string
-) {
-	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
-		routeParam
-	});
-
-	if (!routeTarget) {
-		throw error(404, 'Video not found.');
-	}
-
-	return routeTarget;
-}
-
 export const load: PageServerLoad = async (event) => {
 	event.depends('app:workflow-jobs');
 
 	const client = getConvexClientForEvent(event);
-	const routeTarget = await resolveVideoRouteTarget(client, event.params.id);
-	const videoView = routeTarget.videoView;
-
-	if (routeTarget.kind === 'youtubeVideoId') {
-		throw redirect(308, `/videos/${videoView.video._id}`);
-	}
+	const videoView = await resolveCanonicalVideoView(client, event.params.id);
 
 	const [captions, descriptionJob, availableSpeakers, refreshJob, captionJob, titleUpdateJob] =
 		await Promise.all([
@@ -80,7 +61,7 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	refreshVideo: async (event) => {
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const videoView = await resolveVideoView(client, event.params.id);
 		const result = await client.mutation(api.youtubeCommands.requestVideoRefresh, {
 			videoId: videoView.video._id
 		});
@@ -98,7 +79,7 @@ export const actions: Actions = {
 
 	fetchCaptions: async (event) => {
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const videoView = await resolveVideoView(client, event.params.id);
 		const result = await client.mutation(api.youtubeCommands.requestCaptionFetch, {
 			videoId: videoView.video._id
 		});
@@ -118,7 +99,7 @@ export const actions: Actions = {
 		const titleOverride = optionalString(data, 'titleOverride');
 		const titleOverrideEnabled = data.get('titleOverrideEnabled') === 'on';
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const videoView = await resolveVideoView(client, event.params.id);
 
 		if (titleOverrideEnabled && !titleOverride) {
 			return fail(400, {
@@ -168,7 +149,7 @@ export const actions: Actions = {
 		}
 
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const videoView = await resolveVideoView(client, event.params.id);
 		const result = await client.mutation(api.youtubeCommands.requestTitleUpdate, {
 			videoId: videoView.video._id,
 			title
@@ -193,7 +174,7 @@ export const actions: Actions = {
 			(checkId) => !enabledTitleValidationIds.has(checkId)
 		);
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, event.params.id)).videoView;
+		const videoView = await resolveVideoView(client, event.params.id);
 
 		await client.mutation(api.videoCommands.setDisabledTitleValidations, {
 			videoId: videoView.video._id,
@@ -211,7 +192,7 @@ export const actions: Actions = {
 		const speakerId = optionalString(data, 'speakerId');
 		const name = optionalString(data, 'name');
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, params.id)).videoView;
+		const videoView = await resolveVideoView(client, params.id);
 
 		if (speakerId) {
 			await client.mutation(api.videoCommands.assignSpeaker, {
@@ -244,7 +225,7 @@ export const actions: Actions = {
 		}
 
 		const client = getConvexClientForEvent(event);
-		const videoView = (await resolveVideoRouteTarget(client, params.id)).videoView;
+		const videoView = await resolveVideoView(client, params.id);
 		await client.mutation(api.videoCommands.removeSpeaker, {
 			videoId: videoView.video._id,
 			speakerId: speakerId as Id<'speakers'>

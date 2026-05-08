@@ -1,20 +1,8 @@
-import { error, json } from '@sveltejs/kit';
-import { getConvexClient, getConvexClientForEvent } from '$lib/server/convex';
+import { json } from '@sveltejs/kit';
+import { getConvexClientForEvent } from '$lib/server/convex';
+import { resolveVideoView } from '$lib/server/video-view';
 import { api } from '../../../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
-
-async function resolveVideoView(client: ReturnType<typeof getConvexClient>, routeParam: string) {
-	const routeTarget = await client.query(api.videoViews.getByRouteParam, {
-		routeParam
-	});
-	const videoView = routeTarget?.videoView ?? null;
-
-	if (!videoView) {
-		throw error(404, 'Video not found.');
-	}
-
-	return videoView;
-}
 
 export const GET: RequestHandler = async (event) => {
 	const { params } = event;
