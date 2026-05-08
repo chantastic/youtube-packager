@@ -4,6 +4,8 @@ import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server';
 type AuthCtx = Pick<QueryCtx | MutationCtx | ActionCtx, 'auth'>;
 
 type OrganizationIdentity = UserIdentity & {
+	user_id?: string;
+	userId?: string;
 	org_id?: string;
 	orgId?: string;
 	organization_id?: string;
@@ -29,6 +31,37 @@ export async function requireOrganizationId(ctx: AuthCtx) {
 	}
 
 	return organizationId;
+}
+
+export async function requireWorkOSAuthContext(ctx: AuthCtx) {
+	const identity = await requireAuthenticatedUser(ctx);
+	const organizationId = organizationIdFromIdentity(identity);
+	const userId = userIdFromIdentity(identity);
+
+	if (!organizationId) {
+		throw new Error('Organization context required.');
+	}
+
+	if (!userId) {
+		throw new Error('WorkOS user context required.');
+	}
+
+	return { userId, organizationId };
+}
+
+export function userIdFromIdentity(identity: UserIdentity) {
+	const workosIdentity = identity as OrganizationIdentity;
+
+	for (const value of [workosIdentity.user_id, workosIdentity.userId, identity.subject]) {
+		if (typeof value === 'string' && value.length > 0) {
+			return value;
+		}
+	}
+
+	const tokenIdentifier = identity.tokenIdentifier;
+	const tokenSubject = tokenIdentifier.split('|').at(-1);
+
+	return tokenSubject && tokenSubject.length > 0 ? tokenSubject : null;
 }
 
 export function organizationIdFromIdentity(identity: UserIdentity) {

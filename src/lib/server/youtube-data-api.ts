@@ -5,7 +5,7 @@ import {
 	youtubeStudioPlaylistEditUrl,
 	youtubeStudioVideoEditUrl,
 	youtubeVideoUrl
-} from '$lib/youtube';
+} from '../youtube';
 
 const youtubeApiBaseUrl = 'https://www.googleapis.com/youtube/v3';
 

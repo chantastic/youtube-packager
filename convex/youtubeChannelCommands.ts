@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation } from './_generated/server';
+import { internalMutation, mutation } from './_generated/server';
 import { requireOrganizationId } from './authz';
 import type { MutationCtx } from './_generated/server';
 
@@ -17,19 +17,44 @@ export const recordAuthorizedChannels = mutation({
 	},
 	handler: async (ctx, { channels }) => {
 		const organizationId = await requireOrganizationId(ctx);
-		const recordedChannels = [];
 
-		for (const channel of channels.slice(0, 50)) {
-			const recordedChannel = await upsertYoutubeChannel(ctx, organizationId, channel);
-
-			if (recordedChannel) {
-				recordedChannels.push(recordedChannel);
-			}
-		}
-
-		return recordedChannels;
+		return await recordAuthorizedChannelsHandler(ctx, organizationId, channels);
 	}
 });
+
+export const recordAuthorizedChannelsInternal = internalMutation({
+	args: {
+		organizationId: v.string(),
+		channels: v.array(youtubeChannelValidator)
+	},
+	handler: async (ctx, { organizationId, channels }) => {
+		return await recordAuthorizedChannelsHandler(ctx, organizationId, channels);
+	}
+});
+
+async function recordAuthorizedChannelsHandler(
+	ctx: MutationCtx,
+	organizationId: string,
+	channels: Array<{
+		youtubeChannelId: string;
+		title: string;
+		handle?: string;
+		thumbnailUrl?: string;
+		uploadsPlaylistId?: string;
+	}>
+) {
+	const recordedChannels = [];
+
+	for (const channel of channels.slice(0, 50)) {
+		const recordedChannel = await upsertYoutubeChannel(ctx, organizationId, channel);
+
+		if (recordedChannel) {
+			recordedChannels.push(recordedChannel);
+		}
+	}
+
+	return recordedChannels;
+}
 
 export async function upsertYoutubeChannel(
 	ctx: MutationCtx,

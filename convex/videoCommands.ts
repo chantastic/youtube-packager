@@ -1,10 +1,10 @@
 import { v } from 'convex/values';
-import { mutation } from './_generated/server';
+import { internalMutation, mutation } from './_generated/server';
 import { requireDocumentInOrganization, requireOrganizationId } from './authz';
 import { upsertYoutubeChannel } from './youtubeChannelCommands';
 import { titleValidationCheckIdValidator } from './titleValidationTypes';
 import { validationStatValidator } from './videoValidationTypes';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 
 const playlistVideoSnapshotValidator = v.object({
@@ -22,6 +22,31 @@ const playlistVideoSnapshotValidator = v.object({
 	publishedAt: v.optional(v.string()),
 	videoPublishedAt: v.optional(v.string())
 });
+
+const playlistSnapshotValidator = v.object({
+	playlistId: v.string(),
+	youtubeChannelId: v.optional(v.string()),
+	title: v.optional(v.string()),
+	channelTitle: v.optional(v.string()),
+	itemCount: v.optional(v.number()),
+	validationContextKey: v.string(),
+	validationStats: v.array(validationStatValidator),
+	videos: v.array(playlistVideoSnapshotValidator)
+});
+
+const youtubeVideoSnapshotArgs = {
+	videoId: v.id('videos'),
+	youtubeVideoId: v.string(),
+	youtubeChannelId: v.optional(v.string()),
+	title: v.string(),
+	description: v.optional(v.string()),
+	videoUrl: v.string(),
+	studioEditUrl: v.string(),
+	thumbnailUrl: v.optional(v.string()),
+	channelTitle: v.optional(v.string()),
+	publishedAt: v.optional(v.string()),
+	videoPublishedAt: v.optional(v.string())
+};
 
 const videoTypeValidator = v.union(
 	v.literal('talk'),
@@ -71,6 +96,20 @@ export const recordTitle = mutation({
 	}
 });
 
+export const recordTitleInternal = internalMutation({
+	args: {
+		organizationId: v.string(),
+		videoId: v.id('videos'),
+		title: v.string()
+	},
+	handler: async (ctx, { organizationId, videoId, title }) => {
+		const video = await getVideoOrThrow(ctx, videoId, organizationId);
+		await ctx.db.patch(video._id, { organizationId, title });
+
+		return await ctx.db.get(video._id);
+	}
+});
+
 export const setDisabledTitleValidations = mutation({
 	args: {
 		videoId: v.id('videos'),
@@ -91,36 +130,21 @@ export const setDisabledTitleValidations = mutation({
 });
 
 export const recordYoutubeSnapshot = mutation({
-	args: {
-		videoId: v.id('videos'),
-		youtubeVideoId: v.string(),
-		youtubeChannelId: v.optional(v.string()),
-		title: v.string(),
-		description: v.optional(v.string()),
-		videoUrl: v.string(),
-		studioEditUrl: v.string(),
-		thumbnailUrl: v.optional(v.string()),
-		channelTitle: v.optional(v.string()),
-		publishedAt: v.optional(v.string()),
-		videoPublishedAt: v.optional(v.string())
-	},
-	handler: async (ctx, { videoId, youtubeVideoId, youtubeChannelId, ...fields }) => {
+	args: youtubeVideoSnapshotArgs,
+	handler: async (ctx, args) => {
 		const organizationId = await requireOrganizationId(ctx);
-		const video = await getVideoOrThrow(ctx, videoId, organizationId);
 
-		if (video.youtubeVideoId !== youtubeVideoId) {
-			throw new Error('YouTube snapshot does not match this video.');
-		}
+		return await recordYoutubeSnapshotHandler(ctx, args, organizationId);
+	}
+});
 
-		await ctx.db.patch(video._id, {
-			organizationId,
-			youtubeVideoId,
-			...(youtubeChannelId !== undefined ? { youtubeChannelId } : {}),
-			...fields,
-			lastFetchedAt: Date.now()
-		});
-
-		return await ctx.db.get(video._id);
+export const recordYoutubeSnapshotInternal = internalMutation({
+	args: {
+		organizationId: v.string(),
+		...youtubeVideoSnapshotArgs
+	},
+	handler: async (ctx, { organizationId, ...args }) => {
+		return await recordYoutubeSnapshotHandler(ctx, args, organizationId);
 	}
 });
 
@@ -196,128 +220,200 @@ export const removeSpeaker = mutation({
 export const recordPlaylistSnapshotByEventId = mutation({
 	args: {
 		eventId: v.id('events'),
-		playlist: v.object({
-			playlistId: v.string(),
-			youtubeChannelId: v.optional(v.string()),
-			title: v.optional(v.string()),
-			channelTitle: v.optional(v.string()),
-			itemCount: v.optional(v.number()),
-			validationContextKey: v.string(),
-			validationStats: v.array(validationStatValidator),
-			videos: v.array(playlistVideoSnapshotValidator)
-		})
+		playlist: playlistSnapshotValidator
 	},
 	handler: async (ctx, { eventId, playlist }) => {
 		const organizationId = await requireOrganizationId(ctx);
-		const event = requireDocumentInOrganization(
-			await ctx.db.get(eventId),
-			organizationId,
-			'Event not found.'
-		);
 
-		const lastFetchedAt = Date.now();
-		const defaultVideoType = defaultVideoTypeForEventType(event.eventType);
-		const videos = playlist.videos.slice(0, 500);
-		if (playlist.youtubeChannelId) {
-			await upsertYoutubeChannel(ctx, organizationId, {
-				youtubeChannelId: playlist.youtubeChannelId,
-				title: playlist.channelTitle ?? 'Untitled channel'
-			});
-			await ctx.db.patch(eventId, {
-				organizationId,
-				youtubeChannelId: playlist.youtubeChannelId
-			});
-		}
-		const existingStats = await ctx.db
-			.query('eventPlaylistStats')
-			.withIndex('by_organizationId_and_eventId', (q) =>
-				q.eq('organizationId', organizationId).eq('eventId', eventId)
-			)
-			.unique();
-		const stats = {
-			organizationId,
-			...(playlist.youtubeChannelId !== undefined
-				? { youtubeChannelId: playlist.youtubeChannelId }
-				: {}),
-			eventId,
-			playlistId: playlist.playlistId,
-			validationContextKey: playlist.validationContextKey,
-			videoCount: videos.length,
-			validationStats: playlist.validationStats,
-			lastFetchedAt,
-			...(playlist.title !== undefined ? { playlistTitle: playlist.title } : {}),
-			...(playlist.channelTitle !== undefined
-				? { playlistChannelTitle: playlist.channelTitle }
-				: {}),
-			...(playlist.itemCount !== undefined ? { playlistItemCount: playlist.itemCount } : {})
-		};
-
-		if (existingStats) {
-			await ctx.db.replace(existingStats._id, stats);
-		} else {
-			await ctx.db.insert('eventPlaylistStats', stats);
-		}
-
-		const currentPlaylistItemIds = new Set(videos.map((video) => video.playlistItemId));
-		const existingAssignments = await ctx.db
-			.query('playlistAssignments')
-			.withIndex('by_organizationId_and_eventId', (q) =>
-				q.eq('organizationId', organizationId).eq('eventId', eventId)
-			)
-			.take(500);
-
-		for (const assignment of existingAssignments) {
-			if (
-				assignment.playlistId !== playlist.playlistId ||
-				!currentPlaylistItemIds.has(assignment.playlistItemId)
-			) {
-				await ctx.db.delete(assignment._id);
-			}
-		}
-
-		for (const video of videos) {
-			const videoId = await recordVideoSnapshot(
-				ctx,
-				video,
-				lastFetchedAt,
-				defaultVideoType,
-				organizationId
-			);
-			const existingAssignment = await ctx.db
-				.query('playlistAssignments')
-				.withIndex('by_organizationId_and_eventId_and_playlistId_and_playlistItemId', (q) =>
-					q
-						.eq('organizationId', organizationId)
-						.eq('eventId', eventId)
-						.eq('playlistId', playlist.playlistId)
-						.eq('playlistItemId', video.playlistItemId)
-				)
-				.unique();
-			const assignment = {
-				organizationId,
-				eventId,
-				playlistId: playlist.playlistId,
-				playlistItemId: video.playlistItemId,
-				videoId,
-				youtubeVideoId: video.youtubeVideoId,
-				position: video.position,
-				playlistVideoUrl: video.playlistVideoUrl,
-				lastFetchedAt
-			};
-
-			if (existingAssignment) {
-				await ctx.db.replace(existingAssignment._id, assignment);
-			} else {
-				await ctx.db.insert('playlistAssignments', assignment);
-			}
-		}
-
-		return {
-			videoCount: videos.length,
-			lastFetchedAt
-		};
+		return await recordPlaylistSnapshotByEventIdHandler(ctx, eventId, playlist, organizationId);
 	}
 });
+
+export const recordPlaylistSnapshotByEventIdInternal = internalMutation({
+	args: {
+		organizationId: v.string(),
+		eventId: v.id('events'),
+		playlist: playlistSnapshotValidator
+	},
+	handler: async (ctx, { organizationId, eventId, playlist }) => {
+		return await recordPlaylistSnapshotByEventIdHandler(ctx, eventId, playlist, organizationId);
+	}
+});
+
+async function recordYoutubeSnapshotHandler(
+	ctx: MutationCtx,
+	{
+		videoId,
+		youtubeVideoId,
+		youtubeChannelId,
+		...fields
+	}: {
+		videoId: Id<'videos'>;
+		youtubeVideoId: string;
+		youtubeChannelId?: string;
+		title: string;
+		description?: string;
+		videoUrl: string;
+		studioEditUrl: string;
+		thumbnailUrl?: string;
+		channelTitle?: string;
+		publishedAt?: string;
+		videoPublishedAt?: string;
+	},
+	organizationId: string
+) {
+	const video = await getVideoOrThrow(ctx, videoId, organizationId);
+
+	if (video.youtubeVideoId !== youtubeVideoId) {
+		throw new Error('YouTube snapshot does not match this video.');
+	}
+
+	await ctx.db.patch(video._id, {
+		organizationId,
+		youtubeVideoId,
+		...(youtubeChannelId !== undefined ? { youtubeChannelId } : {}),
+		...fields,
+		lastFetchedAt: Date.now()
+	});
+
+	return await ctx.db.get(video._id);
+}
+
+async function recordPlaylistSnapshotByEventIdHandler(
+	ctx: MutationCtx,
+	eventId: Id<'events'>,
+	playlist: {
+		playlistId: string;
+		youtubeChannelId?: string;
+		title?: string;
+		channelTitle?: string;
+		itemCount?: number;
+		validationContextKey: string;
+		validationStats: Doc<'eventPlaylistStats'>['validationStats'];
+		videos: Array<{
+			playlistItemId: string;
+			youtubeVideoId: string;
+			youtubeChannelId?: string;
+			title: string;
+			description?: string;
+			position: number;
+			videoUrl: string;
+			playlistVideoUrl: string;
+			studioEditUrl: string;
+			thumbnailUrl?: string;
+			channelTitle?: string;
+			publishedAt?: string;
+			videoPublishedAt?: string;
+		}>;
+	},
+	organizationId: string
+) {
+	const event = requireDocumentInOrganization(
+		await ctx.db.get(eventId),
+		organizationId,
+		'Event not found.'
+	);
+
+	const lastFetchedAt = Date.now();
+	const defaultVideoType = defaultVideoTypeForEventType(event.eventType);
+	const videos = playlist.videos.slice(0, 500);
+	if (playlist.youtubeChannelId) {
+		await upsertYoutubeChannel(ctx, organizationId, {
+			youtubeChannelId: playlist.youtubeChannelId,
+			title: playlist.channelTitle ?? 'Untitled channel'
+		});
+		await ctx.db.patch(eventId, {
+			organizationId,
+			youtubeChannelId: playlist.youtubeChannelId
+		});
+	}
+	const existingStats = await ctx.db
+		.query('eventPlaylistStats')
+		.withIndex('by_organizationId_and_eventId', (q) =>
+			q.eq('organizationId', organizationId).eq('eventId', eventId)
+		)
+		.unique();
+	const stats = {
+		organizationId,
+		...(playlist.youtubeChannelId !== undefined
+			? { youtubeChannelId: playlist.youtubeChannelId }
+			: {}),
+		eventId,
+		playlistId: playlist.playlistId,
+		validationContextKey: playlist.validationContextKey,
+		videoCount: videos.length,
+		validationStats: playlist.validationStats,
+		lastFetchedAt,
+		...(playlist.title !== undefined ? { playlistTitle: playlist.title } : {}),
+		...(playlist.channelTitle !== undefined ? { playlistChannelTitle: playlist.channelTitle } : {}),
+		...(playlist.itemCount !== undefined ? { playlistItemCount: playlist.itemCount } : {})
+	};
+
+	if (existingStats) {
+		await ctx.db.replace(existingStats._id, stats);
+	} else {
+		await ctx.db.insert('eventPlaylistStats', stats);
+	}
+
+	const currentPlaylistItemIds = new Set(videos.map((video) => video.playlistItemId));
+	const existingAssignments = await ctx.db
+		.query('playlistAssignments')
+		.withIndex('by_organizationId_and_eventId', (q) =>
+			q.eq('organizationId', organizationId).eq('eventId', eventId)
+		)
+		.take(500);
+
+	for (const assignment of existingAssignments) {
+		if (
+			assignment.playlistId !== playlist.playlistId ||
+			!currentPlaylistItemIds.has(assignment.playlistItemId)
+		) {
+			await ctx.db.delete(assignment._id);
+		}
+	}
+
+	for (const video of videos) {
+		const videoId = await recordVideoSnapshot(
+			ctx,
+			video,
+			lastFetchedAt,
+			defaultVideoType,
+			organizationId
+		);
+		const existingAssignment = await ctx.db
+			.query('playlistAssignments')
+			.withIndex('by_organizationId_and_eventId_and_playlistId_and_playlistItemId', (q) =>
+				q
+					.eq('organizationId', organizationId)
+					.eq('eventId', eventId)
+					.eq('playlistId', playlist.playlistId)
+					.eq('playlistItemId', video.playlistItemId)
+			)
+			.unique();
+		const assignment = {
+			organizationId,
+			eventId,
+			playlistId: playlist.playlistId,
+			playlistItemId: video.playlistItemId,
+			videoId,
+			youtubeVideoId: video.youtubeVideoId,
+			position: video.position,
+			playlistVideoUrl: video.playlistVideoUrl,
+			lastFetchedAt
+		};
+
+		if (existingAssignment) {
+			await ctx.db.replace(existingAssignment._id, assignment);
+		} else {
+			await ctx.db.insert('playlistAssignments', assignment);
+		}
+	}
+
+	return {
+		videoCount: videos.length,
+		lastFetchedAt
+	};
+}
 
 async function getVideoOrThrow(ctx: MutationCtx, videoId: Id<'videos'>, organizationId: string) {
 	const video = await ctx.db.get(videoId);

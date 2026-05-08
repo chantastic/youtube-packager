@@ -37,7 +37,11 @@ import type * as videos from "../videos.js";
 import type * as workflowJobCommands from "../workflowJobCommands.js";
 import type * as workflowJobTypes from "../workflowJobTypes.js";
 import type * as workflowJobViews from "../workflowJobViews.js";
+import type * as workosPipesProvider from "../workosPipesProvider.js";
 import type * as youtubeChannelCommands from "../youtubeChannelCommands.js";
+import type * as youtubeCommands from "../youtubeCommands.js";
+import type * as youtubeWorkflowViews from "../youtubeWorkflowViews.js";
+import type * as youtubeWorkflows from "../youtubeWorkflows.js";
 
 import type {
   ApiFromModules,
@@ -75,7 +79,11 @@ declare const fullApi: ApiFromModules<{
   workflowJobCommands: typeof workflowJobCommands;
   workflowJobTypes: typeof workflowJobTypes;
   workflowJobViews: typeof workflowJobViews;
+  workosPipesProvider: typeof workosPipesProvider;
   youtubeChannelCommands: typeof youtubeChannelCommands;
+  youtubeCommands: typeof youtubeCommands;
+  youtubeWorkflowViews: typeof youtubeWorkflowViews;
+  youtubeWorkflows: typeof youtubeWorkflows;
 }>;
 
 /**

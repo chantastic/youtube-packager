@@ -171,10 +171,13 @@ async function planTitleAiValidationCache(
 			};
 		})
 	);
-	const cached = await ctx.runQuery(internal.aiValidationChecks.collectByCacheKeyInternal, {
-		keys: entries.map((entry) => entry.cacheKey)
-	});
-	const cachedByCacheKey = new Map(
+	const cached: Array<AiValidationCacheKey & { validation: VideoValidation }> = await ctx.runQuery(
+		internal.aiValidationChecks.collectByCacheKeyInternal,
+		{
+			keys: entries.map((entry) => entry.cacheKey)
+		}
+	);
+	const cachedByCacheKey = new Map<string, VideoValidation>(
 		cached.map((check) => [cacheKeyString(check), check.validation])
 	);
 	const cachedValidationsByCacheKey: Record<string, VideoValidation> = {};
