@@ -20,7 +20,7 @@
 		type VideoValidation
 	} from '$lib/video-validation';
 	import { titleCheckDefinitions } from '$lib/title-checks';
-	import { CirclePlay, ListVideo, RefreshCw, SquarePen } from 'lucide-svelte';
+	import { CirclePlay, ListVideo, RefreshCw, Save, SquarePen } from 'lucide-svelte';
 	import ExternalLinkButton from '$lib/components/ExternalLinkButton.svelte';
 	import IconButton from '$lib/components/IconButton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -59,7 +59,6 @@
 				metadataMessage?: string;
 				titleUpdateError?: string;
 				titleUpdateMessage?: string;
-				validationPreferencesMessage?: string;
 		  };
 
 	let { data, form }: { data: PageData; form: VideoActionData } = $props();
@@ -69,7 +68,6 @@
 	let titleAlternativesByAssignmentId = $state<Record<string, AssignmentTitleAlternatives>>({});
 	let titleAlternativesError = $state<string | null>(null);
 	let titleAlternativesLoading = $state(false);
-	let validationPreferencesSaved = $state(false);
 	let copiedTitle = $state<string | null>(null);
 	let descriptionJob = $state<DescriptionJob | null>(currentDescriptionJob());
 	let generatedDescription = $state<GeneratedDescription | null>(
@@ -86,6 +84,7 @@
 	let videoTitleFormatInput = $state(currentVideoTitleFormat());
 	let titleOverrideEnabled = $state(Boolean(currentTitleOverride()));
 	let titleOverrideInput = $state(currentTitleOverride());
+	let enabledTitleValidationIds = $state<string[]>(currentEnabledTitleValidationIds());
 	let speakerSelection = $state('');
 	let selectedSpeakerId = $state('');
 	let speakerName = $state('');
@@ -98,6 +97,7 @@
 		videoTitleFormatInput = currentVideoTitleFormat();
 		titleOverrideEnabled = Boolean(currentTitleOverride());
 		titleOverrideInput = currentTitleOverride();
+		enabledTitleValidationIds = currentEnabledTitleValidationIds();
 	});
 
 	function currentVideoType() {
@@ -110,6 +110,14 @@
 
 	function currentTitleOverride() {
 		return data.videoView.video.titleOverride ?? '';
+	}
+
+	function currentEnabledTitleValidationIds() {
+		const disabledIds = new Set(data.videoView.video.disabledTitleValidationIds ?? []);
+
+		return titleCheckDefinitions
+			.filter((check) => !disabledIds.has(check.id))
+			.map((check) => check.id);
 	}
 
 	function currentDescriptionJob() {
@@ -233,19 +241,20 @@
 		return validateVideoBaseline(data.videoView.video.title, event, {
 			speakers: titleFocusSpeakers(),
 			video: videoTitleRecord(),
-			disabledTitleValidationIds: data.videoView.video.disabledTitleValidationIds
+			disabledTitleValidationIds: selectedDisabledTitleValidationIds()
 		});
 	}
 
 	function activeTitleAiChecks() {
-		return filterDisabledTitleValidations(
-			titleAiChecks,
-			data.videoView.video.disabledTitleValidationIds
-		);
+		return filterDisabledTitleValidations(titleAiChecks, selectedDisabledTitleValidationIds());
 	}
 
-	function disabledTitleValidationIds() {
-		return new Set(data.videoView.video.disabledTitleValidationIds ?? []);
+	function selectedDisabledTitleValidationIds() {
+		const enabledIds = new Set(enabledTitleValidationIds);
+
+		return titleCheckDefinitions
+			.map((check) => check.id)
+			.filter((checkId) => !enabledIds.has(checkId));
 	}
 
 	function speakerMeta(row: PageData['videoView']['speakers'][number]) {
@@ -345,30 +354,6 @@
 			} finally {
 				videoRefreshing = false;
 			}
-		};
-	}
-
-	function afterValidationPreferencesUpdate() {
-		return async ({
-			update,
-			result
-		}: {
-			update: () => Promise<void>;
-			result: { type: string };
-		}) => {
-			await update();
-			if (result.type !== 'success') {
-				validationPreferencesSaved = false;
-				return;
-			}
-
-			await loadTitleAiChecks();
-			titleAlternativesByAssignmentId = {};
-			validationPreferencesSaved = true;
-
-			setTimeout(() => {
-				validationPreferencesSaved = false;
-			}, 1600);
 		};
 	}
 
@@ -614,171 +599,216 @@
 		</div>
 	</PageHeader>
 
-	<section class="mb-6 grid gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
-		{#if data.videoView.video.thumbnailUrl}
-			<img
-				src={data.videoView.video.thumbnailUrl}
-				alt=""
-				class="aspect-video w-full rounded-lg border border-gray-200 object-cover"
-			/>
-		{:else}
-			<div class="aspect-video rounded-lg border border-gray-200 bg-gray-100"></div>
-		{/if}
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
-			<p class="text-xs font-medium text-gray-500 uppercase">Snapshot</p>
-			<dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-				<div>
-					<dt class="text-gray-500">Channel</dt>
-					<dd class="mt-1 text-gray-950">{data.videoView.video.channelTitle ?? 'Unknown'}</dd>
-				</div>
-				<div>
-					<dt class="text-gray-500">Published</dt>
-					<dd class="mt-1 text-gray-950">{formatDate(data.videoView.video.videoPublishedAt)}</dd>
-				</div>
-				<div>
-					<dt class="text-gray-500">Last synced</dt>
-					<dd class="mt-1 text-gray-950">{formatDate(data.videoView.video.lastFetchedAt)}</dd>
-				</div>
-				<div>
-					<dt class="text-gray-500">Assignments</dt>
-					<dd class="mt-1 text-gray-950">{data.videoView.assignments.length}</dd>
-				</div>
-			</dl>
-			{#if form?.refreshError}
-				<p
-					class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700"
-				>
-					{form.refreshError}
-				</p>
-			{:else if data.refreshJob}
-				<WorkflowJobStatus job={data.refreshJob} label="YouTube refresh" class="mt-3" />
-			{:else if form?.refreshMessage}
-				<p
-					class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
-				>
-					{form.refreshMessage}
-				</p>
-			{/if}
-		</div>
-	</section>
-
 	<section class="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-			<h2 class="text-sm font-semibold text-gray-950">Video Title Metadata</h2>
-		</div>
-		<form
-			method="POST"
-			action="?/updateMetadata"
-			use:enhance={afterMetadataUpdate}
-			class="px-4 py-4"
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
 		>
-			<div class="mb-4">
-				<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
-				<select
-					id="videoType"
-					name="videoType"
-					bind:value={selectedVideoType}
-					class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-				>
-					{#each videoTypeOptions as option (option.value)}
-						<option value={option.value}>{option.label}</option>
-					{/each}
-				</select>
+			<div>
+				<h2 class="text-sm font-semibold text-gray-950">Packaging Workbench</h2>
+				<p class="mt-1 text-xs text-gray-500">
+					{data.videoView.video.channelTitle ?? 'Unknown channel'} · {data.videoView.assignments
+						.length} assignments
+				</p>
 			</div>
-			{#if canCustomizeVideoTitleFormat(selectedVideoType)}
-				<div>
-					<label for="videoTitleFormat" class="mb-1 block text-sm text-gray-500"
-						>Custom title format</label
-					>
-					<input
-						id="videoTitleFormat"
-						name="videoTitleFormat"
-						bind:value={videoTitleFormatInput}
-						placeholder={getDefaultVideoTypeTitleFormat(selectedVideoType)}
-						class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+			<button
+				type="submit"
+				form="video-packaging-form"
+				class="inline-flex items-center gap-2 rounded bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+			>
+				<Save aria-hidden="true" class="h-4 w-4" strokeWidth={2} />
+				{normalizeTitleOverride(selectedTitleOverride()) ? 'Save and Update YouTube' : 'Save'}
+			</button>
+		</div>
+		<div class="grid lg:grid-cols-[280px_minmax(0,1fr)]">
+			<div class="border-b border-gray-200 bg-gray-50 p-4 lg:border-r lg:border-b-0">
+				{#if data.videoView.video.thumbnailUrl}
+					<img
+						src={data.videoView.video.thumbnailUrl}
+						alt=""
+						class="aspect-video w-full rounded border border-gray-200 object-cover"
 					/>
-					<div class="mt-1 flex flex-wrap gap-1">
-						{#each videoTitleTokens as token (token)}
-							<span class="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
-								{token}
-							</span>
-						{/each}
+				{:else}
+					<div class="aspect-video rounded border border-gray-200 bg-gray-100"></div>
+				{/if}
+				<dl class="mt-4 space-y-3 text-sm">
+					<div>
+						<dt class="text-xs font-medium text-gray-500 uppercase">Published</dt>
+						<dd class="mt-1 text-gray-950">{formatDate(data.videoView.video.videoPublishedAt)}</dd>
 					</div>
-					<p class="mt-2 text-xs text-gray-500">
-						Fallback:
-						<span class="font-mono">{getDefaultVideoTypeTitleFormat(selectedVideoType)}</span>
+					<div>
+						<dt class="text-xs font-medium text-gray-500 uppercase">Last synced</dt>
+						<dd class="mt-1 text-gray-950">{formatDate(data.videoView.video.lastFetchedAt)}</dd>
+					</div>
+				</dl>
+				{#if form?.refreshError}
+					<p
+						class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+					>
+						{form.refreshError}
 					</p>
+				{:else if data.refreshJob}
+					<WorkflowJobStatus job={data.refreshJob} label="YouTube refresh" class="mt-3" />
+				{:else if form?.refreshMessage}
+					<p
+						class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700"
+					>
+						{form.refreshMessage}
+					</p>
+				{/if}
+			</div>
+			<form
+				id="video-packaging-form"
+				method="POST"
+				action="?/updateMetadata"
+				use:enhance={afterMetadataUpdate}
+				class="divide-y divide-gray-100"
+			>
+				<div class="grid gap-4 p-4 md:grid-cols-2">
+					<div>
+						<label for="videoType" class="mb-1 block text-sm text-gray-500">Video type</label>
+						<select
+							id="videoType"
+							name="videoType"
+							bind:value={selectedVideoType}
+							class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+						>
+							{#each videoTypeOptions as option (option.value)}
+								<option value={option.value}>{option.label}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						{#if canCustomizeVideoTitleFormat(selectedVideoType)}
+							<label for="videoTitleFormat" class="mb-1 block text-sm text-gray-500"
+								>Custom title format</label
+							>
+							<input
+								id="videoTitleFormat"
+								name="videoTitleFormat"
+								bind:value={videoTitleFormatInput}
+								placeholder={getDefaultVideoTypeTitleFormat(selectedVideoType)}
+								class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+							/>
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each videoTitleTokens as token (token)}
+									<span class="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
+										{token}
+									</span>
+								{/each}
+							</div>
+						{:else}
+							<p class="mb-1 text-sm text-gray-500">
+								{videoTypeLabelFor(selectedVideoType)} format
+							</p>
+							<p
+								class="rounded border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-800"
+							>
+								{getDefaultVideoTypeTitleFormat(selectedVideoType)}
+							</p>
+						{/if}
+					</div>
+					<div class="md:col-span-2">
+						<label class="flex items-center gap-2 text-sm font-medium text-gray-900">
+							<input
+								type="checkbox"
+								name="titleOverrideEnabled"
+								bind:checked={titleOverrideEnabled}
+								class="h-4 w-4 rounded border-gray-300 text-gray-950"
+							/>
+							Title override
+						</label>
+						{#if titleOverrideEnabled}
+							<div class="mt-2">
+								<label for="titleOverride" class="sr-only">Override title</label>
+								<textarea
+									id="titleOverride"
+									name="titleOverride"
+									bind:value={titleOverrideInput}
+									maxlength={youtubeTitleMaxLength}
+									rows="2"
+									placeholder={data.videoView.video.title}
+									class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+								></textarea>
+								<p class="mt-1 text-xs text-gray-500">
+									{titleOverrideLength()}/{youtubeTitleMaxLength}
+								</p>
+							</div>
+						{/if}
+					</div>
+					<div class="md:col-span-2">
+						<p class="mb-2 text-sm text-gray-500">Active title checks</p>
+						<div class="flex flex-wrap gap-2">
+							{#each titleCheckDefinitions as check (check.id)}
+								<label
+									class="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700"
+								>
+									<input
+										type="checkbox"
+										name="enabledTitleValidationIds"
+										value={check.id}
+										bind:group={enabledTitleValidationIds}
+										class="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950"
+									/>
+									<span>{check.label}</span>
+									<span class="text-xs text-gray-400">{check.kind}</span>
+								</label>
+							{/each}
+						</div>
+						<div class="mt-3">
+							{#if titleAiChecksLoading}
+								<p class="text-sm text-gray-500">Checking AI title validations...</p>
+							{:else if titleAiChecksError}
+								<p class="text-sm text-amber-700">{titleAiChecksError}</p>
+							{:else if activeTitleAiChecks().length}
+								<div class="flex flex-wrap gap-2">
+									{#each activeTitleAiChecks() as validation (validation.id)}
+										<span
+											class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
+											title={validation.expected ? `Expected: ${validation.expected}` : undefined}
+										>
+											{validation.label}: {validation.message}
+										</span>
+									{/each}
+								</div>
+								{#each activeTitleAiChecks() as validation (validation.id)}
+									{#if validation.details?.length}
+										<p class="mt-2 text-xs text-gray-500">{validation.details.join(' ')}</p>
+									{/if}
+									{#if validation.suggested}
+										<p class="mt-1 text-xs text-gray-500">Suggested: {validation.suggested}</p>
+									{/if}
+								{/each}
+							{:else}
+								<p class="text-sm text-gray-500">No active AI title checks have returned yet.</p>
+							{/if}
+						</div>
+					</div>
 				</div>
-			{:else}
-				<div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
-					<p class="text-xs text-gray-500">
-						{videoTypeLabelFor(selectedVideoType)} format
-					</p>
-					<p class="mt-1 font-mono text-sm text-gray-800">
-						{getDefaultVideoTypeTitleFormat(selectedVideoType)}
-					</p>
-				</div>
-			{/if}
-			<div class="mt-4 rounded border border-gray-200 bg-gray-50 px-3 py-3">
-				<label class="flex items-center gap-2 text-sm font-medium text-gray-900">
-					<input
-						type="checkbox"
-						name="titleOverrideEnabled"
-						bind:checked={titleOverrideEnabled}
-						class="h-4 w-4 rounded border-gray-300 text-gray-950"
-					/>
-					Title override
-				</label>
-				{#if titleOverrideEnabled}
-					<div class="mt-3">
-						<label for="titleOverride" class="sr-only">Override title</label>
-						<textarea
-							id="titleOverride"
-							name="titleOverride"
-							bind:value={titleOverrideInput}
-							maxlength={youtubeTitleMaxLength}
-							rows="2"
-							placeholder={data.videoView.video.title}
-							class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm"
-						></textarea>
-						<p class="mt-1 text-xs text-gray-500">
-							{titleOverrideLength()}/{youtubeTitleMaxLength}
+				<div class="px-4 py-3">
+					{#if normalizeTitleOverride(selectedTitleOverride())}
+						<p class="text-xs text-gray-500">
+							Effective title:
+							<span class="font-mono">{normalizeTitleOverride(selectedTitleOverride())}</span>
 						</p>
-					</div>
-				{/if}
-			</div>
-			<div class="mt-4 flex flex-wrap items-center gap-3">
-				<button
-					type="submit"
-					class="rounded bg-gray-950 px-3 py-2 text-sm text-white hover:bg-gray-800"
-				>
-					{normalizeTitleOverride(selectedTitleOverride())
-						? 'Save and Update YouTube'
-						: 'Save Metadata'}
-				</button>
-				{#if form?.metadataError}
-					<span class="text-sm text-amber-700">{form.metadataError}</span>
-				{:else if metadataSaved}
-					<span class="text-sm text-green-700">{form?.metadataMessage ?? 'Saved'}</span>
-				{/if}
-			</div>
-			{#if normalizeTitleOverride(selectedTitleOverride())}
-				<p class="mt-3 text-xs text-gray-500">
-					Effective title:
-					<span class="font-mono">{normalizeTitleOverride(selectedTitleOverride())}</span>
-				</p>
-			{:else}
-				<p class="mt-3 text-xs text-gray-500">
-					Effective format:
-					<span class="font-mono"
-						>{normalizeComposedVideoTitleFormat(
-							selectedVideoTitleFormat(),
-							selectedVideoType
-						)}</span
-					>
-				</p>
-			{/if}
-		</form>
+					{:else}
+						<p class="text-xs text-gray-500">
+							Effective format:
+							<span class="font-mono"
+								>{normalizeComposedVideoTitleFormat(
+									selectedVideoTitleFormat(),
+									selectedVideoType
+								)}</span
+							>
+						</p>
+					{/if}
+					{#if form?.metadataError}
+						<p class="mt-2 text-sm text-amber-700">{form.metadataError}</p>
+					{:else if metadataSaved}
+						<p class="mt-2 text-sm text-green-700">{form?.metadataMessage ?? 'Saved'}</p>
+					{/if}
+				</div>
+			</form>
+		</div>
 		<div class="border-t border-gray-100 px-4 py-4">
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<h3 class="text-sm font-semibold text-gray-950">Speakers</h3>
@@ -876,282 +906,211 @@
 			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
 		>
 			<div>
-				<h2 class="text-sm font-semibold text-gray-950">Description</h2>
-				<p class="mt-1 text-xs text-gray-500">Generate from stored SRT captions</p>
+				<h2 class="text-sm font-semibold text-gray-950">Content Assets</h2>
+				<p class="mt-1 text-xs text-gray-500">{data.captions.length} stored caption tracks</p>
 			</div>
-			<button
-				type="button"
-				onclick={loadGeneratedDescription}
-				disabled={descriptionLoading || data.captions.length === 0}
-				class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
-			>
-				{descriptionLoading ? workflowJobLabel(descriptionJob) : 'Generate Description'}
-			</button>
-		</div>
-		<div class="px-4 py-4">
-			{#if data.videoView.video.description}
-				<p class="text-sm break-words whitespace-pre-wrap text-gray-700">
-					{data.videoView.video.description}
-				</p>
-			{:else}
-				<p class="text-sm text-gray-500">No description synced yet.</p>
-			{/if}
-			{#if data.captions.length === 0}
-				<p class="mt-3 text-xs text-amber-700">
-					Fetch captions before generating a structured description.
-				</p>
-			{/if}
-			<WorkflowJobStatus
-				job={descriptionJob}
-				label="Description job"
-				class="mt-4"
-				showTimestamp
-				size="md"
-			/>
-			{#if descriptionError && descriptionJob?.status !== 'error'}
-				<p
-					class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+			<div class="flex flex-wrap gap-2">
+				<button
+					type="button"
+					onclick={loadGeneratedDescription}
+					disabled={descriptionLoading || data.captions.length === 0}
+					class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 				>
-					{descriptionError}
-				</p>
-			{/if}
-			{#if generatedDescription}
-				<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
-					<div class="flex flex-wrap items-start justify-between gap-3">
-						<div>
-							<p class="text-xs font-medium text-gray-500 uppercase">Generated Description</p>
-							<p class="mt-1 text-sm text-gray-500">
-								{generatedDescription.model} · {generatedDescription.description.length.toLocaleString()}
-								chars
-							</p>
-							<p class="mt-1 text-xs text-gray-500">
-								{Math.round(generatedDescription.durationSeconds / 60)} min · {generatedDescription
-									.chapters.length}/{generatedDescription.chapterTarget} chapters
-							</p>
-						</div>
-						<button
-							type="button"
-							onclick={() => copyDescription(generatedDescription!.description)}
-							class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-						>
-							{copiedDescription ? 'Copied' : 'Copy Description'}
-						</button>
-					</div>
-					<p class="mt-3 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-sm text-blue-950">
-						{generatedDescription.hook}
+					{descriptionLoading ? workflowJobLabel(descriptionJob) : 'Generate Description'}
+				</button>
+				<form method="POST" action="?/fetchCaptions" use:enhance={afterCaptionFetch}>
+					<button
+						type="submit"
+						disabled={captionsFetching}
+						class="rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+					>
+						{captionsFetching ? 'Fetching...' : 'Fetch Captions'}
+					</button>
+				</form>
+			</div>
+		</div>
+		<div class="grid divide-y divide-gray-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+			<div class="p-4">
+				<h3 class="text-sm font-semibold text-gray-950">Description</h3>
+				{#if data.videoView.video.description}
+					<p
+						class="mt-3 max-h-72 overflow-auto text-sm break-words whitespace-pre-wrap text-gray-700"
+					>
+						{data.videoView.video.description}
 					</p>
-					<div class="mt-3 grid gap-3 md:grid-cols-2">
-						{#if generatedDescription.metadata.length}
+				{:else}
+					<p class="mt-3 text-sm text-gray-500">No description synced yet.</p>
+				{/if}
+				{#if data.captions.length === 0}
+					<p class="mt-3 text-xs text-amber-700">Fetch captions before generating a description.</p>
+				{/if}
+				<WorkflowJobStatus
+					job={descriptionJob}
+					label="Description job"
+					class="mt-4"
+					showTimestamp
+					size="md"
+				/>
+				{#if descriptionError && descriptionJob?.status !== 'error'}
+					<p
+						class="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+					>
+						{descriptionError}
+					</p>
+				{/if}
+				{#if generatedDescription}
+					<div class="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
+						<div class="flex flex-wrap items-start justify-between gap-3">
 							<div>
-								<p class="text-xs font-medium text-gray-500 uppercase">Metadata</p>
-								<dl class="mt-2 space-y-1 text-sm">
-									{#each generatedDescription.metadata as item (`${item.label}-${item.value}`)}
-										<div>
-											<dt class="text-xs text-gray-500">{item.label}</dt>
-											<dd class="text-gray-800">{item.value}</dd>
-										</div>
-									{/each}
-								</dl>
+								<p class="text-xs font-medium text-gray-500 uppercase">Generated</p>
+								<p class="mt-1 text-sm text-gray-500">
+									{generatedDescription.model} · {generatedDescription.description.length.toLocaleString()}
+									chars
+								</p>
+								<p class="mt-1 text-xs text-gray-500">
+									{Math.round(generatedDescription.durationSeconds / 60)} min · {generatedDescription
+										.chapters.length}/{generatedDescription.chapterTarget} chapters
+								</p>
 							</div>
-						{/if}
-						{#if generatedDescription.chapters.length}
-							<div>
-								<p class="text-xs font-medium text-gray-500 uppercase">Chapters</p>
+							<button
+								type="button"
+								onclick={() => copyDescription(generatedDescription!.description)}
+								class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+							>
+								{copiedDescription ? 'Copied' : 'Copy'}
+							</button>
+						</div>
+						<p
+							class="mt-3 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-sm text-blue-950"
+						>
+							{generatedDescription.hook}
+						</p>
+						<div class="mt-3 grid gap-3 xl:grid-cols-2">
+							{#if generatedDescription.metadata.length}
+								<div>
+									<p class="text-xs font-medium text-gray-500 uppercase">Metadata</p>
+									<dl class="mt-2 space-y-1 text-sm">
+										{#each generatedDescription.metadata as item (`${item.label}-${item.value}`)}
+											<div>
+												<dt class="text-xs text-gray-500">{item.label}</dt>
+												<dd class="text-gray-800">{item.value}</dd>
+											</div>
+										{/each}
+									</dl>
+								</div>
+							{/if}
+							{#if generatedDescription.chapters.length}
+								<div>
+									<p class="text-xs font-medium text-gray-500 uppercase">Chapters</p>
+									<div class="mt-2 space-y-1 text-sm">
+										{#each generatedDescription.chapters as chapter (`${chapter.timestamp}-${chapter.title}`)}
+											<p class="text-gray-800">
+												<span class="font-mono text-gray-500">{chapter.timestamp}</span>
+												{chapter.title}
+											</p>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+						{#if generatedDescription.links.length}
+							<div class="mt-3">
+								<p class="text-xs font-medium text-gray-500 uppercase">Links</p>
 								<div class="mt-2 space-y-1 text-sm">
-									{#each generatedDescription.chapters as chapter (`${chapter.timestamp}-${chapter.title}`)}
+									{#each generatedDescription.links as link (`${link.label}-${link.url ?? link.placeholder}`)}
 										<p class="text-gray-800">
-											<span class="font-mono text-gray-500">{chapter.timestamp}</span>
-											{chapter.title}
+											{link.label}:
+											<span class="text-gray-500">{link.url ?? link.placeholder}</span>
 										</p>
 									{/each}
 								</div>
 							</div>
 						{/if}
+						<details class="mt-3">
+							<summary class="cursor-pointer text-xs text-gray-600">Full generated text</summary>
+							<pre
+								class="mt-2 max-h-96 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{generatedDescription.description}</pre>
+						</details>
 					</div>
-					{#if generatedDescription.links.length}
-						<div class="mt-3">
-							<p class="text-xs font-medium text-gray-500 uppercase">Links</p>
-							<div class="mt-2 space-y-1 text-sm">
-								{#each generatedDescription.links as link (`${link.label}-${link.url ?? link.placeholder}`)}
-									<p class="text-gray-800">
-										{link.label}: <span class="text-gray-500">{link.url ?? link.placeholder}</span>
-									</p>
-								{/each}
-							</div>
-						</div>
-					{/if}
-					<details class="mt-3">
-						<summary class="cursor-pointer text-xs text-gray-600">Full generated text</summary>
-						<pre
-							class="mt-2 max-h-96 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{generatedDescription.description}</pre>
-					</details>
-				</div>
-			{/if}
-		</div>
-	</section>
-
-	<section class="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
-		<div
-			class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3"
-		>
-			<div>
-				<h2 class="text-sm font-semibold text-gray-950">Captions</h2>
-				<p class="mt-1 text-xs text-gray-500">{data.captions.length} stored tracks</p>
+				{/if}
 			</div>
-			<form method="POST" action="?/fetchCaptions" use:enhance={afterCaptionFetch}>
-				<button
-					type="submit"
-					disabled={captionsFetching}
-					class="rounded bg-gray-950 px-2.5 py-1.5 text-xs text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
-				>
-					{captionsFetching ? 'Fetching...' : 'Fetch Captions'}
-				</button>
-			</form>
-		</div>
-		{#if form?.captionError}
-			<p class="border-b border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-				{form.captionError}
-			</p>
-		{:else if data.captionJob}
-			<WorkflowJobStatus
-				job={data.captionJob}
-				label="Caption fetch"
-				class="rounded-none border-x-0 border-t-0 px-4 py-3"
-				size="md"
-			/>
-		{:else if form?.captionMessage}
-			<p class="border-b border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
-				{form.captionMessage}
-			</p>
-		{/if}
-		<div class="px-4 py-4">
-			{#if data.captions.length}
-				<div class="space-y-4">
-					{#each data.captions as caption (caption._id)}
-						<div class="rounded border border-gray-200 bg-gray-50 p-3">
-							<div class="flex flex-wrap items-center justify-between gap-3">
-								<div>
-									<p class="text-sm font-medium text-gray-950">
-										{caption.language ?? 'Unknown language'}
-										{#if caption.name}
-											<span class="text-gray-500">· {caption.name}</span>
-										{/if}
-									</p>
-									<p class="mt-1 text-xs text-gray-500">
-										{caption.format.toUpperCase()} · {caption.trackKind ?? 'track'} · Fetched
-										{formatDate(caption.fetchedAt)}
-									</p>
-								</div>
-								<span
-									class="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500"
-								>
-									{caption.body.length.toLocaleString()} chars
-								</span>
-							</div>
-							<div class="mt-3 flex flex-wrap gap-2">
-								<button
-									type="button"
-									onclick={() =>
-										downloadCaption(
-											`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.srt`,
-											caption.body,
-											'application/x-subrip;charset=utf-8'
-										)}
-									class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-								>
-									Download SRT
-								</button>
-								<button
-									type="button"
-									onclick={() =>
-										downloadCaption(
-											`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.txt`,
-											srtToPlainText(caption.body)
-										)}
-									class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-								>
-									Download TXT
-								</button>
-							</div>
-							<details class="mt-3">
-								<summary class="cursor-pointer text-xs text-gray-600">Preview transcript</summary>
-								<pre
-									class="mt-2 max-h-64 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{caption.body}</pre>
-							</details>
-						</div>
-					{/each}
-				</div>
-			{:else}
-				<p class="text-sm text-gray-500">
-					No captions stored yet. Fetching captions requires the YouTube metadata write scope.
-				</p>
-			{/if}
-		</div>
-	</section>
-
-	<section class="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-			<h2 class="text-sm font-semibold text-gray-950">Video Validations</h2>
-		</div>
-		<div class="px-4 py-4">
-			<form
-				method="POST"
-				action="?/setValidationPreferences"
-				use:enhance={afterValidationPreferencesUpdate}
-				class="mb-4 rounded border border-gray-200 bg-gray-50 p-3"
-			>
-				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div>
-						<p class="text-xs font-medium text-gray-500 uppercase">Active checks</p>
-						<div class="mt-2 flex flex-wrap gap-3">
-							{#each titleCheckDefinitions as check (check.id)}
-								<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
-									<input
-										type="checkbox"
-										name="enabledTitleValidationIds"
-										value={check.id}
-										checked={!disabledTitleValidationIds().has(check.id)}
-										class="rounded border-gray-300 text-gray-950 focus:ring-gray-950"
-									/>
-									{check.label}
-								</label>
-							{/each}
-						</div>
-					</div>
-					<button
-						type="submit"
-						class="rounded bg-white px-2.5 py-1.5 text-xs text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"
+			<div class="p-4">
+				<h3 class="text-sm font-semibold text-gray-950">Captions</h3>
+				{#if form?.captionError}
+					<p
+						class="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700"
 					>
-						{validationPreferencesSaved ? 'Saved' : 'Save Checks'}
-					</button>
-				</div>
-			</form>
-			{#if titleAiChecksLoading}
-				<p class="text-sm text-gray-500">Checking AI title validations...</p>
-			{:else if titleAiChecksError}
-				<p class="text-sm text-amber-700">{titleAiChecksError}</p>
-			{:else if activeTitleAiChecks().length}
-				<div class="flex flex-wrap gap-2">
-					{#each activeTitleAiChecks() as validation (validation.id)}
-						<span
-							class={`rounded border px-2 py-1 text-xs ${validationClass(validation.status)}`}
-							title={validation.expected ? `Expected: ${validation.expected}` : undefined}
-						>
-							{validation.label}: {validation.message}
-						</span>
-					{/each}
-				</div>
-				{#each activeTitleAiChecks() as validation (validation.id)}
-					{#if validation.details?.length}
-						<p class="mt-2 text-xs text-gray-500">{validation.details.join(' ')}</p>
-					{/if}
-					{#if validation.suggested}
-						<p class="mt-1 text-xs text-gray-500">Suggested: {validation.suggested}</p>
-					{/if}
-				{/each}
-			{:else}
-				<p class="text-sm text-gray-500">No active AI title checks have returned yet.</p>
-			{/if}
+						{form.captionError}
+					</p>
+				{:else if data.captionJob}
+					<WorkflowJobStatus job={data.captionJob} label="Caption fetch" class="mt-3" size="md" />
+				{:else if form?.captionMessage}
+					<p
+						class="mt-3 rounded border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700"
+					>
+						{form.captionMessage}
+					</p>
+				{/if}
+				{#if data.captions.length}
+					<div class="mt-3 space-y-3">
+						{#each data.captions as caption (caption._id)}
+							<div class="rounded border border-gray-200 bg-gray-50 p-3">
+								<div class="flex flex-wrap items-center justify-between gap-3">
+									<div>
+										<p class="text-sm font-medium text-gray-950">
+											{caption.language ?? 'Unknown language'}
+											{#if caption.name}
+												<span class="text-gray-500">· {caption.name}</span>
+											{/if}
+										</p>
+										<p class="mt-1 text-xs text-gray-500">
+											{caption.format.toUpperCase()} · {caption.trackKind ?? 'track'} · Fetched
+											{formatDate(caption.fetchedAt)}
+										</p>
+									</div>
+									<span
+										class="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500"
+									>
+										{caption.body.length.toLocaleString()} chars
+									</span>
+								</div>
+								<div class="mt-3 flex flex-wrap gap-2">
+									<button
+										type="button"
+										onclick={() =>
+											downloadCaption(
+												`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.srt`,
+												caption.body,
+												'application/x-subrip;charset=utf-8'
+											)}
+										class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+									>
+										Download SRT
+									</button>
+									<button
+										type="button"
+										onclick={() =>
+											downloadCaption(
+												`${data.videoView.video.youtubeVideoId}-${caption.language ?? 'captions'}.txt`,
+												srtToPlainText(caption.body)
+											)}
+										class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+									>
+										Download TXT
+									</button>
+								</div>
+								<details class="mt-3">
+									<summary class="cursor-pointer text-xs text-gray-600">Preview transcript</summary>
+									<pre
+										class="mt-2 max-h-64 overflow-auto rounded border border-gray-200 bg-white p-3 text-xs whitespace-pre-wrap text-gray-700">{caption.body}</pre>
+								</details>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="mt-3 text-sm text-gray-500">No captions stored yet.</p>
+				{/if}
+			</div>
 		</div>
 	</section>
 

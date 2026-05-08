@@ -18,6 +18,17 @@ function optionalVideoType(data: FormData) {
 	return isVideoType(value) ? value : undefined;
 }
 
+function disabledTitleValidationIdsFromForm(data: FormData) {
+	const enabledTitleValidationIds = new Set(
+		data
+			.getAll('enabledTitleValidationIds')
+			.filter((value): value is string => typeof value === 'string')
+			.filter(isTitleCheckId)
+	);
+
+	return titleCheckIds.filter((checkId) => !enabledTitleValidationIds.has(checkId));
+}
+
 export const load: PageServerLoad = async (event) => {
 	event.depends('app:workflow-jobs');
 
@@ -115,6 +126,10 @@ export const actions: Actions = {
 				? { videoTitleFormat: optionalString(data, 'videoTitleFormat') }
 				: {})
 		});
+		await client.mutation(api.videoCommands.setDisabledTitleValidations, {
+			videoId: videoView.video._id,
+			disabledTitleValidationIds: disabledTitleValidationIdsFromForm(data)
+		});
 
 		if (titleOverrideEnabled && titleOverride && videoView.video.title !== titleOverride) {
 			const result = await client.mutation(api.youtubeCommands.requestTitleUpdate, {
@@ -129,14 +144,14 @@ export const actions: Actions = {
 			}
 
 			return {
-				metadataMessage: 'Saved metadata and queued YouTube title update.'
+				metadataMessage: 'Saved packaging and queued YouTube title update.'
 			};
 		}
 
 		return {
 			metadataMessage: titleOverrideEnabled
-				? 'Saved metadata. YouTube title already matches.'
-				: 'Saved metadata.'
+				? 'Saved packaging. YouTube title already matches.'
+				: 'Saved packaging.'
 		};
 	},
 
@@ -160,30 +175,6 @@ export const actions: Actions = {
 		}
 
 		return { titleUpdateMessage: 'Queued YouTube title update.' };
-	},
-
-	setValidationPreferences: async (event) => {
-		const data = await event.request.formData();
-		const enabledTitleValidationIds = new Set(
-			data
-				.getAll('enabledTitleValidationIds')
-				.filter((value): value is string => typeof value === 'string')
-				.filter(isTitleCheckId)
-		);
-		const disabledTitleValidationIds = titleCheckIds.filter(
-			(checkId) => !enabledTitleValidationIds.has(checkId)
-		);
-		const client = getConvexClientForEvent(event);
-		const videoView = await resolveVideoView(client, event.params.id);
-
-		await client.mutation(api.videoCommands.setDisabledTitleValidations, {
-			videoId: videoView.video._id,
-			disabledTitleValidationIds
-		});
-
-		return {
-			validationPreferencesMessage: 'Saved validation checks.'
-		};
 	},
 
 	addSpeaker: async (event) => {
